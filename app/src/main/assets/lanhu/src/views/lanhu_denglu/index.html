@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>动物ICU重症监护系统 - 登录</title>
+  <link rel="stylesheet" href="../../assets/common.css" />
+  <link rel="stylesheet" href="assets/index.css" />
+  <link rel="stylesheet" href="../../../lanhu-fit.css" />
+  <link rel="stylesheet" href="../../../lanhu-denglu.css" />
+<script src="../../../lanhu-fit.js" defer></script>
+</head>
+<body>
+<div class="page flex-col">
+  <div class="group_66 flex-col">
+    <div id="icuCurrentUser" class="icu-current-user" style="display:none;"></div>
+
+    <div id="icuLoginForm">
+      <span class="text_93">用户登录</span>
+      <div class="block_35 flex-row">
+        <img
+          class="icu-input-icon-left"
+          referrerpolicy="no-referrer"
+          src="./assets/img/339520cb6c69ec4fdb5e0fcd4f56fd71.png"
+        />
+        <input id="icuUsername" class="icu-input" type="text" autocomplete="username" placeholder="请输入登录账号" />
+      </div>
+      <div class="image-wrapper_5 flex-col">
+        <img
+          class="icu-input-icon-left"
+          referrerpolicy="no-referrer"
+          src="./assets/img/987199bae49ec79d3c6015af602b142f.png"
+        />
+        <input id="icuPassword" class="icu-input" type="password" autocomplete="current-password" placeholder="请输入登录口令" />
+      </div>
+      <div id="icuLoginBtn" class="text-wrapper_50 flex-col"><span class="text_94">登录</span></div>
+      <div id="icuMessage" class="icu-message"></div>
+      <span class="text_95 icu-toggle-text" id="icuToggleLogin">新用户注册</span>
+    </div>
+
+    <div id="icuRegisterPanel" class="icu-register-panel" style="display:none;">
+      <div class="icu-register-title">创建新账号</div>
+      <div class="icu-register-row">
+        <input id="icuRegUsername" class="icu-input" type="text" autocomplete="username" placeholder="登录账号" />
+      </div>
+      <div class="icu-register-row">
+        <input id="icuRegPassword" class="icu-input" type="password" autocomplete="new-password" placeholder="登录口令" />
+      </div>
+      <div class="icu-register-row">
+        <input id="icuRegOrganization" class="icu-input" type="text" placeholder="所属机构 (可留空)" />
+      </div>
+      <div id="icuRegisterBtn" class="icu-register-button">注册并登录</div>
+      <div class="icu-register-toggle icu-toggle-text" id="icuToggleRegister">返回登录</div>
+    </div>
+  </div>
+</div>
+<script>
+(function () {
+  var HOME = '../lanhu_1icuzhuangtaikaobei/index.html';
+  var $ = function (id) { return document.getElementById(id); };
+
+  function showMessage(text) {
+    var el = $('icuMessage');
+    if (el) {
+      el.textContent = text || '';
+      el.style.color = '#f0545c';
+    }
+  }
+
+  function showSuccess(text) {
+    var el = $('icuMessage');
+    if (el) {
+      el.textContent = text || '';
+      el.style.color = '#2a8a3e';
+    }
+  }
+
+  function tryGoHome() {
+    if (window.IcuNative && typeof window.IcuNative.isLoggedIn === 'function' && window.IcuNative.isLoggedIn()) {
+      window.location.replace(HOME);
+      return true;
+    }
+    return false;
+  }
+
+  function syncCurrentUser() {
+    var banner = $('icuCurrentUser');
+    if (!banner || !window.IcuNative || typeof window.IcuNative.firstPhaseState !== 'function') {
+      return;
+    }
+    try {
+      var state = JSON.parse(window.IcuNative.firstPhaseState() || '{}') || {};
+      var name = state.accountName || '';
+      if (name) {
+        banner.style.display = 'block';
+        banner.textContent = '当前已登录: ' + name + '，如需切换请先在原生界面退出登录';
+      } else {
+        banner.style.display = 'none';
+      }
+    } catch (e) {
+      banner.style.display = 'none';
+    }
+  }
+
+  function doLogin() {
+    showMessage('');
+    var name = ($('icuUsername').value || '').trim();
+    var pwd = $('icuPassword').value || '';
+    if (!name) { showMessage('请输入登录账号'); return; }
+    if (!pwd) { showMessage('请输入登录口令'); return; }
+    if (!window.IcuNative || typeof window.IcuNative.login !== 'function') {
+      showMessage('原生登录接口不可用');
+      return;
+    }
+    var ok = false;
+    try {
+      ok = window.IcuNative.login(name, pwd);
+    } catch (e) {
+      showMessage('登录异常: ' + (e && e.message ? e.message : e));
+      return;
+    }
+    if (ok) {
+      showSuccess('登录成功，正在跳转...');
+      setTimeout(function () {
+        tryGoHome();
+      }, 200);
+    } else {
+      showMessage('账号或口令不正确');
+    }
+  }
+
+  function doRegister() {
+    showMessage('');
+    var name = ($('icuRegUsername').value || '').trim();
+    var pwd = $('icuRegPassword').value || '';
+    var org = ($('icuRegOrganization').value || '').trim();
+    if (!name) { showMessage('请输入登录账号'); return; }
+    if (!pwd) { showMessage('请输入登录口令'); return; }
+    if (!window.IcuNative || typeof window.IcuNative.register !== 'function') {
+      showMessage('原生注册接口不可用');
+      return;
+    }
+    var result = '';
+    try {
+      result = window.IcuNative.register(name, pwd, org);
+    } catch (e) {
+      showMessage('注册异常: ' + (e && e.message ? e.message : e));
+      return;
+    }
+    if (result === 'ok') {
+      showSuccess('注册成功，正在跳转...');
+      setTimeout(function () {
+        tryGoHome();
+      }, 200);
+    } else {
+      showMessage(result || '注册失败');
+    }
+  }
+
+  function toggleRegister(show) {
+    var panel = $('icuRegisterPanel');
+    var loginForm = $('icuLoginForm');
+    if (!panel || !loginForm) return;
+    if (show === undefined) {
+      show = panel.style.display === 'none' || !panel.style.display;
+    }
+    if (show) {
+      loginForm.style.display = 'none';
+      panel.style.display = 'block';
+    } else {
+      loginForm.style.display = 'block';
+      panel.style.display = 'none';
+    }
+  }
+
+  function init() {
+    var btn = $('icuLoginBtn');
+    var username = $('icuUsername');
+    var password = $('icuPassword');
+    var regBtn = $('icuRegisterBtn');
+    var toggles = document.querySelectorAll('.icu-toggle-text');
+
+    if (btn) {
+      btn.addEventListener('click', doLogin);
+      btn.style.cursor = 'pointer';
+      btn.style.touchAction = 'manipulation';
+    }
+    if (regBtn) {
+      regBtn.addEventListener('click', doRegister);
+    }
+    for (var i = 0; i < toggles.length; i += 1) {
+      toggles[i].addEventListener('click', function () { toggleRegister(); });
+    }
+    if (password) {
+      password.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.keyCode === 13) { doLogin(); }
+      });
+    }
+    if (username) {
+      username.focus();
+    }
+    syncCurrentUser();
+    window.addEventListener('icu-native-state', syncCurrentUser);
+  }
+
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    init();
+  } else {
+    document.addEventListener('DOMContentLoaded', init);
+  }
+})();
+</script>
+</body>
+</html>

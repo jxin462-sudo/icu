@@ -1,0 +1,341 @@
+.page {
+  background-color: rgba(255, 255, 255, 1);
+  position: relative;
+  width: 1920px;
+  height: 1200px;
+  overflow: hidden;
+}
+
+.block_1 {
+  background-color: rgba(94, 167, 255, 1);
+  width: 1920px;
+  height: 46px;
+}
+
+.label_1 {
+  width: 23px;
+  height: 29px;
+  margin: 8px 0 0 15px;
+}
+
+.text_1 {
+  width: 193px;
+  height: 19px;
+  overflow-wrap: break-word;
+  color: rgba(255, 255, 255, 1);
+  font-size: 20px;
+  font-family: SourceHanSansCN-Medium;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 72px;
+  margin: 14px 0 0 11px;
+}
+
+.thumbnail_1 {
+  width: 10px;
+  height: 20px;
+  margin: 13px 0 0 170px;
+}
+
+.text_2 {
+  width: 79px;
+  height: 19px;
+  overflow-wrap: break-word;
+  color: rgba(255, 255, 255, 1);
+  font-size: 20px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 72px;
+  margin: 12px 0 0 9px;
+}
+
+.group_1 {
+  background-color: rgba(0, 116, 255, 1);
+  width: 160px;
+  height: 46px;
+  margin-left: 31px;
+}
+
+.image_1 {
+  width: 24px;
+  height: 20px;
+  margin: 12px 0 0 43px;
+}
+
+.text_3 {
+  width: 39px;
+  height: 19px;
+  overflow-wrap: break-word;
+  color: rgba(255, 255, 255, 1);
+  font-size: 20px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 72px;
+  margin: 12px 45px 0 9px;
+}
+
+.label_2 {
+  width: 21px;
+  height: 21px;
+  margin: 13px 0 0 1099px;
+}
+
+.text_4 {
+  width: 53px;
+  height: 17px;
+  overflow-wrap: break-word;
+  color: rgba(255, 255, 255, 1);
+  font-size: 18px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 72px;
+  margin: 14px 0 0 7px;
+}
+
+.thumbnail_2 {
+  width: 10px;
+  height: 6px;
+  margin: 20px 20px 0 9px;
+}
+
+.block_5 {
+  width: 1920px;
+  height: 1155px;
+  margin-bottom: 1px;
+}
+
+.section_2 {
+  width: 1900px;
+  height: 1140px;
+  margin-top: 14px;
+}
+
+.block_3 {
+  background-color: rgba(94, 167, 255, 1);
+  border-radius: 10px 0px 0px 10px;
+  width: 350px;
+  height: 1140px;
+}
+
+.text_5 {
+  width: 70px;
+  height: 18px;
+  overflow-wrap: break-word;
+  color: rgba(255, 255, 255, 1);
+  font-size: 18px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 72px;
+  margin: 26px 0 0 51px;
+}
+
+.text_6 {
+  width: 71px;
+  height: 17px;
+  overflow-wrap: break-word;
+  color: rgba(255, 255, 255, 1);
+  font-size: 18px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 72px;
+  margin: 20px 0 0 50px;
+}
+
+.text_7 {
+  width: 114px;
+  height: 18px;
+  overflow-wrap: break-word;
+  color: rgba(255, 255, 255, 1);
+  font-size: 18px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 72px;
+  margin: 19px 0 0 50px;
+}
+
+.text_8 {
+  width: 71px;
+  height: 17px;
+  overflow-wrap: break-word;
+  color: rgba(255, 255, 255, 1);
+  font-size: 18px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 72px;
+  margin: 20px 0 0 50px;
+}
+
+.text_9 {
+  width: 71px;
+  height: 18px;
+  overflow-wrap: break-word;
+  color: rgba(255, 255, 255, 1);
+  font-size: 18px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 72px;
+  margin: 19px 0 0 50px;
+}
+
+.text_10 {
+  width: 71px;
+  height: 17px;
+  overflow-wrap: break-word;
+  color: rgba(255, 255, 255, 1);
+  font-size: 18px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 72px;
+  margin: 20px 0 0 50px;
+}
+
+.text-wrapper_1 {
+  background-color: rgba(255, 255, 255, 1);
+  border-radius: 5px;
+  height: 36px;
+  width: 336px;
+  margin: 10px 0 0 14px;
+}
+
+.text_11 {
+  width: 35px;
+  height: 17px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 18px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 72px;
+  margin: 10px 0 0 36px;
+}
+
+.text_12 {
+  width: 89px;
+  height: 17px;
+  overflow-wrap: break-word;
+  color: rgba(255, 255, 255, 1);
+  font-size: 18px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 72px;
+  margin: 11px 0 837px 50px;
+}
+
+.block_4 {
+  background-color: rgba(229, 237, 248, 1);
+  border-radius: 10px;
+  height: 1111px;
+  width: 1519px;
+}
+
+.section_3 {
+  width: 1159px;
+  height: 334px;
+  margin: 264px 0 0 191px;
+}
+
+.text_13 {
+  width: 35px;
+  height: 17px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 18px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 72px;
+  margin-top: 9px;
+}
+
+.text-wrapper_2 {
+  background-color: rgba(255, 255, 255, 1);
+  border-radius: 5px;
+  height: 334px;
+  width: 1112px;
+}
+
+.text_14 {
+  width: 93px;
+  height: 14px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 18px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 72px;
+  margin: 10px 0 0 12px;
+}
+
+.section_4 {
+  width: 351px;
+  height: 40px;
+  margin: 418px 0 55px 584px;
+}
+
+.text-wrapper_3 {
+  background-color: rgba(255, 255, 255, 1);
+  border-radius: 5px;
+  height: 40px;
+  width: 120px;
+}
+
+.text_15 {
+  width: 32px;
+  height: 16px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 16px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 30px;
+  margin: 12px 0 0 44px;
+}
+
+.text-wrapper_4 {
+  background-color: rgba(0, 116, 255, 1);
+  border-radius: 5px;
+  height: 40px;
+  width: 120px;
+}
+
+.text_16 {
+  width: 30px;
+  height: 16px;
+  overflow-wrap: break-word;
+  color: rgba(255, 255, 255, 1);
+  font-size: 16px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 30px;
+  margin: 12px 0 0 45px;
+}

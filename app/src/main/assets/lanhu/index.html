@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>动物ICU重症监护系统</title>
+</head>
+<body style="margin:0;background:#fff;">
+<script>
+(function () {
+  var HOME = 'src/views/lanhu_1icuzhuangtaikaobei/index.html';
+  var LOGIN = 'src/views/lanhu_denglu/index.html';
+  function go() {
+    try {
+      if (window.IcuNative && typeof window.IcuNative.isLoggedIn === 'function' && window.IcuNative.isLoggedIn()) {
+        window.location.replace(HOME);
+      } else {
+        window.location.replace(LOGIN);
+      }
+    } catch (e) {
+      window.location.replace(LOGIN);
+    }
+  }
+  if (document.readyState === 'complete' || document.readyState === 'interactive') {
+    go();
+  } else {
+    document.addEventListener('DOMContentLoaded', go);
+  }
+})();
+</script>
+</body>
+</html>

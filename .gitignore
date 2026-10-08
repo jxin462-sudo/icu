@@ -1,0 +1,43 @@
+# Android / Gradle
+.gradle/
+build/
+*/build/
+local.properties
+*.iml
+.idea/
+.cxx/
+.externalNativeBuild/
+captures/
+
+# 签名与密钥（多人协作：绝不入库）
+*.jks
+*.keystore
+key.properties
+
+# 敏感数据（绝不入库）
+accounts.json
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 本地产物
+compare/*.png
+*.log
+*.apk
+log*.txt
+build*.txt
+shot_*.png
+dump.xml
+
+# 一次性脚本与提取目录
+_extract*/
+build-check/
+_*.py
+_i18n_audit_out.txt
+
+# Claude 会话配置
+.claude/
+
+# 本地 Maven 缓存（体积大、可重建）
+.local-m2/

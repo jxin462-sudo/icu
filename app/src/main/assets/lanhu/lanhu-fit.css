@@ -1,0 +1,3140 @@
+/* ============================================================================
+ * lanhu-fit.css — 第 3 层:适配层(全局生效,1920×1200 画布缩放)
+ * 加载顺序:在 common.css / index.css 之后,在 lanhu-*.css 业务层之前
+ * 规则约束:几乎所有规则带 .page 前缀和 !important,锁定蓝湖元素的最终样式
+ * 注意:display 由 lanhu-bridge.js 运行时通过 cssText 控制,本文件不再声明
+ * ============================================================================ */
+html,
+body {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: #eef4fb;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  touch-action: manipulation;
+  user-select: none;
+  box-sizing: border-box;
+}
+
+.page {
+  position: relative !important;
+  left: 0 !important;
+  top: 0 !important;
+  visibility: hidden !important;
+  width: 1920px !important;
+  height: 1200px !important;
+  min-width: var(--lanhu-page-width, 1920px) !important;
+  min-height: var(--lanhu-page-height, 1200px) !important;
+  transform: translate(var(--lanhu-left, 0px), var(--lanhu-top, 0px)) scale(var(--lanhu-scale, 1)) !important;
+  transform-origin: 0 0 !important;
+}
+
+html.lanhu-fit-ready .page {
+  visibility: visible !important;
+}
+
+.page span,
+.page [class^="text_"],
+.page [class*=" text_"],
+.page [class^="text-group_"],
+.page [class*=" text-group_"],
+.page [class^="paragraph_"],
+.page [class*=" paragraph_"] {
+  line-height: 1.18 !important;
+  font-family: "Microsoft YaHei", "PingFang SC", "Source Han Sans CN", sans-serif !important;
+}
+
+/* 患者信息栏医嘱正文。父框 .text-wrapper_17 宽 321px,正文自带 margin-left:7px,
+   所以可用宽度只有 314px —— 原来的 max-width:320px 会让正文右边缘超出白框 6px
+   (实测右边缘 1888 > 白框 1882)。取 307px 使左右留白都是 7px。 */
+.page .medical-advice-text {
+  display: block !important;
+  width: 100% !important;
+  max-width: 307px !important;
+  white-space: pre-line !important;
+  word-break: break-word !important;
+  overflow-wrap: anywhere !important;
+  line-height: 1.4 !important;
+  /* ★ 0904 问题1：医嘱正文原来距白框顶 12px，比其它字段(约6px)靠下，
+     视觉上比“医嘱”标签低。统一上移：去掉顶部 padding，正文首行与标签行对齐。 */
+  margin-top: 2px !important;
+  padding: 0 4px 2px !important;
+  box-sizing: border-box !important;
+}
+
+/* ★ 0904 自测问题：样本信息显示约束统一（ICU状态 / 主机控制 / 实时监护 /
+   摄像监控 / 治疗记录 / 使用教程 六个模块页共用同一张“样本信息卡”）。
+   值白框：text-wrapper_6/7/9/10/12/13/15/16；值文字是白框的直接子 span
+   （ICU状态/主机控制页为 data-patient-live，其它页为 text_35~48）。
+   约束方法沿用 ICU 状态模块：文字占满白框可用宽度、单行、放不下才用省略号，
+   不再出现“还有空间却提前显示 ...”或“超长内容溢出白框”两种不一致现象。 */
+.page.icu-app-module .text-wrapper_6,
+.page.icu-app-module .text-wrapper_7,
+.page.icu-app-module .text-wrapper_9,
+.page.icu-app-module .text-wrapper_10,
+.page.icu-app-module .text-wrapper_12,
+.page.icu-app-module .text-wrapper_13,
+.page.icu-app-module .text-wrapper_15,
+.page.icu-app-module .text-wrapper_16 {
+  display: flex !important;
+  /* 与主机控制/实时监护等页保持一致：值文字靠左、上下居中，
+     不再水平居中/撑满整行。 */
+  align-items: flex-start !important;
+  justify-content: flex-start !important;
+  padding: 0 !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+
+.page.icu-app-module .text-wrapper_6 > span,
+.page.icu-app-module .text-wrapper_7 > span,
+.page.icu-app-module .text-wrapper_9 > span,
+.page.icu-app-module .text-wrapper_10 > span,
+.page.icu-app-module .text-wrapper_12 > span,
+.page.icu-app-module .text-wrapper_13 > span,
+.page.icu-app-module .text-wrapper_15 > span,
+.page.icu-app-module .text-wrapper_16 > span {
+  display: block !important;
+  width: auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  flex: 0 1 auto !important;
+  align-self: stretch !important;
+  /* 设计稿里各值自带左侧 margin(10~11px)，右侧留 3px，避免文字贴圆角边框 */
+  padding: 0 3px 0 0 !important;
+  line-height: 1.25 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  vertical-align: top !important;
+}
+
+/* ★ 0904 复核：病历编号(.text_40)/联系电话(.text_44)在页面 CSS 里被固定为
+   13px 高 + 8px 上边距，文字行(约20px)被 overflow:hidden 从底部裁掉。
+   改为高度自适应，并让上边距与其它字段一致(6px)，内容完整显示在白框内。 */
+.page.icu-app-module .text-wrapper_10 > span,
+.page.icu-app-module .text-wrapper_13 > span {
+  margin-top: 6px !important;
+}
+
+.page [data-patient-live]:not([data-patient-live="note"]) {
+  display: inline-block !important;
+  height: auto !important;
+  min-height: 0 !important;
+  line-height: 1.25 !important;
+  max-width: 280px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  vertical-align: top !important;
+}
+
+/* 左侧样本列表：每行信息只占一行，超长用省略号，不能把同行/下行的
+   字段挤乱（宠物名、种类/主人、编号、就诊时间）。 */
+.page .icu-patient-sidebar [data-patient-live] {
+  display: inline-block !important;
+  flex: 0 1 auto !important;
+  height: auto !important;
+  min-height: 0 !important;
+  line-height: 1.25 !important;
+  align-self: center !important;
+  min-width: 0 !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  vertical-align: top !important;
+}
+
+.page .icu-patient-sidebar .text-wrapper_2,
+.page .icu-patient-sidebar .text-wrapper_3,
+.page .icu-patient-sidebar .text-wrapper_4 {
+  overflow: visible !important;
+}
+
+/* 最新样本行的日期要完整显示到分和秒：加宽日期行并缩小字号，不再省略截断。 */
+.page .icu-patient-sidebar .text-wrapper_4 {
+  width: auto !important;
+  min-width: 190px !important;
+}
+
+.page .icu-patient-sidebar [data-patient-live="visitDate"] {
+  font-size: 12px !important;
+  max-width: none !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+}
+
+/* 报告/打印预览顶部患者信息两行同样只占一行 + 省略号，防止长内容影响版面。 */
+.page .block_1 .text-wrapper_2,
+.page .block_1 .text-wrapper_3 {
+  overflow: hidden !important;
+}
+
+.page .block_1 .text-wrapper_2 > span,
+.page .block_1 .text-wrapper_3 > span {
+  display: inline-block !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  max-width: 250px !important;
+  vertical-align: top !important;
+}
+
+.page .text-wrapper_25 {
+  position: relative !important;
+  cursor: pointer !important;
+}
+
+.page .icu-status-advice {
+  position: absolute !important;
+  left: 82px !important;
+  top: 22px !important;
+  right: 24px !important;
+  bottom: 18px !important;
+  display: flex !important;
+  align-items: center !important;
+  color: #575757 !important;
+  font-size: 16px !important;
+  line-height: 1.45 !important;
+  font-family: "Microsoft YaHei", "PingFang SC", "Source Han Sans CN", sans-serif !important;
+  white-space: normal !important;
+  word-break: break-word !important;
+  overflow: hidden !important;
+}
+
+.page.icu-page-status .text_1,
+.page.icu-page-status .text_4 {
+  margin-top: 14px !important;
+}
+
+.page.icu-page-status .group_2 {
+  margin-top: 5px !important;
+}
+
+.page.icu-page-status .box_4 {
+  margin-top: 9px !important;
+}
+
+.page.icu-page-status .box_5 {
+  height: 30px !important;
+}
+
+.page.icu-page-status .thumbnail_5 {
+  margin-top: 10px !important;
+}
+
+.page.icu-page-status .section_2 {
+  margin-top: 14px !important;
+}
+
+.page.icu-page-status .box_8 {
+  margin-top: 12px !important;
+}
+
+.page.icu-page-status .text-wrapper_3 {
+  margin-top: 10px !important;
+}
+
+.page.icu-page-control .section_29 {
+  margin-top: 5px !important;
+}
+
+.page.icu-page-control .section_30 {
+  margin-top: 9px !important;
+}
+
+.page.icu-page-control .block_4 {
+  height: 30px !important;
+}
+
+/* ★ P1-3 修复:画框内 9 个字段文字统一上移 2px(覆盖全部 6 个页面+报告页)
+   画框字段使用 class="text_33" 到 class="text_49"(宠物名称、年龄、主人、医生、医嘱、动物种类、病历号、电话、就诊时间)
+   不影响其他用途(其他 text_33-49 仅出现在画框里) */
+.page [class^="text_3"][class$="3"],
+.page [class^="text_3"][class$="4"],
+.page [class^="text_3"][class$="5"],
+.page [class^="text_3"][class$="6"],
+.page [class^="text_3"][class$="7"],
+.page [class^="text_3"][class$="8"],
+.page [class^="text_3"][class$="9"],
+.page [class^="text_4"][class$="0"],
+.page [class^="text_4"][class$="1"],
+.page [class^="text_4"][class$="2"],
+.page [class^="text_4"][class$="3"],
+.page [class^="text_4"][class$="4"],
+.page [class^="text_4"][class$="5"],
+.page [class^="text_4"][class$="6"],
+.page [class^="text_4"][class$="7"],
+.page [class^="text_4"][class$="8"],
+.page [class^="text_4"][class$="9"] {
+  transform: translateY(-2px) !important;
+}
+
+/* ★ P1-3 修复:ICU 状态页所有倒计时/环境数字统一正常体(不粗体)
+   包含:舱内温度 .text_61 / 氧浓度 .text_63 / 红外体温 .text_65 / 湿度 .text_69 /
+   治疗时长 .text-wrapper_23 / 二氧化碳 .text_81 / 蓝光理疗 .text_83 /
+   主治医生 .text_71 等 — 统一普通体 + OPPOSans-R
+   覆盖 7 个数据卡片 + 治疗时长卡
+   ★ 注意:不能把 .text_77 放进来 —— 改版后 .text_77 是内循环开关的状态文字(开/关),
+   加 min-width:80px 会把"关"字撑出卡片左侧,与雾化器/暖光照明两个开关不一致。 */
+.page.icu-page-status .text_61,
+.page.icu-page-status .text_63,
+.page.icu-page-status .text_65,
+.page.icu-page-status .text_69,
+.page.icu-page-status .text_71,
+.page.icu-page-status .text_79,
+.page.icu-page-status .text_81,
+.page.icu-page-status .text_83,
+.page.icu-page-status .text-wrapper_23 {
+  font-weight: 400 !important;
+  font-family: OPPOSans-R, "Source Han Sans CN", sans-serif !important;
+  /* ★ 修复问题8: 治疗时间显示不全，增加最小宽度 */
+  min-width: 80px !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+}
+
+.page.icu-page-status .text_60,
+.page.icu-page-status .text_62,
+.page.icu-page-status .text_64,
+.page.icu-page-status .text_66,
+.page.icu-page-status .text_68,
+.page.icu-page-status .text_70,
+.page.icu-page-status .text_78,
+.page.icu-page-status .text_80,
+.page.icu-page-status .text_82,
+.page.icu-page-status .text_72,
+.page.icu-page-status .text_74,
+.page.icu-page-status .text_76 {
+  font-size: 18px !important;
+  line-height: 26px !important;
+  font-weight: 700 !important;
+  color: rgba(87, 87, 87, 1) !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  max-width: 220px !important;
+}
+
+/* 底部医嘱面板标题 .text_84:UI 初稿里它是常规字重(与数据卡片标题的粗体不同),
+   且距卡片顶 22px。原先它被并进上面那条粗体规则,渲染出来比初稿明显更粗、更靠下。 */
+.page.icu-page-status .text_84 {
+  font-size: 18px !important;
+  line-height: 26px !important;
+  font-weight: 400 !important;
+  font-family: "Source Han Sans CN", "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  color: rgba(87, 87, 87, 1) !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+  max-width: 220px !important;
+  margin: 18px 0 0 21px !important;
+}
+
+.page.icu-page-status .text_67 {
+  font-size: 13px !important;
+  line-height: 16px !important;
+}
+
+.page.icu-page-status .text-wrapper_24 {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 96px !important;
+  height: 28px !important;
+  margin-top: 18px !important;
+}
+
+.page.icu-page-status .text_61,
+.page.icu-page-status .text_63,
+.page.icu-page-status .text_65,
+.page.icu-page-status .text_69,
+.page.icu-page-status .text_71,
+.page.icu-page-status .text_79,
+.page.icu-page-status .text_81,
+.page.icu-page-status .text_83 {
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: 132px !important;
+  flex: 1 1 auto !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  font-size: 20px !important;
+  line-height: 24px !important;
+}
+
+.page.icu-page-status .box_16,
+.page.icu-page-status .section_5,
+.page.icu-page-status .section_8,
+.page.icu-page-status .box_31,
+.page.icu-page-status .box_33,
+.page.icu-page-status .group_17,
+.page.icu-page-status .group_20,
+.page.icu-page-status .section_13 {
+  align-items: flex-end !important;
+}
+
+.page.icu-page-status .text_73,
+.page.icu-page-status .text_75,
+.page.icu-page-status .text_77 {
+  font-size: 16px !important;
+  line-height: 20px !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  height: 20px !important;
+  margin-right: 8px !important;
+  font-weight: 700 !important;
+  font-family: OPPOSans-B, sans-serif !important;
+}
+
+/* 医嘱正文:初稿里正文在「医嘱」标题下方,左边与标题对齐。
+   通用规则的 left:82px / align-items:center 会把正文顶到标题右侧同一行
+   (实测 x=488 vs 标题 x=427),与初稿不符 —— 这里改为标题下方左对齐。 */
+.page.icu-page-status .icu-status-advice {
+  left: 21px !important;
+  right: 21px !important;
+  top: 48px !important;
+  bottom: 14px !important;
+  align-items: flex-start !important;
+  font-size: 20px !important;
+  line-height: 1.5 !important;
+  padding: 0 !important;
+  color: rgba(72, 78, 92, 1) !important;
+  white-space: pre-wrap !important;
+  word-break: break-word !important;
+  min-height: 0 !important;
+  box-sizing: border-box !important;
+}
+
+.page.icu-page-status .section_11,
+.page.icu-page-status .section_12,
+.page.icu-page-status .box_39 {
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+.page.icu-page-monitor .icu-wave {
+  width: 993px;
+  height: 164px;
+  margin: 8px 0 0 18px;
+  border-radius: 8px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.page.icu-page-monitor .group_37 > img,
+.page.icu-page-monitor .group_39 > img,
+.page.icu-page-monitor .box_30 > img {
+  display: none !important;
+}
+
+.page .icu-mode-dot {
+  border-radius: 999px !important;
+  border: 2px solid #8db8d8 !important;
+  background: #fff !important;
+}
+
+.page .icu-mode-dot.on {
+  background: #3d9be9 !important;
+  box-shadow: 0 0 0 5px rgba(61, 155, 233, 0.18) !important;
+}
+
+.page .icu-mode-dot.last {
+  background: #d7e9f8 !important;
+}
+
+.page .icu-patient-search-input {
+  -webkit-appearance: none !important;
+  appearance: none !important;
+  width: 260px !important;
+  height: 32px !important;
+  margin-left: 11px !important;
+  border: 0 !important;
+  outline: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #4b5563 !important;
+  font-size: 16px !important;
+  line-height: 32px !important;
+  font-family: "Microsoft YaHei", "PingFang SC", "Source Han Sans CN", sans-serif !important;
+  user-select: text !important;
+  touch-action: auto !important;
+}
+
+.page .icu-patient-search-input::placeholder {
+  color: #5f6b7a !important;
+  opacity: 1 !important;
+}
+
+.page [data-icu-search-box] {
+  display: flex !important;
+  align-items: center !important;
+  overflow: hidden !important;
+  position: relative !important;
+  z-index: 40 !important;
+  pointer-events: auto !important;
+}
+
+.page [data-icu-search-box] img {
+  flex: 0 0 auto !important;
+}
+
+.page [data-icu-search-box] .icu-patient-search-input {
+  flex: 1 1 auto !important;
+  width: auto !important;
+  min-width: 0 !important;
+  position: relative !important;
+  z-index: 41 !important;
+  pointer-events: auto !important;
+}
+
+.page .section_1,
+.page .icu-patient-sidebar {
+  position: relative !important;
+}
+
+.page [data-temp-patient-id] {
+  cursor: pointer !important;
+}
+
+.page .icu-temp-patient-row-node {
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+.page .icu-record-active-bg {
+  position: absolute !important;
+  left: 14px !important;
+  width: 336px !important;
+  border-radius: 10px !important;
+  background: #ffffff !important;
+  z-index: 1 !important;
+  pointer-events: none !important;
+}
+
+.page .icu-record-hit-layer {
+  position: absolute !important;
+  z-index: 20 !important;
+  background: rgba(255, 255, 255, 0) !important;
+  pointer-events: auto !important;
+  touch-action: manipulation !important;
+}
+
+.page .icu-temp-patient-active {
+  box-shadow: none !important;
+}
+
+.page .icu-patient-empty-hint {
+  display: none !important;
+}
+
+.icu-patient-modal {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483647 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 24px 0 !important;
+  /* 弹窗自身（.icu-patient-dialog）已可内部滚动，外层不需要滚动；
+     外层若可滚动，键盘弹起/收起时 WebView 会去滚它，和 JS 的
+     transform 叠加导致位置算偏、内容来回跳动。 */
+  overflow: hidden !important;
+  background: rgba(15, 23, 42, 0.42) !important;
+  font-family: "Microsoft YaHei", "PingFang SC", "Source Han Sans CN", sans-serif !important;
+  /* P2-BUG#2 修复：改善键盘弹出时的滚动体验 */
+  -webkit-overflow-scrolling: touch !important;
+  overscroll-behavior: contain !important;
+}
+
+.icu-patient-dialog {
+  position: relative !important;
+  z-index: 2147483647 !important;
+  width: 720px !important;
+  max-height: 900px !important;
+  max-height: calc(100vh - 48px) !important;
+  padding: 28px 32px !important;
+  border-radius: 18px !important;
+  background: #ffffff !important;
+  box-shadow: 0 24px 80px rgba(24, 51, 85, 0.28) !important;
+  overflow-y: auto !important;
+  -webkit-overflow-scrolling: touch !important;
+  /* 键盘动画期间若开启 smooth/transition，多路事件会互相追赶，
+     弹窗内容会上下反复滑动；这里统一改瞬时完成。 */
+  scroll-behavior: auto !important;
+}
+
+/* JS 确认键盘收起后，即使输入框仍持有焦点，也恢复完整高度；
+   避免为了“去掉焦点态”去 blur 用户刚点中的下一个输入框。 */
+.icu-patient-modal.icu-patient-modal-closed .icu-patient-dialog {
+  max-height: calc(100vh - 48px) !important;
+}
+
+.icu-patient-modal,
+.icu-patient-dialog {
+  transition: none !important;
+  scroll-behavior: auto !important;
+}
+
+/* 弹窗右侧的网页式滚动条：输入内容超出一屏时可滑动查看全部已填信息。
+   滚动发生在 .icu-patient-dialog 上，滚动条固定在弹窗内容右侧。 */
+.icu-patient-dialog {
+  scrollbar-width: thin !important;
+  scrollbar-color: rgba(110, 132, 152, 0.65) rgba(0, 0, 0, 0.035) !important;
+  scrollbar-gutter: stable !important;
+}
+.icu-patient-dialog::-webkit-scrollbar {
+  width: 10px !important;
+}
+.icu-patient-dialog::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.035) !important;
+  border-radius: 5px !important;
+}
+.icu-patient-dialog::-webkit-scrollbar-thumb {
+  background: rgba(110, 132, 152, 0.55) !important;
+  border-radius: 5px !important;
+  min-height: 36px !important;
+  border: 2px solid rgba(255, 255, 255, 0.65) !important;
+  background-clip: padding-box !important;
+}
+.icu-patient-dialog::-webkit-scrollbar-thumb:hover {
+  background: rgba(90, 112, 132, 0.75) !important;
+  background-clip: padding-box !important;
+}
+
+.icu-patient-title {
+  margin-bottom: 22px !important;
+  color: #1f3b57 !important;
+  font-size: 24px !important;
+  font-weight: 700 !important;
+}
+
+.icu-patient-form {
+  display: grid !important;
+  grid-template-columns: 1fr 1fr !important;
+  gap: 16px 18px !important;
+  padding-bottom: 8px !important;
+}
+
+.icu-patient-field {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 7px !important;
+  color: #4c5b6b !important;
+  font-size: 15px !important;
+  user-select: text !important;
+}
+
+.icu-patient-field input,
+.icu-patient-field textarea {
+  width: 100% !important;
+  min-height: 42px !important;
+  padding: 8px 12px !important;
+  border: 1px solid #d7e2ee !important;
+  border-radius: 8px !important;
+  outline: 0 !important;
+  background: #f8fbff !important;
+  color: #1f2f3f !important;
+  font-size: 16px !important;
+  user-select: text !important;
+  touch-action: auto !important;
+  /* P2-BUG#2 修复：确保输入框滚动时有足够的边距 */
+  scroll-margin: 80px !important;
+  transition: border-color 0.2s ease !important;
+}
+
+/* P2-BUG#2 修复：输入框获得焦点时的视觉反馈 */
+.icu-patient-field input:focus,
+.icu-patient-field textarea:focus {
+  border-color: #0077d7 !important;
+  background: #ffffff !important;
+}
+
+.icu-patient-field textarea {
+  min-height: 82px !important;
+  resize: none !important;
+  overflow-y: auto !important;
+  white-space: pre-wrap !important;
+}
+
+.icu-patient-field-wide {
+  grid-column: 1 / -1 !important;
+}
+
+.icu-patient-actions {
+  display: flex !important;
+  justify-content: flex-end !important;
+  gap: 14px !important;
+  margin-top: 24px !important;
+}
+
+.icu-patient-actions button {
+  min-width: 110px !important;
+  height: 42px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: #edf4fb !important;
+  color: #2d5f8e !important;
+  font-size: 16px !important;
+}
+
+.icu-patient-actions button[data-act="save"] {
+  background: #0077d7 !important;
+  color: #ffffff !important;
+}
+
+/* ★ 自建中文日期时间选择器。替代 <input type="datetime-local"> 的 Chromium
+   原生弹窗(英文 "Set date and time" / Jul-Aug-Sep / AM-PM)。
+   z-index 要压过 .icu-patient-modal(2147483647),所以同值 + 后插入 DOM。 */
+.icu-cn-datetime {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 2147483647 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(15, 23, 42, 0.46) !important;
+  font-family: "Microsoft YaHei", "PingFang SC", "Source Han Sans CN", sans-serif !important;
+}
+
+.icu-cn-datetime__panel {
+  width: 560px !important;
+  max-width: calc(100vw - 48px) !important;
+  padding: 22px 24px 18px !important;
+  border-radius: 16px !important;
+  background: #ffffff !important;
+  box-shadow: 0 24px 80px rgba(24, 51, 85, 0.3) !important;
+}
+
+.icu-cn-datetime__title {
+  margin-bottom: 10px !important;
+  color: #1f3b57 !important;
+  font-size: 20px !important;
+  font-weight: 700 !important;
+}
+
+.icu-cn-datetime__preview {
+  margin-bottom: 14px !important;
+  padding: 8px 12px !important;
+  border-radius: 8px !important;
+  background: #f2f8ff !important;
+  color: #0f5fa8 !important;
+  font-size: 18px !important;
+}
+
+.icu-cn-datetime__cols {
+  display: flex !important;
+  gap: 10px !important;
+}
+
+.icu-cn-datetime__col {
+  flex: 1 1 0 !important;
+  min-width: 0 !important;
+}
+
+.icu-cn-datetime__colname {
+  margin-bottom: 6px !important;
+  color: #6b7a8b !important;
+  font-size: 14px !important;
+  text-align: center !important;
+}
+
+.icu-cn-datetime__list {
+  /* position:relative 是必须的:centerSelected() 用 offsetTop 定位选中项,
+     而 offsetTop 是相对最近的定位祖先算的。不写这句的话定位祖先会一路找到
+     position:fixed 的 .icu-cn-datetime,offsetTop 变成「相对视口」的大数值,
+     scrollTop 被顶到最大,选中项就滚出可视区了。 */
+  position: relative !important;
+  height: 208px !important;
+  overflow-y: auto !important;
+  border: 1px solid #d7e2ee !important;
+  border-radius: 8px !important;
+  background: #f8fbff !important;
+  -webkit-overflow-scrolling: touch !important;
+}
+
+.icu-cn-datetime__list button {
+  display: block !important;
+  width: 100% !important;
+  height: 38px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: #33475b !important;
+  font-size: 17px !important;
+  font-family: inherit !important;
+  cursor: pointer !important;
+}
+
+.icu-cn-datetime__list button.is-on {
+  background: #0077d7 !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+.icu-cn-datetime__actions {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  margin-top: 18px !important;
+}
+
+.icu-cn-datetime__spacer {
+  flex: 1 1 auto !important;
+}
+
+.icu-cn-datetime__actions button {
+  min-width: 96px !important;
+  height: 40px !important;
+  border: 0 !important;
+  border-radius: 8px !important;
+  background: #edf4fb !important;
+  color: #2d5f8e !important;
+  font-size: 16px !important;
+  font-family: inherit !important;
+  cursor: pointer !important;
+}
+
+.icu-cn-datetime__actions button.icu-cn-datetime__primary {
+  background: #0077d7 !important;
+  color: #ffffff !important;
+}
+
+.page .icu-treatment-table span {
+  display: inline-block !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  line-height: 1.05 !important;
+  vertical-align: middle !important;
+}
+
+.page .icu-treatment-table [class^="text_"],
+.page .icu-treatment-table [class*=" text_"] {
+  max-width: 100%;
+}
+
+.page .icu-treatment-header,
+.page .icu-treatment-row {
+  width: 1465px !important;
+  min-height: 28px !important;
+  display: grid !important;
+  grid-template-columns: 52px 150px 220px 220px 92px 92px 118px 116px 112px 112px !important;
+  align-items: center !important;
+  column-gap: 0 !important;
+  padding: 0 8px !important;
+}
+
+.page .icu-treatment-row {
+  height: 36px !important;
+  margin-left: 28px !important;
+}
+
+.page .icu-treatment-table .icu-treatment-cell {
+  width: auto !important;
+  max-width: 100% !important;
+  height: auto !important;
+  margin: 0 !important;
+  line-height: 18px !important;
+  padding: 0 6px !important;
+}
+
+.page .icu-treatment-table img {
+  justify-self: center !important;
+  margin: 0 !important;
+}
+
+.page .icu-treatment-actions {
+  display: inline-flex !important;
+  gap: 12px !important;
+  margin-left: 22px !important;
+  vertical-align: middle !important;
+}
+
+.page .icu-treatment-actions button {
+  min-width: 112px !important;
+  height: 30px !important;
+  padding: 0 14px !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  background: #0077d7 !important;
+  color: #fff !important;
+  font-size: 14px !important;
+  font-family: "Microsoft YaHei", "PingFang SC", "Source Han Sans CN", sans-serif !important;
+  touch-action: manipulation !important;
+}
+
+.page .section_5,
+.page .block_7 {
+  position: relative !important;
+}
+
+.page.icu-page-status .image-wrapper_4 > img,
+.page.icu-page-camera-live .block_7 > img {
+  display: none !important;
+}
+
+.page .icu-monitor-filter {
+  display: none !important;
+  position: absolute !important;
+  left: 28px !important;
+  top: 12px !important;
+  z-index: 40 !important;
+  display: flex !important;
+  gap: 7px !important;
+  padding: 7px 9px !important;
+  border-radius: 999px !important;
+  background: rgba(8, 21, 32, 0.72) !important;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.16) !important;
+}
+
+.page .icu-monitor-filter button {
+  min-width: 52px !important;
+  height: 28px !important;
+  padding: 0 10px !important;
+  border: 1px solid rgba(255, 255, 255, 0.24) !important;
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #e8f5ff !important;
+  font-size: 13px !important;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  touch-action: manipulation !important;
+}
+
+.page .icu-monitor-filter button.active {
+  border-color: #35d27f !important;
+  background: #35d27f !important;
+  color: #07131d !important;
+  font-weight: 700 !important;
+}
+
+.page.icu-page-monitor .group_37,
+.page.icu-page-monitor .group_39,
+.page.icu-page-monitor .box_30 {
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.page.icu-page-monitor .section_5 {
+  position: relative !important;
+}
+
+.page.icu-page-monitor .section_5.icu-monitor-single-wave .block_9,
+.page.icu-page-monitor .section_5.icu-monitor-single-wave .block_10,
+.page.icu-page-monitor .section_5.icu-monitor-single-wave .block_13 {
+  margin-top: 21px !important;
+}
+
+.page.icu-page-monitor .box_7,
+.page.icu-page-monitor .box_8,
+.page.icu-page-monitor .block_11,
+.page.icu-page-monitor .block_12,
+.page.icu-page-monitor .box_13,
+.page.icu-page-monitor .box_14 {
+  cursor: pointer !important;
+  box-sizing: border-box !important;
+  border: 1px solid transparent !important;
+}
+
+.page.icu-page-monitor .icu-monitor-card-active {
+  border-color: rgba(255, 255, 255, 0.58) !important;
+  box-shadow: inset 0 0 0 1px rgba(80, 180, 255, 0.42), 0 0 18px rgba(80, 180, 255, 0.22) !important;
+}
+
+.page.icu-page-monitor .icu-wave {
+  position: absolute !important;
+  left: 18px !important;
+  top: 34px !important;
+  width: 993px !important;
+  height: 164px !important;
+  z-index: 8 !important;
+  pointer-events: none !important;
+}
+
+.page.icu-page-monitor .icu-wave.icu-wave-interactive {
+  pointer-events: auto !important;
+  cursor: pointer !important;
+}
+
+.page.icu-page-monitor .section_5.icu-monitor-single-wave .icu-wave {
+  position: static !important;
+  left: auto !important;
+  top: auto !important;
+  width: 100% !important;
+  height: 100% !important;
+  margin: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.page.icu-page-monitor .section_5.icu-monitor-single-wave .icu-wave > svg {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  max-width: 100% !important;
+  max-height: 100% !important;
+  margin: 0 auto !important;
+}
+
+.page.icu-page-monitor .icu-wave-probe {
+  position: absolute !important;
+  inset: 0 !important;
+  pointer-events: none !important;
+  --probe-left: 50%;
+  --probe-top: 50%;
+  --probe-color: #ff6b6b;
+}
+
+.page.icu-page-monitor .icu-wave-probe-v {
+  position: absolute !important;
+  left: var(--probe-left) !important;
+  top: 6px !important;
+  bottom: 6px !important;
+  width: 1px !important;
+  background: var(--probe-color) !important;
+  opacity: 0.72 !important;
+}
+
+.page.icu-page-monitor .icu-wave-probe-h {
+  position: absolute !important;
+  left: 8px !important;
+  right: 8px !important;
+  top: var(--probe-top) !important;
+  height: 1px !important;
+  background: var(--probe-color) !important;
+  opacity: 0.52 !important;
+}
+
+.page.icu-page-monitor .icu-wave-probe-dot {
+  position: absolute !important;
+  left: var(--probe-left) !important;
+  top: var(--probe-top) !important;
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 999px !important;
+  background: var(--probe-color) !important;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.16) !important;
+  transform: translate(-50%, -50%) !important;
+}
+
+.page.icu-page-monitor .icu-wave-probe-label {
+  position: absolute !important;
+  left: calc(var(--probe-left) + 12px) !important;
+  top: calc(var(--probe-top) - 38px) !important;
+  max-width: 240px !important;
+  min-height: 24px !important;
+  padding: 6px 10px !important;
+  border-radius: 10px !important;
+  background: rgba(7, 18, 30, 0.9) !important;
+  color: #f4fbff !important;
+  font-size: 12px !important;
+  line-height: 1.3 !important;
+  white-space: nowrap !important;
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.26) !important;
+}
+
+.page.icu-page-monitor .icu-wave-probe.align-right .icu-wave-probe-label {
+  left: auto !important;
+  right: calc(100% - var(--probe-left) + 12px) !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-modal {
+  position: absolute !important;
+  inset: 0 !important;
+  z-index: 140 !important;
+  display: none !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: rgba(4, 10, 18, 0.58) !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-modal.open {
+  display: flex !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-shell {
+  width: calc(100% - 56px) !important;
+  height: calc(100% - 48px) !important;
+  padding: 18px 22px 20px !important;
+  border-radius: 20px !important;
+  background: linear-gradient(180deg, rgba(8, 19, 30, 0.98), rgba(11, 29, 44, 0.97)) !important;
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.32) !important;
+  box-sizing: border-box !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  margin-bottom: 14px !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-title {
+  color: #f4fbff !important;
+  font-size: 24px !important;
+  font-weight: 700 !important;
+  letter-spacing: 1px !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-close,
+.page.icu-page-monitor .icu-monitor-history-tabs button {
+  border: 0 !important;
+  border-radius: 999px !important;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  touch-action: manipulation !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-close {
+  min-width: 78px !important;
+  height: 34px !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #f4fbff !important;
+  font-size: 14px !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-tabs {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 10px !important;
+  margin-bottom: 14px !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-tabs button {
+  min-width: 74px !important;
+  height: 32px !important;
+  padding: 0 14px !important;
+  background: rgba(255, 255, 255, 0.1) !important;
+  color: rgba(235, 247, 255, 0.86) !important;
+  font-size: 13px !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-tabs button.active {
+  background: #35d27f !important;
+  color: #08131e !important;
+  font-weight: 700 !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-stats {
+  display: grid !important;
+  grid-template-columns: repeat(5, minmax(0, 1fr)) !important;
+  gap: 12px !important;
+  margin-bottom: 16px !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-stats > div {
+  padding: 12px 14px !important;
+  border-radius: 14px !important;
+  background: rgba(255, 255, 255, 0.06) !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-stats span {
+  display: block !important;
+  margin-bottom: 6px !important;
+  color: rgba(214, 231, 245, 0.72) !important;
+  font-size: 12px !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-stats strong {
+  color: #ffffff !important;
+  font-size: 20px !important;
+  font-weight: 700 !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-chart-wrap {
+  position: relative !important;
+  height: calc(100% - 146px) !important;
+  min-height: 260px !important;
+  padding: 12px 12px 40px !important;
+  border-radius: 18px !important;
+  background: rgba(2, 8, 14, 0.92) !important;
+  box-sizing: border-box !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-chart {
+  position: relative !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 14px !important;
+  overflow: hidden !important;
+  cursor: crosshair !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-chart svg {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-note {
+  position: absolute !important;
+  left: 18px !important;
+  bottom: 12px !important;
+  color: rgba(210, 228, 241, 0.72) !important;
+  font-size: 12px !important;
+}
+
+.page.icu-page-monitor .icu-monitor-history-empty {
+  display: flex !important;
+  width: 100% !important;
+  height: 100% !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: rgba(221, 236, 247, 0.72) !important;
+  font-size: 16px !important;
+}
+
+.page.icu-page-monitor .icu-wave-empty > img {
+  visibility: hidden !important;
+}
+
+.page.icu-page-monitor .icu-wave-empty::after {
+  content: attr(data-empty-label) !important;
+  position: absolute !important;
+  left: 14px !important;
+  top: 12px !important;
+  z-index: 9 !important;
+  color: rgba(232, 245, 255, 0.68) !important;
+  font-size: 15px !important;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+}
+
+.page.icu-page-monitor .section_5 .text-wrapper_66,
+.page.icu-page-monitor .section_5 .text-wrapper_68,
+.page.icu-page-monitor .section_5 .text-wrapper_72 {
+  display: flex !important;
+  position: relative !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  overflow: visible !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+.page.icu-page-monitor .section_5 .text-wrapper_62 {
+  display: flex !important;
+  position: relative !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  overflow: visible !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+.page.icu-page-monitor .section_5 .text-wrapper_70 {
+  display: flex !important;
+  position: relative !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  overflow: visible !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+.page.icu-page-monitor .section_5 .text-wrapper_64 {
+  display: flex !important;
+  position: relative !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  overflow: visible !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  gap: 8px !important;
+}
+
+.page.icu-page-monitor .section_5 .text_62,
+.page.icu-page-monitor .section_5 .text_70,
+.page.icu-page-monitor .section_5 .text_73,
+.page.icu-page-monitor .section_5 .text_77,
+.page.icu-page-monitor .section_5 .text_80 {
+  width: auto !important;
+  min-width: 66px !important;
+  max-width: 146px !important;
+  height: 48px !important;
+  font-size: 40px !important;
+  line-height: 48px !important;
+  overflow-wrap: normal !important;
+  word-break: keep-all !important;
+  white-space: nowrap !important;
+}
+
+.page.icu-page-monitor .section_5 .text_66 {
+  width: auto !important;
+  min-width: 142px !important;
+  max-width: 184px !important;
+  height: 48px !important;
+  margin: 0 !important;
+  font-size: 40px !important;
+  line-height: 48px !important;
+  overflow-wrap: normal !important;
+  word-break: keep-all !important;
+  white-space: nowrap !important;
+}
+
+.page.icu-page-monitor .section_5 .text_63,
+.page.icu-page-monitor .section_5 .text_67,
+.page.icu-page-monitor .section_5 .text_71,
+.page.icu-page-monitor .section_5 .text_74,
+.page.icu-page-monitor .section_5 .text_78,
+.page.icu-page-monitor .section_5 .text_81 {
+  position: absolute !important;
+  right: 28px !important;
+  bottom: 4px !important;
+  flex: 0 0 auto !important;
+  width: auto !important;
+  height: 20px !important;
+  margin: 0 !important;
+  font-size: 16px !important;
+  line-height: 20px !important;
+  text-align: right !important;
+  white-space: nowrap !important;
+}
+
+.page.icu-page-monitor .section_5 .text_65 {
+  position: absolute !important;
+  left: 13px !important;
+  bottom: 5px !important;
+  flex: 0 0 auto !important;
+  width: auto !important;
+  height: 18px !important;
+  margin: 0 !important;
+  line-height: 18px !important;
+  white-space: nowrap !important;
+}
+
+.page .icu-camera-config-button {
+  position: absolute !important;
+  right: 22px !important;
+  top: 18px !important;
+  z-index: 55 !important;
+  height: 34px !important;
+  padding: 0 16px !important;
+  border: 0 !important;
+  border-radius: 18px !important;
+  background: rgba(0, 119, 215, 0.92) !important;
+  color: #ffffff !important;
+  font-size: 14px !important;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  box-shadow: 0 6px 16px rgba(0, 69, 125, 0.24) !important;
+  touch-action: manipulation !important;
+}
+
+.page.icu-page-camera-live .text-wrapper_55 {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 344px !important;
+}
+
+.page.icu-page-camera-live .text-wrapper_55 .text_70,
+.page.icu-page-camera-live .text-wrapper_55 .text_71,
+.page.icu-page-camera-live .text-wrapper_55 .text_72 {
+  width: auto !important;
+  margin: 0 !important;
+  line-height: 18px !important;
+  white-space: nowrap !important;
+}
+
+.page.icu-page-camera-live .text-wrapper_55 .text_70 {
+  min-width: 108px !important;
+}
+
+.page .icu-camera-playback-panel {
+  position: absolute !important;
+  inset: 10px !important;
+  z-index: 60 !important;
+  display: none;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 18px !important;
+  border-radius: 18px !important;
+  background: linear-gradient(135deg, rgba(7, 19, 29, 0.96), rgba(13, 45, 66, 0.94)) !important;
+  color: #ffffff !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08) !important;
+}
+
+.page .icu-camera-playback-title {
+  font-size: 28px !important;
+  font-weight: 700 !important;
+  letter-spacing: 2px !important;
+}
+
+.page .icu-camera-playback-empty {
+  max-width: 620px !important;
+  color: rgba(255, 255, 255, 0.72) !important;
+  font-size: 16px !important;
+  text-align: center !important;
+  line-height: 1.7 !important;
+}
+
+.page .icu-camera-playback-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  gap: 12px !important;
+}
+
+.page .icu-camera-playback-actions button {
+  height: 38px !important;
+  min-width: 104px !important;
+  padding: 0 16px !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  border-radius: 19px !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
+  font-size: 14px !important;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  touch-action: manipulation !important;
+}
+
+.page .icu-camera-playback-actions button:nth-child(2) {
+  border-color: #32d583 !important;
+  background: #32d583 !important;
+  color: #07131d !important;
+}
+
+.page .icu-switch-fake {
+  position: relative !important;
+  display: inline-block !important;
+  width: 42px !important;
+  height: 22px !important;
+  flex: 0 0 auto !important;
+  border-radius: 999px !important;
+  background: #c5ccd5 !important;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
+  vertical-align: middle !important;
+}
+
+.page .icu-switch-fake::after {
+  content: "" !important;
+  position: absolute !important;
+  top: 3px !important;
+  left: 3px !important;
+  width: 16px !important;
+  height: 16px !important;
+  border-radius: 50% !important;
+  background: #ffffff !important;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.24) !important;
+  transition: left 0.12s ease !important;
+}
+
+.page .icu-switch-fake.on {
+  background: #189af2 !important;
+}
+
+.page .icu-switch-fake.on::after {
+  left: 23px !important;
+}
+
+.page .icu-status-switch {
+  width: 40px !important;
+  height: 20px !important;
+}
+
+.page .icu-status-switch::after {
+  top: 2px !important;
+  left: 2px !important;
+}
+
+.page .icu-status-switch.on::after {
+  left: 22px !important;
+}
+
+.page .icu-switch-fake[data-native-action] {
+  cursor: pointer !important;
+  touch-action: manipulation !important;
+}
+
+/* ★ P1-3 修复:ICU 状态页开关按钮的状态视觉反馈
+   - 显示原图(.thumbnail_10/11/12)
+   - on 状态:加亮 + 绿色光晕,显示"已开启"效果
+   - off 状态:默认颜色
+   - 点击瞬间:active 缩放反馈
+*/
+.page .image-wrapper_1,
+.page .image-wrapper_2,
+.page .image-wrapper_3 {
+  cursor: pointer !important;
+  transition: transform 0.12s ease !important;
+}
+
+.page .image-wrapper_1 img,
+.page .image-wrapper_2 img,
+.page .image-wrapper_3 img {
+  transition: filter 0.18s ease, opacity 0.18s ease, transform 0.12s ease !important;
+}
+
+.page .image-wrapper_1 img.on,
+.page .image-wrapper_2 img.on,
+.page .image-wrapper_3 img.on {
+  filter: brightness(1.15) saturate(1.3) drop-shadow(0 0 6px rgba(76, 175, 80, 0.7)) !important;
+  opacity: 1 !important;
+}
+
+.page .image-wrapper_1 img.off,
+.page .image-wrapper_2 img.off,
+.page .image-wrapper_3 img.off {
+  filter: grayscale(0.4) brightness(0.92) !important;
+  opacity: 0.6 !important;
+}
+
+.page .image-wrapper_1:active,
+.page .image-wrapper_2:active,
+.page .image-wrapper_3:active {
+  transform: scale(0.92) !important;
+}
+
+.page .text-wrapper_23.icu-camera-mode-active,
+.page .text-wrapper_24.icu-camera-mode-active,
+.page .text-wrapper_29.icu-camera-mode-active,
+.page .text-wrapper_30.icu-camera-mode-active {
+  background-color: #0074ff !important;
+}
+
+.page .text-wrapper_23.icu-camera-mode-inactive,
+.page .text-wrapper_24.icu-camera-mode-inactive,
+.page .text-wrapper_29.icu-camera-mode-inactive,
+.page .text-wrapper_30.icu-camera-mode-inactive {
+  background-color: #ffffff !important;
+}
+
+.page .text-wrapper_23.icu-camera-mode-active span,
+.page .text-wrapper_24.icu-camera-mode-active span,
+.page .text-wrapper_29.icu-camera-mode-active span,
+.page .text-wrapper_30.icu-camera-mode-active span {
+  color: #ffffff !important;
+}
+
+.page .text-wrapper_23.icu-camera-mode-inactive span,
+.page .text-wrapper_24.icu-camera-mode-inactive span,
+.page .text-wrapper_29.icu-camera-mode-inactive span,
+.page .text-wrapper_30.icu-camera-mode-inactive span {
+  color: #575757 !important;
+}
+
+.page .icu-camera-chip-active {
+  background-color: #0074ff !important;
+}
+
+.page .icu-camera-chip-inactive {
+  background-color: #ffffff !important;
+}
+
+.page .icu-camera-chip-active span {
+  color: #ffffff !important;
+}
+
+.page .icu-camera-chip-inactive span {
+  color: #575757 !important;
+}
+
+.page .section_13,
+.page .section_14,
+.page .section_15,
+.page .section_16,
+.page .box_18,
+.page .text-wrapper_23,
+.page .text-wrapper_24,
+.page .text-wrapper_25,
+.page .text-wrapper_26,
+.page .text-wrapper_27,
+.page .text-wrapper_28,
+.page .text-wrapper_29,
+.page .text-wrapper_30 {
+  cursor: pointer !important;
+  touch-action: manipulation !important;
+}
+
+.page .icu-camera-action-disabled {
+  opacity: 0.58 !important;
+}
+
+.page.icu-page-camera-playback .image-wrapper_7 {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+  grid-auto-rows: 188px !important;
+  gap: 11px 8px !important;
+  align-content: start !important;
+}
+
+.page.icu-page-camera-playback .icu-camera-replay-card {
+  position: relative !important;
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  padding: 0 !important;
+  border: 2px solid transparent !important;
+  border-radius: 4px !important;
+  overflow: hidden !important;
+  background: linear-gradient(180deg, #233142, #0f1722) !important;
+  box-shadow: 0 8px 18px rgba(14, 24, 40, 0.16) !important;
+}
+
+.page.icu-page-camera-playback .icu-camera-replay-card.selected {
+  border-color: #0074ff !important;
+  box-shadow: 0 0 0 2px rgba(0, 116, 255, 0.16), 0 10px 20px rgba(14, 24, 40, 0.22) !important;
+}
+
+.page.icu-page-camera-playback .icu-camera-replay-card img {
+  display: block !important;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+.page.icu-page-camera-playback .icu-camera-replay-placeholder,
+.page.icu-page-camera-playback .icu-camera-empty {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  color: rgba(255, 255, 255, 0.88) !important;
+  font-size: 16px !important;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+}
+
+.page.icu-page-camera-playback .icu-camera-replay-placeholder {
+  width: 100% !important;
+  height: 100% !important;
+  background: linear-gradient(135deg, rgba(30, 44, 62, 0.96), rgba(12, 20, 31, 0.98)) !important;
+}
+
+.page.icu-page-camera-playback .icu-camera-empty {
+  grid-column: 1 / -1 !important;
+  height: 100% !important;
+  min-height: 188px !important;
+  border-radius: 6px !important;
+  background: rgba(10, 19, 31, 0.72) !important;
+}
+
+.page.icu-page-camera-playback .icu-camera-replay-time,
+.page.icu-page-camera-playback .icu-camera-replay-badge,
+.page.icu-page-camera-playback .icu-camera-replay-footer {
+  position: absolute !important;
+  z-index: 2 !important;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  letter-spacing: 0 !important;
+}
+
+.page.icu-page-camera-playback .icu-camera-replay-time {
+  left: 10px !important;
+  top: 8px !important;
+  padding: 2px 8px !important;
+  border-radius: 999px !important;
+  background: rgba(0, 0, 0, 0.36) !important;
+  color: #ffffff !important;
+  font-size: 12px !important;
+  line-height: 16px !important;
+}
+
+.page.icu-page-camera-playback .icu-camera-replay-badge {
+  right: 10px !important;
+  top: 8px !important;
+  min-width: 24px !important;
+  height: 18px !important;
+  padding: 0 6px !important;
+  border-radius: 999px !important;
+  background: rgba(255, 255, 255, 0.2) !important;
+  color: #ffffff !important;
+  font-size: 12px !important;
+  line-height: 18px !important;
+  text-align: center !important;
+}
+
+.page.icu-page-camera-playback .icu-camera-replay-footer {
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  height: 28px !important;
+  padding: 0 10px !important;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0), rgba(0, 0, 0, 0.68)) !important;
+  color: #ffffff !important;
+  font-size: 12px !important;
+  line-height: 36px !important;
+  text-align: left !important;
+}
+
+.page.icu-page-camera-playback .group_37 {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 8px !important;
+  width: 100% !important;
+  height: 28px !important;
+  margin: 392px 0 0 0 !important;
+}
+
+.page.icu-page-camera-playback .group_37 button {
+  min-width: 22px !important;
+  height: 22px !important;
+  padding: 0 4px !important;
+  border: 0 !important;
+  background: transparent !important;
+  color: #4e5f73 !important;
+  font-size: 14px !important;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+}
+
+.page.icu-page-camera-playback .group_37 button[disabled] {
+  opacity: 0.34 !important;
+}
+
+.page.icu-page-camera-playback .icu-camera-pager-index,
+.page.icu-page-camera-playback .icu-camera-pager-total {
+  color: #4e5f73 !important;
+  font-size: 16px !important;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  line-height: 22px !important;
+  white-space: nowrap !important;
+}
+
+.page .icu-monitor-tools {
+  position: absolute !important;
+  left: 452px !important;
+  right: 52px !important;
+  bottom: 34px !important;
+  z-index: 70 !important;
+  display: none !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  pointer-events: auto !important;
+}
+
+.page .icu-monitor-toolbar,
+.page .icu-treatment-actions {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.page .icu-monitor-toolbar button,
+.page .icu-treatment-actions button,
+.page .icu-tutorial-card button {
+  height: 30px !important;
+  min-width: 78px !important;
+  padding: 0 12px !important;
+  border: 1px solid #b9cce0 !important;
+  border-radius: 4px !important;
+  background: #ffffff !important;
+  color: #26465f !important;
+  font-size: 13px !important;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  cursor: pointer !important;
+  touch-action: manipulation !important;
+}
+
+.page .icu-monitor-toolbar button.active,
+.page .icu-treatment-actions button.active {
+  border-color: #168edb !important;
+  background: #168edb !important;
+  color: #ffffff !important;
+}
+
+.page .icu-monitor-panel {
+  display: grid !important;
+  grid-template-columns: minmax(360px, 1.05fr) minmax(320px, 0.95fr) !important;
+  gap: 10px !important;
+  padding: 10px !important;
+  border: 1px solid rgba(94, 122, 150, 0.35) !important;
+  border-radius: 6px !important;
+  background: rgba(7, 14, 22, 0.86) !important;
+  box-shadow: 0 8px 24px rgba(0, 30, 60, 0.18) !important;
+}
+
+.page .icu-monitor-summary {
+  display: grid !important;
+  grid-template-columns: repeat(3, minmax(88px, 1fr)) !important;
+  gap: 8px !important;
+}
+
+.page .icu-monitor-summary-item {
+  min-height: 50px !important;
+  padding: 7px 9px !important;
+  border: 1px solid rgba(124, 162, 190, 0.35) !important;
+  border-radius: 4px !important;
+  background: rgba(255, 255, 255, 0.07) !important;
+  color: #d9edf8 !important;
+}
+
+.page .icu-monitor-summary-item strong,
+.page .icu-monitor-summary-item span,
+.page .icu-monitor-summary-item em {
+  display: block !important;
+  font-style: normal !important;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+}
+
+.page .icu-monitor-summary-item strong {
+  color: #8fb7d4 !important;
+  font-size: 11px !important;
+}
+
+.page .icu-monitor-summary-item span {
+  margin-top: 2px !important;
+  color: #ffffff !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+}
+
+.page .icu-monitor-summary-item em {
+  color: #9fb9ca !important;
+  font-size: 10px !important;
+}
+
+.page .icu-monitor-last {
+  margin-top: 7px !important;
+  color: #a8bfd0 !important;
+  font-size: 12px !important;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+}
+
+.page .icu-monitor-limits {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(120px, 1fr)) !important;
+  gap: 6px 10px !important;
+  color: #d8e8f3 !important;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+}
+
+.page .icu-monitor-limit-row {
+  display: grid !important;
+  grid-template-columns: 54px 1fr 24px !important;
+  gap: 6px !important;
+  align-items: center !important;
+  min-height: 25px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  font-size: 12px !important;
+}
+
+.page .icu-monitor-limit-row b,
+.page .icu-monitor-limit-row em {
+  font-style: normal !important;
+  font-weight: 500 !important;
+  color: #ffffff !important;
+}
+
+.page .icu-treatment-actions {
+  position: relative !important;
+  z-index: 45 !important;
+  margin-top: 8px !important;
+}
+
+.page .icu-treatment-period {
+  display: inline-flex !important;
+  gap: 6px !important;
+  margin-left: 8px !important;
+}
+
+.page .icu-treatment-row {
+  cursor: pointer !important;
+}
+
+.page .icu-treatment-row:hover {
+  outline: 1px solid rgba(22, 142, 219, 0.55) !important;
+  outline-offset: -1px !important;
+}
+
+.page .block_6.icu-treatment-table {
+  box-sizing: border-box !important;
+  padding: 0 12px 18px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.page .block_6.icu-treatment-table .text-wrapper_48 {
+  width: auto !important;
+  height: 46px !important;
+  margin: 16px 0 0 0 !important;
+  padding: 0 10px !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+  gap: 16px !important;
+}
+
+.page .block_6.icu-treatment-table .text_60 {
+  width: auto !important;
+  height: auto !important;
+  font-size: 30px !important;
+  line-height: 40px !important;
+}
+
+.page .block_6.icu-treatment-table .text-wrapper_24,
+.page .block_6.icu-treatment-table .icu-treatment-header,
+.page .block_6.icu-treatment-table .icu-treatment-row {
+  width: 1495px !important;
+  box-sizing: border-box !important;
+  grid-template-columns: 58px 170px 220px 220px 104px 104px 150px 150px 145px 145px !important;
+  min-height: 52px !important;
+  padding: 0 10px !important;
+  margin-left: 0 !important;
+}
+
+.page .block_6.icu-treatment-table .text-wrapper_24,
+.page .block_6.icu-treatment-table .icu-treatment-header {
+  height: 52px !important;
+  margin-top: 12px !important;
+}
+
+.page .block_6.icu-treatment-table .icu-treatment-row {
+  height: 52px !important;
+}
+
+.page .block_6.icu-treatment-table .icu-treatment-cell {
+  font-size: 24px !important;
+  line-height: 32px !important;
+  padding: 0 8px !important;
+}
+
+.page .block_6.icu-treatment-table .icu-treatment-header .icu-treatment-cell {
+  font-size: 22px !important;
+  font-weight: 700 !important;
+}
+
+.page .block_6.icu-treatment-table img {
+  width: 30px !important;
+  height: 30px !important;
+}
+
+.page .block_6.icu-treatment-table .icu-treatment-actions button {
+  height: 38px !important;
+  min-width: 92px !important;
+  font-size: 16px !important;
+}
+
+.page .block_6.icu-treatment-table {
+  padding: 0 18px 14px !important;
+  background: #dfeaf6 !important;
+  border-radius: 4px !important;
+  overflow: hidden !important;
+}
+
+.page .block_6.icu-treatment-table .text-wrapper_48 {
+  position: relative !important;
+  width: 100% !important;
+  height: 42px !important;
+  margin: 0 !important;
+  padding: 0 !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.page .block_6.icu-treatment-table .text_60 {
+  position: absolute !important;
+  left: 50% !important;
+  top: 12px !important;
+  transform: translateX(-50%) !important;
+  width: auto !important;
+  height: 18px !important;
+  margin: 0 !important;
+  color: #3f4f5d !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  line-height: 18px !important;
+  text-align: center !important;
+}
+
+.page .block_6.icu-treatment-table .text_61 {
+  position: absolute !important;
+  right: 20px !important;
+  top: 12px !important;
+  width: auto !important;
+  height: 18px !important;
+  margin: 0 !important;
+  color: #6b7480 !important;
+  font-size: 14px !important;
+  font-weight: 400 !important;
+  line-height: 18px !important;
+  text-align: right !important;
+}
+
+.page .block_6.icu-treatment-table .icu-treatment-actions {
+  display: none !important;
+}
+
+.page .block_6.icu-treatment-table .text-wrapper_24,
+.page .block_6.icu-treatment-table .icu-treatment-header,
+.page .block_6.icu-treatment-table .icu-treatment-row {
+  display: grid !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  box-sizing: border-box !important;
+  grid-template-columns: 60px 160px 210px 210px 92px 92px 175px 150px 140px 140px !important;
+  column-gap: 0 !important;
+  align-items: center !important;
+  padding: 0 14px !important;
+  margin-left: 0 !important;
+}
+
+.page .block_6.icu-treatment-table .text-wrapper_24,
+.page .block_6.icu-treatment-table .icu-treatment-header {
+  height: 32px !important;
+  margin-top: 0 !important;
+  background: #ffffff !important;
+}
+
+.page .block_6.icu-treatment-table .icu-treatment-row {
+  height: 34px !important;
+  margin-top: 0 !important;
+  background: #e3edf8 !important;
+  cursor: pointer !important;
+}
+
+.page .block_6.icu-treatment-table .icu-treatment-row:nth-of-type(even) {
+  background: #ffffff !important;
+}
+
+.page .block_6.icu-treatment-table .icu-treatment-row.icu-treatment-selected {
+  background: #acd0f5 !important;
+}
+
+.page .block_6.icu-treatment-table .icu-treatment-cell {
+  width: auto !important;
+  max-width: 100% !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 8px !important;
+  color: #4f5963 !important;
+  font-size: 18px !important;
+  font-weight: 400 !important;
+  line-height: 22px !important;
+  text-align: left !important;
+}
+
+.page .block_6.icu-treatment-table .icu-treatment-header .icu-treatment-cell {
+  color: #3f4f5d !important;
+  font-size: 17px !important;
+  font-weight: 700 !important;
+  line-height: 22px !important;
+}
+
+.page .block_6.icu-treatment-table .icu-col-0,
+.page .block_6.icu-treatment-table .icu-col-4,
+.page .block_6.icu-treatment-table .icu-col-5,
+.page .block_6.icu-treatment-table .icu-col-6,
+.page .block_6.icu-treatment-table .icu-col-7,
+.page .block_6.icu-treatment-table .icu-col-8,
+.page .block_6.icu-treatment-table .icu-col-9 {
+  text-align: center !important;
+}
+
+.page .block_6.icu-treatment-table img,
+.page .block_6.icu-treatment-table .icu-treatment-icon {
+  width: 20px !important;
+  height: 20px !important;
+  justify-self: center !important;
+  align-self: center !important;
+  margin: 0 !important;
+}
+
+.page.icu-page-control .text_60,
+.page.icu-page-control .text_64,
+.page.icu-page-control .text_68,
+.page.icu-page-control .text_72,
+.page.icu-page-control .text_76,
+.page.icu-page-control .text_78,
+.page.icu-page-control .text_81,
+.page.icu-page-control .text_84,
+.page.icu-page-control .text_97,
+.page.icu-page-control .text_100,
+.page.icu-page-control .text_103,
+.page.icu-page-control .text_104,
+.page.icu-page-control .text_105,
+.page.icu-page-control .text_106,
+.page.icu-page-control .text_107,
+.page.icu-page-control .text_108,
+.page.icu-page-control .text_109,
+.page.icu-page-control .text_110,
+.page.icu-page-control .text_111 {
+  width: auto !important;
+  max-width: 220px !important;
+  font-size: 18px !important;
+  line-height: 22px !important;
+  font-weight: 700 !important;
+  color: rgba(87, 87, 87, 1) !important;
+  white-space: nowrap !important;
+  overflow: visible !important;
+}
+
+.page.icu-page-control .text_63,
+.page.icu-page-control .text_67,
+.page.icu-page-control .text_71,
+.page.icu-page-control .text_75,
+.page.icu-page-control .text_93,
+.page.icu-page-control .text_94,
+.page.icu-page-control .text_96,
+.page.icu-page-control .text_99,
+.page.icu-page-control .text_102,
+.page.icu-page-control .text_112 {
+  font-size: 18px !important;
+  line-height: 22px !important;
+}
+
+.page.icu-page-control .text_94 {
+  color: rgba(0, 116, 255, 1) !important;
+}
+
+.page.icu-page-control .text_97,
+.page.icu-page-control .text_105,
+.page.icu-page-control .text_109 {
+  display: inline-block !important;
+  transform: none !important;
+}
+
+.page.icu-page-control .text_77 {
+  width: auto !important;
+  margin: 6px auto 0 !important;
+  font-size: 13px !important;
+  line-height: 16px !important;
+  text-align: center !important;
+}
+
+.page.icu-page-control .text-wrapper_28 {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 96px !important;
+  height: 28px !important;
+  margin-top: 18px !important;
+}
+
+.page.icu-page-control .box_71,
+.page.icu-page-control .group_92,
+.page.icu-page-control .group_93,
+.page.icu-page-control .section_37,
+.page.icu-page-control .group_94,
+.page.icu-page-control .text-wrapper_72,
+.page.icu-page-control .box_73,
+.page.icu-page-control .section_39,
+.page.icu-page-control .box_75,
+.page.icu-page-control .image-text_8 {
+  align-items: center !important;
+}
+
+.page.icu-page-control .image-text_8 {
+  align-items: flex-start !important;
+}
+
+.page.icu-page-control .text-group_2 {
+  width: 204px !important;
+  max-width: none !important;
+  height: 48px !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  font-size: 48px !important;
+  line-height: 48px !important;
+  text-align: left !important;
+}
+
+.page.icu-page-control .box_71,
+.page.icu-page-control .group_92,
+.page.icu-page-control .group_93,
+.page.icu-page-control .section_37 {
+  height: 47px !important;
+  margin-top: 0 !important;  /* 统一顶部位置，4 个数字同一基线 */
+}
+
+.page.icu-page-control .text-wrapper_23,
+.page.icu-page-control .text-wrapper_24,
+.page.icu-page-control .text-wrapper_25,
+.page.icu-page-control .text-wrapper_26 {
+  height: 47px !important;
+  line-height: 47px !important;  /* 与容器高度一致，垂直居中 */
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-start !important;
+}
+
+.page.icu-page-control .group_13,
+.page.icu-page-control .group_15 {
+  margin-top: 19px !important;
+}
+
+.page.icu-page-control .text_63,
+.page.icu-page-control .text_67 {
+  margin-top: 21px !important;
+}
+
+/* 理疗卡片数字与图标垂直对齐修复 */
+.page.icu-page-control .group_94,
+.page.icu-page-control .text-wrapper_72,
+.page.icu-page-control .box_73,
+.page.icu-page-control .section_39,
+.page.icu-page-control .box_75 {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+.page.icu-page-control .text-wrapper_29,
+.page.icu-page-control .text-wrapper_30,
+.page.icu-page-control .text_95,
+.page.icu-page-control .text_98,
+.page.icu-page-control .text_101 {
+  display: inline-flex !important;
+  align-items: center !important;
+  line-height: 1 !important;
+  margin-top: 0 !important;
+  padding: 0 !important;
+  vertical-align: middle !important;
+  font-size: 55px !important;
+}
+
+/* 理疗卡片右侧图标：70×70 + 原位（transform: 0）让文字覆盖在图标上 */
+.page.icu-page-control .group_39,
+.page.icu-page-control .section_17,
+.page.icu-page-control .box_37,
+.page.icu-page-control .box_41 {
+  width: 70px !important;
+  height: 70px !important;
+  outline: none !important;
+  position: relative !important;
+  transform: translate3d(-20px, 0, 0) !important;  /* 向左 20px */
+  margin-right: 0 !important;
+  z-index: 1 !important;  /* 图标层（数字层在其上） */
+}
+
+/* ICU 状态页 8 个数值字号统一强制 55px（与主机控制一致）*/
+.page.icu-page-status .text_61,
+.page.icu-page-status .text_63,
+.page.icu-page-status .text_65,
+.page.icu-page-status .text_69,
+.page.icu-page-status .text_71,
+.page.icu-page-status .text_79,
+.page.icu-page-status .text_81,
+.page.icu-page-status .text_83 {
+  font-size: 55px !important;
+}
+
+/* 主机控制页所有"设置"链接字号：20px */
+.page.icu-page-control .text_63,
+.page.icu-page-control .text_67,
+.page.icu-page-control .text_71,
+.page.icu-page-control .text_75,
+.page.icu-page-control .text_93,
+.page.icu-page-control .text_94,
+.page.icu-page-control .text_96,
+.page.icu-page-control .text_99,
+.page.icu-page-control .text_102,
+.page.icu-page-control .text_112 {
+  font-size: 18px !important;
+}
+
+/* 数字 span：z-index 更高，让文字能覆盖在图标之上 */
+.page.icu-page-control .text-wrapper_29,
+.page.icu-page-control .text-wrapper_30,
+.page.icu-page-control .text-wrapper_95,
+.page.icu-page-control .text-wrapper_98,
+.page.icu-page-control .text-wrapper_101,
+.page.icu-page-control .text_95,
+.page.icu-page-control .text_98,
+.page.icu-page-control .text_101 {
+  position: relative !important;
+  z-index: 2 !important;
+}
+
+/* 第一行卡片数字（氧浓度/湿度/二氧化碳）：与舱内温度保持一致 55px */
+.page.icu-page-control .text-wrapper_24,
+.page.icu-page-control .text-wrapper_25,
+.page.icu-page-control .text-wrapper_26 {
+  font-size: 55px !important;
+  z-index: 2 !important;
+  position: relative !important;
+}
+
+/* ★ ICU 状态页：所有数字 span 水平对齐到父容器左边缘
+   修复 flex justify-between 布局下数字位置参差不齐的问题 */
+.page.icu-page-status [data-icu-live="host.temp"],
+.page.icu-page-status [data-icu-live="host.oxygen"],
+.page.icu-page-status [data-icu-live="host.humidity"],
+.page.icu-page-status [data-icu-live="host.infraredTemp"],
+.page.icu-page-status [data-icu-live="host.co2"],
+.page.icu-page-status [data-icu-live="host.controls.redTherapy"],
+.page.icu-page-status [data-icu-live="host.controls.uv"],
+.page.icu-page-status [data-icu-live="host.controls.nebulizer"],
+.page.icu-page-status [data-icu-live="host.controls.anion"],
+.page.icu-page-status [data-icu-live="host.controls.blueTherapy"],
+.page.icu-page-status [data-icu-live="host.treatmentTime"] {
+  position: relative !important;
+  left: 0 !important;
+  margin-left: 0 !important;
+  text-align: left !important;
+  display: inline-block !important;
+  vertical-align: top !important;
+  /* ★ 同行基线对齐：统一 margin-top + line-height + height */
+  margin-top: 6px !important;
+  line-height: 1 !important;
+  vertical-align: bottom !important;
+  height: 60px !important;
+  font-size: 55px !important;
+}
+
+/* ★ 5 个数字的父容器 margin-left 统一 23px，让数字左边缘 X 坐标完全对齐
+   - .box_16    (text_61 仓内温度)
+   - .section_5 (text_63 氧浓度)
+   - .group_17  (text_79 湿度)
+   - .section_8 (text_65 红外体温)
+   - .group_20  (text_81 二氧化碳)
+*/
+.page.icu-page-status .box_16,
+.page.icu-page-status .section_5,
+.page.icu-page-status .group_17,
+.page.icu-page-status .section_8,
+.page.icu-page-status .group_20 {
+  margin-left: 23px !important;
+  margin-right: auto !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+  width: auto !important;
+  position: relative !important;
+}
+
+/* ★ 3 列图标垂直对齐：每个图标距离父容器右边缘 23px
+   列 1（仓内温度/红外体温/治疗时长）：.block_14 .box_17 .box_21 .block_11
+   列 2（氧浓度/监护等级/红外理疗）：.box_19 .group_12 .block_34
+   列 3（湿度/二氧化碳/蓝光理疗）：.box_41 .box_21 .block_34
+*/
+.page.icu-page-status .block_14,
+.page.icu-page-status .box_17,
+.page.icu-page-status .box_19,
+.page.icu-page-status .box_41,
+.page.icu-page-status .box_21,
+.page.icu-page-status .group_12,
+.page.icu-page-status .block_11,
+.page.icu-page-status .block_34 {
+  position: absolute !important;
+  right: 23px !important;
+  top: 0 !important;
+  margin: 0 !important;
+}
+
+
+.page.icu-page-treatment .block_6.icu-treatment-table .text-wrapper_24,
+.page.icu-page-treatment .block_6.icu-treatment-table .icu-treatment-header,
+.page.icu-page-treatment .block_6.icu-treatment-table .icu-treatment-row {
+  display: grid !important;
+  width: 100% !important;
+  min-height: 0 !important;
+  box-sizing: border-box !important;
+  grid-template-columns: 64px minmax(168px, 1fr) 210px 210px 96px 96px 132px 112px 112px 112px !important;
+  column-gap: 0 !important;
+  align-items: center !important;
+  padding: 0 16px !important;
+  margin-left: 0 !important;
+}
+
+.page.icu-page-treatment .block_6.icu-treatment-table .text-wrapper_24,
+.page.icu-page-treatment .block_6.icu-treatment-table .icu-treatment-header {
+  height: 34px !important;
+}
+
+.page.icu-page-treatment .block_6.icu-treatment-table .icu-treatment-row {
+  height: 36px !important;
+}
+
+.page.icu-page-treatment .block_6.icu-treatment-table .icu-treatment-cell {
+  width: auto !important;
+  max-width: 100% !important;
+  height: auto !important;
+  margin: 0 !important;
+  padding: 0 6px !important;
+  color: #4f5963 !important;
+  font-size: 16px !important;
+  font-weight: 400 !important;
+  line-height: 20px !important;
+  text-align: left !important;
+  font-variant-numeric: tabular-nums !important;
+}
+
+.page.icu-page-treatment .block_6.icu-treatment-table .icu-treatment-header .icu-treatment-cell {
+  color: #3f4f5d !important;
+  font-size: 16px !important;
+  font-weight: 700 !important;
+  line-height: 20px !important;
+}
+
+.page.icu-page-treatment .block_6.icu-treatment-table .icu-col-0,
+.page.icu-page-treatment .block_6.icu-treatment-table .icu-col-2,
+.page.icu-page-treatment .block_6.icu-treatment-table .icu-col-3,
+.page.icu-page-treatment .block_6.icu-treatment-table .icu-col-4,
+.page.icu-page-treatment .block_6.icu-treatment-table .icu-col-5,
+.page.icu-page-treatment .block_6.icu-treatment-table .icu-col-6,
+.page.icu-page-treatment .block_6.icu-treatment-table .icu-col-7,
+.page.icu-page-treatment .block_6.icu-treatment-table .icu-col-8,
+.page.icu-page-treatment .block_6.icu-treatment-table .icu-col-9 {
+  text-align: center !important;
+}
+
+.page.icu-page-treatment .block_6.icu-treatment-table img,
+.page.icu-page-treatment .block_6.icu-treatment-table .icu-treatment-icon {
+  width: 18px !important;
+  height: 18px !important;
+}
+
+.page .icu-tutorial-panel {
+  position: absolute !important;
+  left: 26px !important;
+  right: 26px !important;
+  top: 24px !important;
+  bottom: 24px !important;
+  z-index: 50 !important;
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(260px, 1fr)) !important;
+  gap: 18px !important;
+  padding: 18px !important;
+  background: #f4f8fc !important;
+  border: 1px solid #d6e2ef !important;
+  border-radius: 6px !important;
+  box-sizing: border-box !important;
+}
+
+.page .icu-tutorial-video-thumb {
+  display: block !important;
+  width: 450px !important;
+  height: 300px !important;
+  border-radius: 10px !important;
+  object-fit: cover !important;
+}
+
+.page .icu-tutorial-card {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: space-between !important;
+  min-height: 150px !important;
+  padding: 18px !important;
+  border: 1px solid #ccd9e7 !important;
+  border-radius: 6px !important;
+  background: #ffffff !important;
+  box-shadow: 0 8px 22px rgba(51, 86, 122, 0.08) !important;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+}
+
+.page .icu-tutorial-card strong {
+  color: #20384d !important;
+  font-size: 20px !important;
+}
+
+.page .icu-tutorial-card em {
+  float: right !important;
+  min-width: 62px !important;
+  padding: 3px 8px !important;
+  border-radius: 4px !important;
+  background: #e7f2fb !important;
+  color: #176fae !important;
+  font-size: 12px !important;
+  font-style: normal !important;
+  text-align: center !important;
+}
+
+.page .icu-tutorial-card p {
+  margin: 12px 0 16px !important;
+  color: #506579 !important;
+  font-size: 14px !important;
+  line-height: 1.65 !important;
+}
+
+/* The preview label has four characters; center it within its existing action button. */
+.page .text-wrapper_18,
+.page .text-wrapper_19,
+.page .text-wrapper_20,
+.page .text-wrapper_21 {
+  box-sizing: border-box !important;
+  flex: 0 0 76px !important;
+  width: 76px !important;
+  min-width: 76px !important;
+  max-width: 76px !important;
+  height: 39px !important;
+  min-height: 39px !important;
+  max-height: 39px !important;
+}
+
+.page .text-wrapper_18 {
+  margin-left: 0 !important;
+}
+
+.page .text-wrapper_19,
+.page .text-wrapper_20,
+.page .text-wrapper_21 {
+  margin-left: 17px !important;
+}
+
+/* Applied only to the parent that contains all four record action buttons. */
+.page .icu-record-action-row {
+  box-sizing: border-box !important;
+  width: 355px !important;
+  min-width: 355px !important;
+  height: 39px !important;
+  min-height: 39px !important;
+  margin-left: 30px !important;
+}
+
+/* ★ 问题5:样本操作行新增的“新建样本”按钮 */
+.page .icu-record-action-row.icu-with-new {
+  width: 472px !important;
+  min-width: 472px !important;
+}
+
+.page .icu-record-new-action {
+  box-sizing: border-box !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex: 0 0 100px !important;
+  width: 100px !important;
+  min-width: 100px !important;
+  max-width: 100px !important;
+  height: 39px !important;
+  min-height: 39px !important;
+  max-height: 39px !important;
+  margin-left: 17px !important;
+  border-radius: 5px !important;
+  background: rgba(0, 119, 215, 1) !important;
+  color: #ffffff !important;
+  cursor: pointer !important;
+  touch-action: manipulation !important;
+}
+
+.page .icu-record-new-action span {
+  color: #ffffff !important;
+  font-size: 16px !important;
+  line-height: 26px !important;
+  white-space: nowrap !important;
+}
+
+/* ★ 样本操作行：5 个按钮文字统一水平+垂直居中，避免“打印预览/下载/
+   新建样本”等文本基线高低不一。 */
+.page .icu-record-action-row > div {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  padding: 0 !important;
+}
+
+.page .icu-record-action-row > div > span {
+  display: block !important;
+  width: 100% !important;
+  margin: 0 !important;
+  padding: 0 4px !important;
+  box-sizing: border-box !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  line-height: 1.2 !important;
+}
+
+.page .text-wrapper_20 .text_52 {
+  box-sizing: border-box !important;
+  display: block !important;
+  width: 100% !important;
+  margin: 0 !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+}
+
+/* ★ 修复问题9补充: ICU状态页底部功能卡片布局优化 */
+.page.icu-page-status .block_12 {
+  margin-bottom: 12px !important;
+  width: 100% !important;
+}
+
+.page.icu-page-status .box_36,
+.page.icu-page-status .box_37,
+.page.icu-page-status .box_38 {
+  flex: 1 !important;
+  min-width: 0 !important;
+  margin: 0 6px !important;
+}
+
+.page.icu-page-status .box_36:first-child {
+  margin-left: 0 !important;
+}
+
+.page.icu-page-status .box_38:last-child {
+  margin-right: 0 !important;
+}
+
+/* ★ 修复底部控制面板堆叠问题 */
+.page.icu-page-status .section_11,
+.page.icu-page-status .section_12,
+.page.icu-page-status .box_39 {
+  min-height: 40px !important;
+}
+
+.icu-tablet-control-status {
+  /* ★ 用 position: absolute 浮起，不依赖父容器（不挤压账号，不受 flex-col 影响） */
+  position: absolute !important;
+  top: 0 !important;
+  right: 220px !important;            /* 距右 220px（避开账号 123）*/
+  left: auto !important;
+  bottom: auto !important;
+  transform: none !important;
+  z-index: 9999 !important;
+  /* display 由 lanhu-bridge.js 运行时通过 cssText 强制设置,此处不再声明避免误导 */
+  align-items: center !important;
+  gap: 6px !important;
+  height: 38px !important;             /* 浮起高度（不挤压顶部蓝条）*/
+  line-height: 38px !important;
+  padding: 0 10px !important;
+  border: none !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: #ffffff !important;
+  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-size: 14px !important;
+  line-height: 1;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+}
+
+.icu-tablet-control-status::before {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #2ca56c;
+  content: "";
+}
+
+.icu-tablet-control-status .icu-tablet-label {
+  color: #ffffff !important;
+  font-weight: 600;
+  white-space: nowrap;
+  margin-right: 6px;
+}
+
+.icu-tablet-control-status button {
+  position: relative;
+  min-width: 48px;
+  height: 30px !important;             /* 高度从 32 减到 30（更紧凑）*/
+  padding: 0 6px;
+  border: 1px solid rgba(255, 255, 255, 0.5) !important;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.15) !important;
+  color: #ffffff !important;
+  font: inherit;
+  font-size: 14px !important;            /* 字号 16→14 更紧凑 */
+  font-weight: 600;
+  line-height: 1 !important;             /* 文字居中 */
+  transition: all 0.3s ease;             /* ★ 添加平滑过渡动画 */
+  overflow: hidden;
+}
+
+.icu-tablet-control-status button.active {
+  border-color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.4) !important;
+  color: #1474be !important;
+  box-shadow: 0 1px 3px rgba(255, 255, 255, 0.4);
+  transform: scale(1.05);                /* ★ 选中时轻微放大 */
+}
+
+/* ★ 添加滑动指示器效果 */
+.icu-tablet-control-status button::before {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  left: 50%;
+  width: 0;
+  height: 3px;
+  background: #ffffff;
+  border-radius: 2px;
+  transform: translateX(-50%);
+  transition: width 0.3s ease;
+}
+
+.icu-tablet-control-status button.active::before {
+  width: 80%;                           /* ★ 选中时显示底部指示条 */
+}
+
+.icu-tablet-control-status button:hover {
+  background: rgba(255, 255, 255, 0.25) !important;
+  transform: translateY(-1px);          /* ★ 悬停时轻微上移 */
+}
+
+.icu-tablet-control-status .icu-system-time {
+  min-width: 54px;
+  margin-left: 5px;
+  padding-left: 6px;
+  border-left: 1px solid #d7e2ec;
+  color: #29455e;
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.icu-tablet-control-status.icu-time-only {
+  gap: 0;
+  min-height: 32px;
+  padding: 0 6px;
+}
+
+.icu-tablet-control-status.icu-time-only::before {
+  display: none;
+}
+
+.icu-tablet-control-status.icu-time-only .icu-system-time {
+  min-width: 0;
+  margin-left: 0;
+  padding-left: 0;
+  border-left: 0;
+}
+
+/* Dynamic patient list: all rows are generated by lanhu-first-phase.js. */
+.page .icu-patient-sidebar .icu-patient-list-viewport {
+  position: absolute !important;
+  left: 12px !important;
+  right: 12px !important;
+  top: 258px !important;
+  bottom: 18px !important;
+  z-index: 32 !important;
+  overflow-x: hidden !important;
+  overflow-y: auto !important;
+  touch-action: pan-y !important;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, .7) rgba(255, 255, 255, .15);
+}
+.page .icu-patient-sidebar .icu-patient-list {
+  display: flex !important;
+  width: 100% !important;
+  min-height: 100% !important;
+  flex-direction: column !important;
+  gap: 10px !important;
+  padding: 4px 2px 16px !important;
+  box-sizing: border-box !important;
+}
+.page .icu-patient-sidebar .icu-patient-list-row {
+  display: flex !important;
+  flex: 0 0 auto !important;
+  width: 100% !important;
+  height: auto !important;
+  min-height: 130px !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  padding: 12px 14px !important;
+  box-sizing: border-box !important;
+  border: 1px solid rgba(255, 255, 255, .32) !important;
+  border-radius: 9px !important;
+  background: rgba(255, 255, 255, .10) !important;
+  color: #fff !important;
+  cursor: pointer;
+}
+.page .icu-patient-sidebar .icu-patient-list-row.is-active {
+  border-color: #fff !important;
+  background: #fff !important;
+  color: #575757 !important;
+  box-shadow: 0 3px 10px rgba(18, 84, 145, .22) !important;
+}
+.page .icu-patient-sidebar .icu-patient-list-field {
+  display: flex !important;
+  width: 100% !important;
+  min-width: 0 !important;
+  height: auto !important;
+  align-items: flex-start !important;
+  font-size: 15px !important;
+  line-height: 21px !important;
+}
+.page .icu-patient-sidebar .icu-patient-list-name {
+  margin-bottom: 2px !important;
+  color: inherit !important;
+  font-size: 18px !important;
+  font-weight: 700 !important;
+  line-height: 24px !important;
+}
+.page .icu-patient-sidebar .icu-patient-list-row.is-active .icu-patient-list-name {
+  color: #0074ff !important;
+}
+.page .icu-patient-sidebar .icu-patient-list-label {
+  flex: 0 0 auto !important;
+  white-space: nowrap !important;
+}
+.page .icu-patient-sidebar .icu-patient-list-value {
+  display: block !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: normal !important;
+  overflow-wrap: anywhere !important;
+  word-break: break-word !important;
+}
+.page .icu-patient-sidebar .icu-patient-empty-hint {
+  padding: 32px 12px !important;
+  color: rgba(255, 255, 255, .92) !important;
+  font-size: 16px !important;
+  text-align: center !important;
+}
+.page.icu-page-control .icu-patient-sidebar .icu-patient-list-viewport {
+  top: 264px !important;
+}
+
+/* 左侧侧边栏“当前宠物信息”行统一：
+   ICU状态/主机控制页的字体行高与首槽位置与其它四页不一致，
+   这里统一成 实时监护/摄像监控/治疗记录/使用教程 的样式。 */
+.page .icu-patient-sidebar .text_10 {
+  /* 宠物名 18px 字号：中文字形需要 23px 行盒才不被下方的省略号规则
+     （overflow:hidden）裁掉；24px 会与“种类”行重叠，故取 23px。 */
+  height: auto !important;
+  min-height: 23px !important;
+  line-height: 23px !important;
+}
+.page .icu-patient-sidebar .text_11,
+.page .icu-patient-sidebar .text_12,
+.page .icu-patient-sidebar .text_13 {
+  height: auto !important;
+  min-height: 20px !important;
+  font-size: 16px !important;
+  line-height: 20px !important;
+  overflow: visible !important;
+}
+.page.icu-page-status .icu-patient-sidebar .text_13,
+.page.icu-page-control .icu-patient-sidebar .text_13 {
+  transform: translateY(1px) !important;
+}
+/* 主机控制页首条宠物槽整体比其它页高 6px，下移对齐。 */
+.page.icu-page-control .block_6 {
+  margin-top: 27px !important;
+}
+/* 主机控制页搜索栏整体比其它页高 6px，视觉下移后与其它页同高，
+   保证“搜索栏底边 → 首条患者信息”的间隙统一为 40px。 */
+.page.icu-page-control .block_5 {
+  transform: translateY(6px) !important;
+}
+/* 主机控制页 LOGO 圆高度 54（其它页 60）、“切换机构”按钮高 6px：统一。 */
+.page.icu-page-control .text-wrapper_1 {
+  height: 60px !important;
+}
+.page.icu-page-control .block_4 {
+  transform: translateY(6px) !important;
+}
+/* 主机控制页首行蓝点比其它五页低 3px（y294 vs 291），上移对齐。 */
+.page.icu-page-control .block_6 .section_2 {
+  transform: translateY(-3px) !important;
+}
+/* ICU 状态页第二~六条样本的描述行（种类/主人）margin 原为 25px，
+   与其它页 10px 不一致，导致整列逐行下移 15px，统一为 10px。 */
+.page.icu-page-status .icu-patient-sidebar .text_15,
+.page.icu-page-status .icu-patient-sidebar .text_19,
+.page.icu-page-status .icu-patient-sidebar .text_23,
+.page.icu-page-status .icu-patient-sidebar .text_27,
+.page.icu-page-status .icu-patient-sidebar .text_31 {
+  margin-top: 10px !important;
+}
+/* 加宽宠物名与“种类/主人”行，避免“宠物名：待录入 / 主人：待录入”
+   这类完整占位在窄行内被裁掉。 */
+.page .icu-patient-sidebar .text_10 {
+  width: 220px !important;
+  max-width: 220px !important;
+  min-width: 220px !important;
+  flex: 0 0 auto !important;
+}
+.page .icu-patient-sidebar .text_11,
+.page .icu-patient-sidebar .text_14,
+.page .icu-patient-sidebar .text_18,
+.page .icu-patient-sidebar .text_22,
+.page .icu-patient-sidebar .text_26,
+.page .icu-patient-sidebar .text_30 {
+  width: 250px !important;
+  max-width: 250px !important;
+  min-width: 250px !important;
+  flex: 0 0 auto !important;
+}
+
+/* ★ 0904 自测：左侧“当前样本信息”白卡（实时监护/摄像监控/治疗记录/使用教程
+   页可见的左侧样本信息区；ICU状态/主机控制页第一个样本槽同一结构）。
+   - 种类/主人拆成两行（主人行由 JS 插入 .icu-sidebar-owner，跟随种类行左对齐）；
+   - 卡内各行超长时统一省略号，不再溢出白卡（问题4）。 */
+.page.icu-app-module .icu-patient-first-card {
+  height: auto !important;
+}
+
+/* 第一白卡现在通过收紧行间距保持与原高度基本一致（约 +2px），
+   不再需要负下边距补偿；置 0 避免把后续样本槽过度上提。 */
+.page.icu-page-status .icu-patient-first-card,
+.page.icu-page-control .icu-patient-first-card {
+  margin-bottom: 0 !important;
+}
+
+.page.icu-app-module .icu-patient-sidebar .icu-sidebar-owner {
+  display: block !important;
+  box-sizing: border-box !important;
+  width: 250px !important;
+  max-width: 250px !important;
+  min-width: 0 !important;
+  /* ★ 0908：主人行原为固定 16px 高 + 20px 行高 + overflow:hidden，
+     行盒比元素高 4px，中文字形下缘被裁掉，看起来像被上下行“遮挡”。
+     改为高度自适应，由行高决定占位，文字完整显示。 */
+  height: auto !important;
+  min-height: 20px !important;
+  line-height: 20px !important;
+  font-size: 16px !important;
+  /* 与“种类”行文字起点对齐（种类行外层 wrapper 的 margin-left 同为 16px） */
+  margin: 0 0 0 16px !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  vertical-align: top !important;
+}
+
+/* 左侧样本栏各行（宠物名/种类/主人/编号）：放不下才省略号，不允许溢出白卡。
+   日期行保持既有“完整显示到分秒”的规则，不参与省略。 */
+.page.icu-app-module .icu-patient-sidebar .text_10,
+.page.icu-app-module .icu-patient-sidebar .text-group_1,
+.page.icu-app-module .icu-patient-sidebar .text_11,
+.page.icu-app-module .icu-patient-sidebar .text_12,
+.page.icu-app-module .icu-patient-sidebar .text_14,
+.page.icu-app-module .icu-patient-sidebar .text_15,
+.page.icu-app-module .icu-patient-sidebar .text_17,
+.page.icu-app-module .icu-patient-sidebar .text_18,
+.page.icu-app-module .icu-patient-sidebar .text_19,
+.page.icu-app-module .icu-patient-sidebar .text_21,
+.page.icu-app-module .icu-patient-sidebar .text_22,
+.page.icu-app-module .icu-patient-sidebar .text_23,
+.page.icu-app-module .icu-patient-sidebar .text_25,
+.page.icu-app-module .icu-patient-sidebar .text_26,
+.page.icu-app-module .icu-patient-sidebar .text_27,
+.page.icu-app-module .icu-patient-sidebar .text_29,
+.page.icu-app-module .icu-patient-sidebar .text_30,
+.page.icu-app-module .icu-patient-sidebar .text_31 {
+  min-width: 0 !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
+  white-space: nowrap !important;
+  /* ★ 0908：设计稿给这些行固定 13~16px 高，但行高是 20px，
+     叠加上面的 overflow:hidden 后中文字形下缘被裁切（编号/主人尤其明显）。
+     统一改为高度自适应：元素高度跟随行盒，各行仍是单行 + 省略号，
+     所有字段处于同一层级、同一排版流，不会互相遮挡。 */
+  height: auto !important;
+  min-height: 20px !important;
+  line-height: 20px !important;
+  align-self: flex-start !important;
+}
+
+/* ★ 0904 自测：左侧当前样本卡“主人/种类/编号”位置微调。
+   插入主人行后种类行与主人行文字发生过近，编号行整体下移过多。
+   通过收紧各行间距并压缩行高，让编号/日期尽量回到原纵向位置：
+   - 种类行上移（吸走原 13px 空距的一部分）；
+   - 主人行紧随种类，中间留 3px；
+   - 编号行顶距压到最小，避免被主人行推下去太多；
+   - 行高与元素高一致，避免中文字形向下溢出压住下一行。 */
+.page.icu-app-module .icu-patient-first-card > :nth-child(2) {
+  margin-top: 5px !important;
+}
+.page.icu-app-module .icu-patient-first-card > .icu-sidebar-owner {
+  margin-top: 5px !important;
+  margin-bottom: 0 !important;
+}
+.page.icu-app-module .icu-patient-first-card > :nth-child(4) {
+  margin-top: 0 !important;
+}
+.page.icu-app-module .icu-patient-first-card .text_10 {
+  line-height: 23px !important;
+  height: auto !important;
+}
+.page.icu-app-module .icu-patient-first-card .text_11,
+.page.icu-app-module .icu-patient-first-card .text_12,
+.page.icu-app-module .icu-patient-first-card .icu-sidebar-owner {
+  line-height: 20px !important;
+  height: auto !important;
+}
+
+/* ★ 0904 复核：ICU状态/主机控制页病历编号白框上边距是 15px，
+   其它四个模块页是 12px，导致白框比其它模块低约 3px。统一为 12px。 */
+.page.icu-page-status .text-wrapper_10,
+.page.icu-page-control .text-wrapper_10 {
+  margin-top: 12px !important;
+}
+
+/* ★ 0908 复核：四个护理模式的“设置”入口移到右侧图标下方。
+   入口作为卡片的绝对定位子节点，不再参与左侧“标题 + 开关”的 flex 排版；
+   右侧图标统一上移，入口直接使用卡片底色，不再显示独立底色。
+   四个模式开关单独下移 9px，与右侧“设置”入口垂直居中对齐。 */
+.page.icu-page-control .group_45,
+.page.icu-page-control .section_20,
+.page.icu-page-control .group_55,
+.page.icu-page-control .group_62 {
+  position: relative !important;
+}
+
+.page.icu-page-control .group_47 {
+  margin-top: 16px !important;
+}
+.page.icu-page-control .group_52 {
+  margin-top: 10px !important;
+}
+.page.icu-page-control .group_57 {
+  margin-top: 11px !important;
+}
+.page.icu-page-control .box_47 {
+  margin-top: 12px !important;
+}
+
+.page.icu-page-control .icu-mode-settings {
+  position: absolute !important;
+  top: 60px !important;
+  display: block !important;
+  box-sizing: border-box !important;
+  width: 44px !important;
+  height: 22px !important;
+  line-height: 22px !important;
+  padding: 0 !important;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: #1676df !important;
+  font-size: 18px !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  user-select: none !important;
+  margin: 0 !important;
+  z-index: 2 !important;
+}
+
+/* ★ 0908 复核：四个护理模式开关与上排“冷光/暖光/外循环/内循环”开关对齐。
+   上一轮为配合“设置”入口把模式开关下移 9px，导致与上排错位；这里去掉纵向偏移，
+   两排开关回到各自卡片内相同的左下位置（左缘距卡片 21.3px），横向严格同列。 */
+.page.icu-page-control .icu-switch-fake[data-for=".image_15"],
+.page.icu-page-control .icu-switch-fake[data-for=".image_17"],
+.page.icu-page-control .icu-switch-fake[data-for=".image_19"],
+.page.icu-page-control .icu-switch-fake[data-for=".image_21"] {
+  top: 0 !important;
+}
+
+
+.page.icu-page-control .icu-mode-settings[data-native-action="host_mode_mother_settings"] {
+  left: 190px !important;
+}
+.page.icu-page-control .icu-mode-settings[data-native-action="host_mode_postop_settings"] {
+  left: 204px !important;
+}
+.page.icu-page-control .icu-mode-settings[data-native-action="host_mode_cardio_settings"] {
+  left: 198px !important;
+}
+.page.icu-page-control .icu-mode-settings[data-native-action="host_mode_custom_settings"] {
+  left: 179px !important;
+}
+
+/* ★ 0908：左侧样本信息白卡首行（宠物名）上方多出一整行空白。
+   设计稿给首行容器的 margin-top 各页不一（主机控制/实时监护/摄像监控/
+   使用教程/治疗记录 29px，ICU状态/监控回放 14px），29px 比卡内其它行间距
+   （5px/12px）和卡片下边距（19px）都大，视觉上像宠物名之上还有一条空行。
+   六个模块页统一收到 10px，与“种类/主人/编号”各行的节奏一致，
+   卡片整体高度同步收紧。 */
+.page.icu-page-status .icu-patient-first-card > :first-child,
+.page.icu-page-control .icu-patient-first-card > :first-child,
+.page.icu-page-monitor .icu-patient-first-card > :first-child,
+.page.icu-page-camera-live .icu-patient-first-card > :first-child,
+.page.icu-page-camera-playback .icu-patient-first-card > :first-child,
+.page.icu-page-treatment .icu-patient-first-card > :first-child,
+.page.icu-page-tutorial .icu-patient-first-card > :first-child {
+  margin-top: 10px !important;
+}
+
+/* ============================================================================
+ * 教程页媒体权限弹窗
+ * 挂在 body 下(不在 .page 内),所以不受 .page 的缩放/!important 规则影响;
+ * 用 fixed + 真实 px 定位,保证在任何平板上都居中且不随设计稿缩放变形。
+ * ========================================================================== */
+.icu-permission-mask {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 99999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.45);
+}
+
+.icu-permission-dialog {
+  width: 420px;
+  max-width: 86vw;
+  box-sizing: border-box;
+  background: #ffffff;
+  border-radius: 14px;
+  padding: 26px 26px 20px;
+  box-shadow: 0 18px 48px rgba(15, 23, 42, 0.28);
+  font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  color: #1f2937;
+}
+
+.icu-permission-title {
+  margin: 0 0 12px;
+  font-size: 19px;
+  line-height: 1.4;
+  font-weight: 600;
+  color: #111827;
+}
+
+.icu-permission-body {
+  margin: 0 0 10px;
+  font-size: 15px;
+  line-height: 1.7;
+  color: #4b5563;
+}
+
+.icu-permission-tip {
+  margin: 0 0 4px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 8px;
+  padding: 8px 10px;
+}
+
+.icu-permission-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.icu-permission-actions button {
+  min-width: 104px;
+  height: 42px;
+  border-radius: 8px;
+  font-size: 15px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  font-family: inherit;
+}
+
+.icu-permission-cancel {
+  background: #f3f4f6;
+  color: #4b5563;
+  border-color: #d1d5db;
+}
+
+.icu-permission-confirm {
+  background: #2563eb;
+  color: #ffffff;
+}

@@ -1,0 +1,90 @@
+/**
+ * lanhu-2.css — 业务层:lanhu_2zhujikongzhi (主机控制) 页面专属覆盖
+ * 层级:业务层(在 lanhu-fit.css 之后加载,优先级最高)
+ * 规则:可使用 !important;本文件应只包含 index.css 没覆盖到的页面级微调
+ */
+[data-icu-live] {
+  font-family: OPPOSans-R, "Source Han Sans CN", sans-serif;
+  font-weight: 400;
+}
+.text-wrapper_23,
+.text-wrapper_24,
+.text-wrapper_25,
+.text-wrapper_26 {
+  transform: translateY(8px);
+}
+.group_63 {
+  position: relative;
+}
+.page.icu-page-control .group_63 .text-group_2 {
+  position: absolute;
+  left: 50%;
+  top: 75%;
+  width: auto !important;
+  min-width: 0 !important;
+  max-width: none !important;
+  margin: 0;
+  text-align: center !important;
+  transform: translate(-50%, -50%) translateY(-8px);
+}
+
+/* ★ 新增 P1-1:监护等级"设备确认中"过渡态样式 */
+.icu-monitor-pending {
+  opacity: 0.5;
+  transition: opacity 0.2s ease;
+}
+.icu-monitor-pending::after {
+  content: "确认中";
+  margin-left: 6px;
+  font-size: 10px;
+  color: #f0a020;
+  padding: 1px 6px;
+  background: rgba(240, 160, 32, 0.12);
+  border-radius: 4px;
+  vertical-align: middle;
+}
+
+/* ★ 新增 P1-2:所有 set_* 控制的"设备确认中"过渡态 */
+.icu-pending {
+  opacity: 0.55;
+  transition: opacity 0.2s ease;
+}
+
+/* ★ P1-1:CO2 报警闪烁样式 */
+.icu-alarm {
+  animation: icu-alarm-blink 1s ease-in-out infinite;
+  color: #d32f2f !important;
+  font-weight: 700 !important;
+}
+
+@keyframes icu-alarm-blink {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.05); }
+}
+
+/* 顶栏"设置"字号:与 view 1 (ICU状态) 对齐,view 1 用 20px,view 2 index.css 是 18px */
+.text_3 {
+  font-size: 20px !important;
+}
+
+/* ★ P2-问题9 修复:监护等级顺序调换 —— 三级(绿)最左,一级(红)最右。
+   index.css 原始配色是 block_16 红 / block_17 黄 / block_18 绿,
+   这里只交换首尾两个色点的颜色,不动 DOM 顺序和几何位置
+   (选中环 .section_10/11/12 为绝对定位 left:21/61/104px,
+    改 DOM 顺序会让环与色点错位)。
+   动作绑定在 lanhu-first-phase.js renderHostMonitorLevel() 中同步交换。 */
+.box_17 .block_16 {
+  background-color: rgba(23, 177, 41, 1) !important;  /* 三级 绿 */
+}
+.box_17 .block_18 {
+  background-color: rgba(233, 94, 94, 1) !important;  /* 一级 红 */
+}
+
+/* 三个选中环的静态边框统一为灰色:index.css 里 .section_10 写死了蓝框,
+   会让最左那个看起来"永远处于选中态"。真实选中态由
+   setHostMonitorLevelButton() 的 boxShadow / opacity / grayscale 表示。 */
+.box_17 .section_10,
+.box_17 .section_11,
+.box_17 .section_12 {
+  border-color: rgba(87, 87, 87, 1) !important;
+}

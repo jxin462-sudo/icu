@@ -1,0 +1,624 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, minimum-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>动物ICU重症监护系统</title>
+  <link rel="stylesheet" href="../../assets/common.css" />
+  <link rel="stylesheet" href="assets/index.css" />
+  <link rel="stylesheet" href="../../../lanhu-fit.css" />
+  <link rel="stylesheet" href="../../../lanhu-thermal.css" />
+  <link rel="stylesheet" href="../../../lanhu-1.css" />
+  <link rel="stylesheet" href="../../../lanhu-nav.css" />
+  <script src="../../../lanhu-fit.js" defer></script>
+  <script src="../../../lanhu-bridge.js" defer></script>
+  <script src="../../../lanhu-live-state-v3.js" defer></script>
+  <script src="../../../lanhu-first-phase.js" defer></script>
+  <script src="../../../lanhu-thermal.js" defer></script>
+  <style>
+    .icu-print-preview[hidden] { display: none !important; }
+    .icu-print-preview { position: fixed; z-index: 10000; inset: 0; display: flex; align-items: center; justify-content: center; padding: 32px; background: rgba(15, 35, 60, .42); touch-action: none; }
+    .icu-print-preview__sheet { position: relative; box-sizing: border-box; overflow: hidden; border-radius: 8px; background: #fff; box-shadow: 0 20px 54px rgba(15, 35, 60, .28); }
+    .icu-print-preview__frame-shell { position: absolute; inset: 0; overflow: hidden; }
+    .icu-print-preview__frame { position: absolute; top: 0; left: 0; width: 1512px; height: 2138px; border: 0; background: #fff; transform-origin: top left; }
+    .icu-print-preview__footer { position: absolute; right: 18px; bottom: 16px; display: flex; gap: 12px; }
+    .icu-print-preview__button { min-width: 88px; height: 36px; border: 1px solid #5ea7ff; border-radius: 4px; background: #fff; color: #1676df; font-size: 16px; }
+    .icu-print-preview__button--primary { background: #1676df; color: #fff; }
+  </style>
+</head>
+<body>
+<div class="page flex-col">
+  <div id="icu-tablet-control-status" class="icu-tablet-control-status">
+    <span class="icu-tablet-label">本平板控制</span><button type="button" data-native-action="tablet_zone_left">左舱</button><button type="button" data-native-action="tablet_zone_right">右舱</button><time class="icu-system-time"><//time>
+  </div>
+    <div class="box_1 flex-row">
+      <img
+        class="label_1"
+        referrerpolicy="no-referrer"
+        src="./assets/img/172772596a109c4dedb36517c7d813ed.png"
+      />
+      <span class="text_1">动物ICU重症监护系统</span>
+      <div class="block_1 flex-row justify-between">
+        <img
+          class="thumbnail_1"
+          referrerpolicy="no-referrer"
+          src="./assets/img/95370126599da23eca48a7e56073e05a.png"
+        />
+        <span class="text_2">动物样本</span>
+      </div>
+      <img
+        class="image_1"
+        referrerpolicy="no-referrer"
+        src="./assets/img/558dd8d8773d2312318cbb908c68acb4.png"
+      />
+      <span class="text_3">设置</span>
+      <img
+        class="label_2"
+        referrerpolicy="no-referrer"
+        src="./assets/img/167114e4aef88e69f265245e2688579a.png"
+      />
+      <span class="text_4" data-account-live="name">--</span>
+      <img
+        class="thumbnail_2"
+        referrerpolicy="no-referrer"
+        src="./assets/img/c5dadcf74eacf7464c3c9f4a03c2ad7a.png"
+      />
+    </div>
+    <div class="box_2 flex-col">
+      <div class="group_1 flex-row justify-between">
+        <div class="section_1 flex-col">
+          <div class="box_3 flex-row justify-between">
+            <div class="text-wrapper_1 flex-col" data-org-logo-slot="sample"><span class="text_5" data-org-logo-text>LOGO</span></div>
+            <div class="group_2 flex-col justify-between">
+              <span class="text_6" data-org-live="name">--</span>
+              <div class="box_4 flex-row justify-between">
+                <img
+                  class="thumbnail_3"
+                  referrerpolicy="no-referrer"
+                  src="./assets/img/8815118396e04cb1a24d564c6a2c9eae.png"
+                />
+                <span class="text_7" data-org-live="address">--</span>
+              </div>
+            </div>
+          </div>
+          <div class="box_5 flex-row">
+            <img
+              class="thumbnail_4"
+              referrerpolicy="no-referrer"
+              src="./assets/img/983071170dfac615e643acfebd06e332.png"
+            />
+            <span class="text_8">切换机构</span>
+          </div>
+          <div class="box_6 flex-row">
+            <img
+              class="thumbnail_5"
+              referrerpolicy="no-referrer"
+              src="./assets/img/41f964d191c0ed5ec897b0c2b9f1630f.png"
+            />
+            <span class="text_9">搜索宠物名字/主人</span>
+          </div>
+          <div class="box_7 flex-col">
+            <div class="section_2 flex-row">
+              <div class="box_8 flex-col"></div>
+              <span class="text_10" data-patient-live="petListName">待录入</span>
+              <img
+                class="image_2"
+                referrerpolicy="no-referrer"
+                src="./assets/img/35d01889c6eccf9a8e281cab3b6f9371.png"
+              />
+            </div>
+            <div class="text-wrapper_2 flex-row">
+              <span class="text_11" data-patient-live="speciesOwner">待录入</span>
+            </div>
+            <div class="text-wrapper_3 flex-row"><span class="text_12" data-patient-live="caseNo">待录入</span></div>
+            <div class="text-wrapper_4 flex-row"><span class="text_13" data-patient-live="visitDate">待录入</span></div>
+          </div>
+          <div class="box_9 flex-row justify-between">
+            <div class="image-text_1 flex-row justify-between">
+              <img
+                class="thumbnail_6"
+                referrerpolicy="no-referrer"
+                src="./assets/img/e5db3c9a79fd6186a23ca79945456edb.png"
+              />
+              <span class="text-group_1">待录入</span>
+            </div>
+            <img
+              class="image_3"
+              referrerpolicy="no-referrer"
+              src="./assets/img/bea85d8f2aa64479109725fefbcbf6cf.png"
+            />
+          </div>
+          <span class="text_14">待录入</span>
+          <span class="text_15">待录入</span>
+          <span class="text_16">待录入</span>
+          <div class="box_10 flex-row">
+            <div class="section_3 flex-col"></div>
+            <span class="text_17">待录入</span>
+            <img
+              class="image_4"
+              referrerpolicy="no-referrer"
+              src="./assets/img/4c6d6fe810a196feefd4a0d89e74d2e1.png"
+            />
+          </div>
+          <span class="text_18">待录入</span>
+          <span class="text_19">待录入</span>
+          <span class="text_20">待录入</span>
+          <div class="box_11 flex-row">
+            <div class="group_3 flex-col"></div>
+            <span class="text_21">待录入</span>
+            <img
+              class="image_5"
+              referrerpolicy="no-referrer"
+              src="./assets/img/d7524cc0c24805144954f314696990de.png"
+            />
+          </div>
+          <span class="text_22">待录入</span>
+          <span class="text_23">待录入</span>
+          <span class="text_24">待录入</span>
+          <div class="box_12 flex-row">
+            <div class="block_2 flex-col"></div>
+            <span class="text_25">待录入</span>
+            <img
+              class="image_6"
+              referrerpolicy="no-referrer"
+              src="./assets/img/fa18bc6cd70d7308395d7c1b95968e2b.png"
+            />
+          </div>
+          <span class="text_26">待录入</span>
+          <span class="text_27">待录入</span>
+          <span class="text_28">待录入</span>
+          <div class="box_13 flex-row">
+            <div class="block_3 flex-col"></div>
+            <span class="text_29">待录入</span>
+            <img
+              class="image_7"
+              referrerpolicy="no-referrer"
+              src="./assets/img/0f57f7b70de4a5b38af0c7eeb5733a7d.png"
+            />
+          </div>
+          <span class="text_30">待录入</span>
+          <span class="text_31">待录入</span>
+          <span class="text_32">待录入</span>
+        </div>
+        <div class="section_4 flex-col">
+          <div class="group_4 flex-col justify-around">
+            <div class="block_4 flex-row">
+              <img
+                class="thumbnail_7"
+                referrerpolicy="no-referrer"
+                src="./assets/img/9ecbe2040397003999ca03ae29d5c354.png"
+              />
+              <div class="text-wrapper_5 flex-col justify-between">
+                <span class="text_33">宠物名称</span>
+                <span class="text_34">动物种类</span>
+              </div>
+              <div class="group_5 flex-col justify-between">
+                <div class="text-wrapper_6 flex-col"><span class="text_35" data-patient-live="petName">待录入</span></div>
+                <div class="text-wrapper_7 flex-col"><span class="text_36" data-patient-live="species">待录入</span></div>
+              </div>
+              <img
+                class="thumbnail_8"
+                referrerpolicy="no-referrer"
+                src="./assets/img/bc0772a90fb120f77bba21532ef035fa.png"
+              />
+              <div class="text-wrapper_8 flex-col justify-between">
+                <span class="text_37">年龄</span>
+                <span class="text_38">病历编号</span>
+              </div>
+              <div class="group_6 flex-col justify-between">
+                <div class="text-wrapper_9 flex-col"><span class="text_39" data-patient-live="age">待录入</span></div>
+                <div class="text-wrapper_10 flex-col"><span class="text_40" data-patient-live="recordNo">待录入</span></div>
+              </div>
+              <img
+                class="thumbnail_9"
+                referrerpolicy="no-referrer"
+                src="./assets/img/1425e8a84e4caef2c1a1ca0e88c662c3.png"
+              />
+              <div class="text-wrapper_11 flex-col justify-between">
+                <span class="text_41">宠物主人</span>
+                <span class="text_42">联系电话</span>
+              </div>
+              <div class="group_7 flex-col justify-between">
+                <div class="text-wrapper_12 flex-col"><span class="text_43" data-patient-live="ownerName">待录入</span></div>
+                <div class="text-wrapper_13 flex-col"><span class="text_44" data-patient-live="ownerPhone">待录入</span></div>
+              </div>
+              <div class="text-wrapper_14 flex-col justify-between">
+                <span class="text_45">主治医生</span>
+                <span class="text_46">就诊时间</span>
+              </div>
+              <div class="group_8 flex-col justify-between">
+                <div class="text-wrapper_15 flex-col"><span class="text_47" data-patient-live="doctor">待录入</span></div>
+                <div class="text-wrapper_16 flex-col"><span class="text_48" data-patient-live="visitDate">待录入</span></div>
+              </div>
+              <span class="text_49">医嘱</span>
+              <div class="text-wrapper_17 flex-col">
+                <span class="paragraph_1 medical-advice-text" data-patient-live="note">待录入</span>
+              </div>
+            </div>
+            <div class="block_5 flex-row justify-between">
+              <div class="text-wrapper_18 flex-col"><span class="text_50">编辑</span></div>
+              <div class="text-wrapper_19 flex-col"><span class="text_51">删除</span></div>
+              <div class="text-wrapper_20 flex-col"><span class="text_52">打印</span></div>
+              <div class="text-wrapper_21 flex-col"><span class="text_53">下载</span></div>
+            </div>
+          </div>
+          <div class="group_9 flex-row">
+            <div class="text-wrapper_22 flex-col"><span class="text_54">ICU状态</span></div>
+            <span class="text_55">主机控制</span>
+            <span class="text_56">实时监护</span>
+            <span class="text_57">摄像监控</span>
+            <span class="text_58">治疗记录</span>
+            <span class="text_59">使用教程</span>
+          </div>
+          <div class="group_10 flex-col">
+            <div class="box_14 flex-row">
+              <div class="box_15 flex-col">
+                <div class="block_6 flex-row justify-between">
+                  <div class="block_7 flex-col">
+                    <span class="text_60">舱内温度&nbsp;&nbsp;℃</span>
+                    <div class="box_16 flex-row justify-between">
+                      <span class="text_61" data-icu-live="host.temp">--</span>
+                      <div class="box_17 flex-col"></div>
+                    </div>
+                    <div class="box_18 flex-col"><div class="group_11 flex-col"></div></div>
+                  </div>
+                  <div class="block_8 flex-col">
+                    <span class="text_62">氧浓度&nbsp;&nbsp;%</span>
+                    <div class="section_5 flex-row justify-between">
+                      <span class="text_63" data-icu-live="host.oxygen">--</span>
+                      <div class="box_19 flex-col"></div>
+                    </div>
+                    <div class="section_6 flex-col"><div class="box_20 flex-col"></div></div>
+                  </div>
+                </div>
+                <div class="block_9 flex-row justify-between">
+                  <div class="section_7 flex-col">
+                    <span class="text_64">红外体温&nbsp;&nbsp;℃</span>
+                    <div class="section_8 flex-row justify-between">
+                      <span class="text_65" data-icu-live="host.infraredTemp">--</span>
+                      <div class="box_21 flex-col"></div>
+                    </div>
+                    <div class="section_9 flex-col"><div class="box_22 flex-col"></div></div>
+                  </div>
+                  <div class="section_10 flex-col">
+                    <div class="text-wrapper_23 flex-row"><span class="text_66">监护等级</span></div>
+                    <div class="box_23 flex-row justify-between">
+                      <div class="text-wrapper_24 flex-col"><span class="text_67" data-icu-live="monitorLevel">--</span></div>
+                      <div class="group_12 flex-col"></div>
+                    </div>
+                    <div class="box_24 flex-row">
+                      <div class="box_25 flex-col"></div>
+                      <div class="box_26 flex-col"></div>
+                      <div class="box_27 flex-col"></div>
+                    </div>
+                    <div class="box_28 flex-col"></div>
+                    <div class="box_29 flex-col"></div>
+                    <div class="box_30 flex-col"></div>
+                  </div>
+                </div>
+                <div class="block_10 flex-row justify-between">
+                  <div class="group_13 flex-col">
+                    <span class="text_68">治疗时长</span>
+                    <div class="box_31 flex-row justify-between">
+                      <span class="text_69" data-icu-live="host.treatmentTime">--</span>
+                      <div class="block_11 flex-col"></div>
+                    </div>
+                    <div class="box_32 flex-col"><div class="group_14 flex-col"></div></div>
+                  </div>
+                  <div class="group_15 flex-col">
+                    <span class="text_70">红外理疗&nbsp;&nbsp;m</span>
+                    <div class="box_33 flex-row justify-between">
+                      <span class="text_71" data-icu-live="host.controls.redTherapy">--</span>
+                      <div class="box_34 flex-col"></div>
+                    </div>
+                    <div class="box_35 flex-col"></div>
+                  </div>
+                </div>
+                <div class="block_12 flex-row justify-between">
+                  <div class="box_36 flex-col">
+                    <span class="text_72">雾化器</span>
+                    <div class="section_11 flex-row justify-between">
+                      <span class="text_73" data-icu-live="host.controls.nebulizer">--</span>
+                      <div class="image-wrapper_1 flex-col">
+                        <img
+                          class="thumbnail_10"
+                          referrerpolicy="no-referrer"
+                          src="./assets/img/821574a8635eeef6ca4877e826321aa9.png"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div class="box_37 flex-col">
+                    <span class="text_74">暖光照明</span>
+                    <div class="section_12 flex-row justify-between">
+                      <span class="text_75" data-icu-live="host.controls.warmLight">--</span>
+                      <div class="image-wrapper_2 flex-col">
+                        <img
+                          class="thumbnail_11"
+                          referrerpolicy="no-referrer"
+                          src="./assets/img/26ec985efd0ef0aaa783af07711e531c.png"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                  <div class="box_38 flex-col">
+                    <span class="text_76">内循环</span>
+                    <div class="box_39 flex-row justify-between">
+                      <span class="text_77" data-icu-live="host.controls.innerCycle">--</span>
+                      <div class="image-wrapper_3 flex-col">
+                        <img
+                          class="thumbnail_12"
+                          referrerpolicy="no-referrer"
+                          src="./assets/img/ac535d6f9fd92185e59a3bc1c29ad1a3.png"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <!-- 紫外消毒 / 负离子 / 外循环 / 冷光灯 的开关在「主机控制」页
+                     (.image_11 / .image_13 / .image_18 / .image_14)。
+                     此处原先复制的两行沿用了 .image-wrapper_1/2/3 与 .thumbnail_10/11/12,
+                     而 JS 绑定只取首个匹配节点,因此那些开关点不动、也不回显状态;
+                     同时 .box_15 固定 708px 高,多出的两行会溢出并压在底部医嘱卡片上,
+                     导致医嘱区域与 UI 初稿不一致。按初稿恢复为单行三个开关。 -->
+              </div>
+              <div class="box_40 flex-col">
+                <div class="group_16 flex-col">
+                  <span class="text_78">湿度&nbsp;&nbsp;%</span>
+                  <div class="group_17 flex-row justify-between" style="position: relative !important;">
+                    <span class="text_79" data-icu-live="host.humidity">--</span>
+                    <div class="box_41 flex-col" style="position: absolute !important; right: 23px !important; top: 0 !important; margin: 0 !important;"></div>
+                  </div>
+                  <div class="group_18 flex-col"><div class="box_42 flex-col"></div></div>
+                </div>
+                <div class="group_19 flex-col">
+                  <span class="text_80">二氧化碳浓度&nbsp;&nbsp;PPM</span>
+                  <div class="group_20 flex-row justify-between" style="position: relative !important;">
+                    <span id="icu-co2-value" class="text_81" data-icu-live="host.co2">--</span>
+                    <!-- ★ P2-问题10 修复:去掉多余的 transform: translateX(145px)。
+                         图标已用 right:23px 定位在卡片内,再平移 145px 会把它推出
+                         .group_19(230px 宽)右边界约 122px,即"二氧化碳超出框"。
+                         同行的湿度图标 .box_41 没有这个 transform,可作对照。 -->
+                    <div id="icu-co2-icon" class="box_43 flex-col" style="position: absolute !important; top: 0 !important; right: 23px !important; left: auto !important; margin: 0 !important;"></div>
+                  </div>
+                  <div class="group_21 flex-col"><div class="box_44 flex-col"></div></div>
+                </div>
+                <div class="group_22 flex-col">
+                  <span class="text_82">蓝光理疗&nbsp;&nbsp;m</span>
+                  <div class="section_13 flex-row justify-between">
+                    <span class="text_83" data-icu-live="host.controls.blueTherapy">--</span>
+                    <div class="section_14 flex-col"></div>
+                  </div>
+                  <div class="section_15 flex-col"><div class="box_45 flex-col"></div></div>
+                </div>
+                <div class="group_23 flex-col icu-thermal-card" aria-label="红外热成像">
+                  <canvas id="icu-thermal-canvas" width="460" height="280"></canvas>
+                </div>
+              </div>
+              <div class="image-wrapper_4 flex-col" data-icu-action="goto_camera_tab">
+                <img
+                  class="image_8"
+                  referrerpolicy="no-referrer"
+                  src="./assets/img/2e936592b046ae563ca37c7ea09d08de.png"
+                  data-icu-action="goto_camera_tab"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="icu-print-preview" class="icu-print-preview" hidden aria-hidden="true" role="dialog" aria-modal="true" aria-label="治疗记录单预览">
+    <section class="icu-print-preview__sheet">
+      <div id="icu-print-preview-frame-shell" class="icu-print-preview__frame-shell"><iframe id="icu-print-preview-frame" class="icu-print-preview__frame" title="ICU 动物舱治疗记录单预览"></iframe></div>
+      <footer class="icu-print-preview__footer"><button type="button" class="icu-print-preview__button" data-print-preview-close>关闭</button><button type="button" class="icu-print-preview__button icu-print-preview__button--primary" data-print-preview-print>打印</button></footer>
+    </section>
+  </div>
+<script src="../../../lanhu-routes.js" defer></script>
+<script>
+(function () {
+  'use strict';
+
+  var printPreview = document.getElementById('icu-print-preview');
+  var printPreviewClickGuardUntil = 0;
+
+  function stopPreviewEvent(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    if (event.stopImmediatePropagation) {
+      event.stopImmediatePropagation();
+    }
+  }
+
+  function openPrintPreview(event) {
+    if (event) {
+      event.preventDefault();
+      event.stopPropagation();
+      if (event.stopImmediatePropagation) {
+        event.stopImmediatePropagation();
+      }
+    }
+    var frame = document.getElementById('icu-print-preview-frame');
+    var sheet = frame.parentNode.parentNode;
+    var viewportWidth = Math.max(320, window.innerWidth - 64);
+    var viewportHeight = Math.max(320, window.innerHeight * 0.92);
+    var scale = Math.min(viewportWidth / 1512, viewportHeight / 2138);
+    sheet.style.width = Math.round(1512 * scale) + 'px';
+    sheet.style.height = Math.round(2138 * scale) + 'px';
+    if (window.IcuNative && typeof window.IcuNative.action === 'function') {
+      window.IcuNative.action('camera_preview_pause', '', window.location.pathname || '');
+    }
+    frame.src = '../lanhu_baogao/index.html?preview=' + Date.now();
+    frame.onload = function () {
+      var sheet = frame.parentNode;
+      var reportScale = Math.min(sheet.clientWidth / 1512, sheet.clientHeight / 2138);
+      frame.style.transform = 'scale(' + Math.max(0.1, reportScale) + ')';
+    };
+    printPreview.hidden = false;
+    printPreview.setAttribute('aria-hidden', 'false');
+  }
+
+  function closePrintPreview() {
+    printPreviewClickGuardUntil = Date.now() + 700;
+    printPreview.hidden = true;
+    printPreview.setAttribute('aria-hidden', 'true');
+    if (window.IcuNative && typeof window.IcuNative.action === 'function') {
+      window.IcuNative.action('camera_preview_resume', '', window.location.pathname || '');
+    }
+  }
+
+  window.addEventListener('icu-print-preview-open', function (event) {
+    event.preventDefault();
+    openPrintPreview();
+  });
+
+  function handlePrintPreviewAction(event) {
+    if (Date.now() < printPreviewClickGuardUntil) {
+      stopPreviewEvent(event);
+      return;
+    }
+    if (event.target.closest('.text-wrapper_20,.text_52')) {
+      openPrintPreview(event);
+      return;
+    }
+    if (event.target.closest('[data-print-preview-close],.icu-print-preview__close') || event.target === printPreview) {
+      stopPreviewEvent(event);
+      closePrintPreview();
+      return;
+    }
+    if (event.target.closest('[data-print-preview-print]')) {
+      var frame = document.getElementById('icu-print-preview-frame');
+      if (frame && frame.contentWindow) {
+        frame.contentWindow.print();
+      }
+    }
+  }
+
+  document.addEventListener('touchend', handlePrintPreviewAction, true);
+  document.addEventListener('click', handlePrintPreviewAction, true);
+
+  document.addEventListener('keydown', function (event) {
+    if (event.key === 'Escape' && !printPreview.hidden) {
+      closePrintPreview();
+    }
+  });
+
+  var iconAlignmentPairs = [
+    ['.box_17', '.block_11'],
+    ['.box_21', '.block_11'],
+    ['.box_19', '.group_12', 12],
+    ['.box_34', '.group_12'],
+    ['.box_41', '.section_14'],
+    // ★ P2-问题10 修复：CO2 图标与湿度/蓝光图标对齐（.box_43 此前不在列表内，
+    //   因 .group_20 容器收缩，图标停留在卡片左侧，与右侧的湿度/蓝光图标不一致）
+    ['.box_43', '.section_14']
+  ];
+
+  var progressBarAlignmentPairs = [
+    ['.box_18', '.box_32'],
+    ['.section_9', '.box_32'],
+    ['.section_6', '.box_35'],
+    ['.group_18', '.section_15'],
+    ['.group_21', '.section_15']
+  ];
+
+  var valueAlignmentTargets = [
+    ['.text_61', '.block_7'],
+    ['.text_63', '.block_8'],
+    ['.text_65', '.section_7'],
+    ['.text_69', '.group_13'],
+    ['.text_71', '.group_15'],
+    ['.text_79', '.group_16'],
+    ['.text_81', '.group_19'],
+    ['.text_83', '.group_22']
+  ];
+
+  function alignStatusElements() {
+    iconAlignmentPairs.concat(progressBarAlignmentPairs).forEach(function (pair) {
+      var icon = document.querySelector(pair[0]);
+      var reference = document.querySelector(pair[1]);
+      if (!icon || !reference || !icon.offsetWidth) {
+        return;
+      }
+
+      icon.style.transform = '';
+      var iconBounds = icon.getBoundingClientRect();
+      var referenceBounds = reference.getBoundingClientRect();
+      var scaleX = iconBounds.width / icon.offsetWidth;
+      if (!scaleX) {
+        return;
+      }
+
+      var offset = (referenceBounds.left + referenceBounds.width / 2
+          - iconBounds.left - iconBounds.width / 2) / scaleX + (pair[2] || 0);
+      icon.style.transform = 'translateX(' + offset + 'px)';
+    });
+  }
+
+  function alignValueBaselines() {
+    var reference = document.querySelector('.text_65');
+    var referenceCard = document.querySelector('.section_7');
+    if (!reference || !referenceCard || !reference.offsetHeight) {
+      return;
+    }
+
+    reference.style.transform = '';
+    var referenceBounds = reference.getBoundingClientRect();
+    var referenceCardBounds = referenceCard.getBoundingClientRect();
+    var referenceOffset = referenceBounds.top - referenceCardBounds.top;
+
+    valueAlignmentTargets.forEach(function (target) {
+      var value = document.querySelector(target[0]);
+      var card = document.querySelector(target[1]);
+      if (!value || !card || !value.offsetHeight) {
+        return;
+      }
+
+      value.style.transform = '';
+      var valueBounds = value.getBoundingClientRect();
+      var cardBounds = card.getBoundingClientRect();
+      var scaleY = valueBounds.height / value.offsetHeight;
+      if (!scaleY) {
+        return;
+      }
+
+      var offset = (referenceOffset - (valueBounds.top - cardBounds.top)) / scaleY;
+      value.style.transform = 'translateY(' + offset + 'px)';
+    });
+  }
+
+  window.addEventListener('load', function () {
+    requestAnimationFrame(function () {
+      alignStatusElements();
+      alignValueBaselines();
+    });
+  });
+  window.addEventListener('resize', function () {
+    alignStatusElements();
+    alignValueBaselines();
+  });
+})();
+</script>
+  <script>
+    // ICU 状态页允许点击预览遮罩的空白区域关闭；报告内容区域不会触发关闭。
+    document.addEventListener('DOMContentLoaded', function () {
+      var previewOverlay = document.getElementById('icu-print-preview');
+      if (!previewOverlay) return;
+
+      previewOverlay.addEventListener('click', function (event) {
+        if (event.target === previewOverlay && typeof closePrintPreview === 'function') {
+          closePrintPreview();
+        }
+      });
+    });
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+

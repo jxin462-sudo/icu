@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="page_bg">#D7E1ED</color>
+    <color name="top_bg">#30365A</color>
+    <color name="sidebar_bg">#EDF2F7</color>
+    <color name="surface">#FFFFFF</color>
+    <color name="panel_bg">#EDF4FB</color>
+    <color name="panel_border">#C7D3DF</color>
+    <color name="surface_border">#D3DBE6</color>
+    <color name="text_primary">#2F3848</color>
+    <color name="text_secondary">#667387</color>
+    <color name="text_muted">#7A879A</color>
+    <color name="white">#FFFFFF</color>
+    <color name="primary_button">#2A58C8</color>
+    <color name="tab_active">#5D6679</color>
+    <color name="tab_inactive">#FFFFFF</color>
+    <color name="case_active">#D8E7FF</color>
+    <color name="accent_orange">#F1993B</color>
+    <color name="accent_green">#61B96A</color>
+    <color name="accent_blue">#7FA8DC</color>
+    <color name="accent_red">#D45B48</color>
+    <color name="accent_gray">#6E7F97</color>
+    <color name="status_ok">#4A6D53</color>
+    <color name="status_error">#B54B4B</color>
+</resources>

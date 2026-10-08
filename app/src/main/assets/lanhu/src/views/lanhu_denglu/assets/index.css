@@ -1,0 +1,114 @@
+.page {
+  background-color: rgba(255, 255, 255, 1);
+  position: relative;
+  width: 1920px;
+  height: 1200px;
+  overflow: hidden;
+}
+
+.group_66 {
+  width: 1920px;
+  height: 1200px;
+  background: url(./img/3018321aa3615227c023082154f7984d.png)
+    100% no-repeat;
+  background-size: 100% 100%;
+}
+
+.text_93 {
+  width: 141px;
+  height: 34px;
+  overflow-wrap: break-word;
+  color: rgba(42, 42, 42, 1);
+  font-size: 36px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: center;
+  white-space: nowrap;
+  line-height: 36px;
+  margin: 377px 0 0 888px;
+}
+
+.block_35 {
+  box-shadow: 0px 0px 1px 0px rgba(103, 103, 103, 1);
+  background-color: rgba(255, 255, 255, 0.8);
+  border-radius: 4px;
+  width: 380px;
+  height: 50px;
+  margin: 27px 0 0 770px;
+}
+
+.image-text_5 {
+  width: 77px;
+  height: 18px;
+  margin: 17px 0 0 11px;
+}
+
+.thumbnail_13 {
+  width: 16px;
+  height: 18px;
+}
+
+.text-group_6 {
+  width: 53px;
+  height: 16px;
+  overflow-wrap: break-word;
+  color: rgba(42, 42, 42, 1);
+  font-size: 18px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: center;
+  white-space: nowrap;
+  line-height: 36px;
+  margin-top: 2px;
+}
+
+.image-wrapper_5 {
+  box-shadow: 0px 0px 2px 0px rgba(103, 103, 103, 1);
+  background-color: rgba(255, 255, 255, 0.8);
+  border-radius: 4px;
+  height: 50px;
+  width: 380px;
+  margin: 19px 0 0 770px;
+}
+
+.thumbnail_14 {
+  width: 17px;
+  height: 18px;
+  margin: 15px 0 0 10px;
+}
+
+.text-wrapper_50 {
+  background-color: rgba(94, 167, 255, 1);
+  border-radius: 10px;
+  height: 50px;
+  width: 380px;
+  margin: 29px 0 0 770px;
+}
+
+.text_94 {
+  width: 39px;
+  height: 19px;
+  overflow-wrap: break-word;
+  color: rgba(255, 255, 255, 1);
+  font-size: 20px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: center;
+  white-space: nowrap;
+  line-height: 36px;
+  margin: 15px 0 0 170px;
+}
+
+.text_95 {
+  width: 79px;
+  height: 16px;
+  overflow-wrap: break-word;
+  color: rgba(42, 42, 42, 1);
+  font-size: 16px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: center;
+  white-space: nowrap;
+  line-height: 36px;
+  margin: 14px 0 534px 771px;
+}

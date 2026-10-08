@@ -1,0 +1,1589 @@
+.page {
+  background-color: rgba(255, 255, 255, 1);
+  position: relative;
+  width: 1512px;
+  height: 2138px;
+  overflow: hidden;
+}
+
+.text-wrapper_1 {
+  width: 1512px;
+  height: 108px;
+  background: url(./img/2274398d0145db7d63b8d1af11e07005.png) -5px
+    0px no-repeat;
+  background-size: 1517px 108px;
+}
+
+.text_1 {
+  width: 137px;
+  height: 40px;
+  overflow-wrap: break-word;
+  color: rgba(54, 54, 54, 1);
+  font-size: 50px;
+  font-family: SourceHanSansCN-Bold;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+  line-height: 60px;
+  margin: 49px 0 0 44px;
+}
+
+.text_2 {
+  width: 409px;
+  height: 43px;
+  overflow-wrap: break-word;
+  color: rgba(54, 54, 54, 1);
+  font-size: 45px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: center;
+  white-space: nowrap;
+  line-height: 60px;
+  margin: 47px 0 0 47px;
+}
+
+.text_3 {
+  width: 485px;
+  height: 48px;
+  overflow-wrap: break-word;
+  color: rgba(255, 255, 255, 1);
+  font-size: 50px;
+  font-family: SourceHanSansCN-Medium;
+  font-weight: 500;
+  text-align: center;
+  white-space: nowrap;
+  line-height: 60px;
+  margin: 31px 56px 0 334px;
+}
+
+.block_1 {
+  width: 1512px;
+  height: 2031px;
+  margin-bottom: 1px;
+}
+
+.text-wrapper_2 {
+  width: 1303px;
+  height: 27px;
+  margin: 26px 0 0 72px;
+}
+
+.text_4 {
+  width: 167px;
+  height: 22px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 36px;
+  margin-top: 5px;
+}
+
+.text_5 {
+  width: 241px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 36px;
+  margin: 1px 0 0 97px;
+}
+
+.text_6 {
+  width: 142px;
+  height: 22px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 36px;
+  margin-left: 96px;
+}
+
+.text_7 {
+  width: 241px;
+  height: 22px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 36px;
+  margin: 1px 0 0 96px;
+}
+
+.text_8 {
+  width: 115px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 36px;
+  margin-left: 108px;
+}
+
+.text-wrapper_3 {
+  width: 1378px;
+  height: 28px;
+  margin: 14px 0 0 72px;
+}
+
+.text_9 {
+  width: 142px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 36px;
+  margin-top: 3px;
+}
+
+.text_10 {
+  width: 136px;
+  height: 26px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 36px;
+  margin: 2px 0 0 121px;
+}
+
+.text_11 {
+  width: 129px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 36px;
+  margin-left: 202px;
+}
+
+.text_12 {
+  width: 254px;
+  height: 22px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 36px;
+  margin: 1px 0 0 109px;
+}
+
+.text_13 {
+  width: 190px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 36px;
+  margin-left: 95px;
+}
+
+.block_2 {
+  width: 1386px;
+  height: 30px;
+  margin: 35px 0 0 73px;
+}
+
+.text_14 {
+  width: 143px;
+  height: 29px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 30px;
+  font-family: SourceHanSansCN-Medium;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.image_1 {
+  width: 1223px;
+  height: 2px;
+  margin-top: 28px;
+}
+
+.block_3 {
+  width: 1378px;
+  height: 72px;
+  margin: 29px 0 0 74px;
+}
+
+.image-text_1 {
+  width: 130px;
+  height: 72px;
+}
+
+.image_2 {
+  width: 22px;
+  height: 71px;
+  margin-top: 1px;
+}
+
+.text-group_1 {
+  width: 95px;
+  height: 71px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  line-height: 48px;
+}
+
+.paragraph_1 {
+  width: 189px;
+  height: 70px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  line-height: 48px;
+  margin: 1px 0 0 38px;
+}
+
+.image-text_2 {
+  width: 129px;
+  height: 70px;
+  margin: 1px 0 0 188px;
+}
+
+.image_3 {
+  width: 22px;
+  height: 69px;
+}
+
+.text-group_2 {
+  width: 95px;
+  height: 70px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  line-height: 48px;
+}
+
+.text_15 {
+  width: 143px;
+  height: 22px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 1px 0 0 39px;
+}
+
+.image-text_3 {
+  width: 152px;
+  height: 70px;
+  margin: 1px 0 0 188px;
+}
+
+.image_4 {
+  width: 22px;
+  height: 69px;
+}
+
+.text-group_3 {
+  width: 118px;
+  height: 70px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  line-height: 48px;
+}
+
+.paragraph_2 {
+  width: 151px;
+  height: 66px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  line-height: 48px;
+  margin: 3px 0 0 31px;
+}
+
+.block_4 {
+  width: 1386px;
+  height: 29px;
+  margin: 59px 0 0 73px;
+}
+
+.text_16 {
+  width: 204px;
+  height: 29px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 30px;
+  font-family: SourceHanSansCN-Medium;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.image_5 {
+  width: 1160px;
+  height: 2px;
+  margin-top: 25px;
+}
+
+.text-wrapper_4 {
+  background-color: rgba(229, 237, 248, 1);
+  border-radius: 4px;
+  width: 1387px;
+  height: 50px;
+  margin: 20px 0 0 72px;
+}
+
+.text_17 {
+  width: 44px;
+  height: 22px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Medium;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 15px 0 0 22px;
+}
+
+.text_18 {
+  width: 46px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Medium;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 14px 0 0 328px;
+}
+
+.text_19 {
+  width: 46px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Medium;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 14px 0 0 230px;
+}
+
+.text_20 {
+  width: 46px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Medium;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 14px 0 0 233px;
+}
+
+.text_21 {
+  width: 48px;
+  height: 22px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Medium;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 15px 41px 0 303px;
+}
+
+.text-wrapper_5 {
+  width: 1347px;
+  height: 24px;
+  margin: 16px 0 0 93px;
+}
+
+.text_22 {
+  width: 225px;
+  height: 19px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin-top: 1px;
+}
+
+.text_23 {
+  width: 37px;
+  height: 19px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 1px 0 0 149px;
+}
+
+.text_24 {
+  width: 47px;
+  height: 19px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 1px 0 0 238px;
+}
+
+.text_25 {
+  width: 73px;
+  height: 24px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin-left: 233px;
+}
+
+.text_26 {
+  width: 70px;
+  height: 20px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin-left: 275px;
+}
+
+.text-wrapper_6 {
+  background-color: rgba(229, 237, 248, 1);
+  border-radius: 4px;
+  width: 1387px;
+  height: 50px;
+  margin: 9px 0 0 72px;
+}
+
+.text_27 {
+  width: 225px;
+  height: 19px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 15px 0 0 21px;
+}
+
+.text_28 {
+  width: 37px;
+  height: 19px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 15px 0 0 149px;
+}
+
+.text_29 {
+  width: 47px;
+  height: 19px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 15px 0 0 238px;
+}
+
+.text_30 {
+  width: 73px;
+  height: 24px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 14px 0 0 233px;
+}
+
+.text_31 {
+  width: 70px;
+  height: 20px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 14px 19px 0 275px;
+}
+
+.text-wrapper_7 {
+  width: 1347px;
+  height: 24px;
+  margin: 13px 0 0 93px;
+}
+
+.text_32 {
+  width: 225px;
+  height: 19px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin-top: 1px;
+}
+
+.text_33 {
+  width: 37px;
+  height: 19px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 1px 0 0 149px;
+}
+
+.text_34 {
+  width: 47px;
+  height: 19px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 1px 0 0 238px;
+}
+
+.text_35 {
+  width: 73px;
+  height: 24px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin-left: 233px;
+}
+
+.text_36 {
+  width: 70px;
+  height: 20px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin-left: 275px;
+}
+
+.text-wrapper_8 {
+  background-color: rgba(229, 237, 248, 1);
+  border-radius: 4px;
+  width: 1387px;
+  height: 50px;
+  margin: 13px 0 0 72px;
+}
+
+.text_37 {
+  width: 225px;
+  height: 19px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 15px 0 0 21px;
+}
+
+.text_38 {
+  width: 37px;
+  height: 19px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 15px 0 0 149px;
+}
+
+.text_39 {
+  width: 47px;
+  height: 19px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 15px 0 0 238px;
+}
+
+.text_40 {
+  width: 73px;
+  height: 24px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 14px 0 0 233px;
+}
+
+.text_41 {
+  width: 70px;
+  height: 20px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin: 14px 19px 0 275px;
+}
+
+.block_5 {
+  width: 1320px;
+  height: 122px;
+  margin: 26px 0 0 139px;
+}
+
+.text_42 {
+  width: 88px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin-top: 1px;
+}
+
+.image-wrapper_1 {
+  background-color: rgba(3, 3, 3, 1);
+  border-radius: 4px;
+  height: 122px;
+  width: 1213px;
+}
+
+.image_6 {
+  width: 1198px;
+  height: 105px;
+  margin: 9px 0 0 11px;
+}
+
+.block_6 {
+  width: 1368px;
+  height: 122px;
+  margin: 21px 0 0 91px;
+}
+
+.text_43 {
+  width: 136px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin-top: 1px;
+}
+
+.image-wrapper_2 {
+  background-color: rgba(3, 3, 3, 1);
+  border-radius: 4px;
+  height: 122px;
+  width: 1213px;
+}
+
+.image_7 {
+  width: 1198px;
+  height: 105px;
+  margin: 9px 0 0 11px;
+}
+
+.block_7 {
+  width: 1344px;
+  height: 122px;
+  margin: 21px 0 0 115px;
+}
+
+.text_44 {
+  width: 112px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 48px;
+  margin-top: 1px;
+}
+
+.image-wrapper_3 {
+  background-color: rgba(3, 3, 3, 1);
+  border-radius: 4px;
+  height: 122px;
+  width: 1213px;
+}
+
+.image_8 {
+  width: 1198px;
+  height: 105px;
+  margin: 8px 0 0 11px;
+}
+
+.block_8 {
+  width: 1386px;
+  height: 29px;
+  margin: 59px 0 0 73px;
+}
+
+.text_45 {
+  width: 143px;
+  height: 29px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 30px;
+  font-family: SourceHanSansCN-Medium;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.image_9 {
+  width: 1223px;
+  height: 2px;
+  margin-top: 24px;
+}
+
+.block_9 {
+  width: 1338px;
+  height: 29px;
+  margin: 32px 0 0 71px;
+}
+
+.text_46 {
+  width: 190px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.text_47 {
+  width: 120px;
+  height: 22px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin: 1px 0 0 198px;
+}
+
+.text-wrapper_9 {
+  width: 201px;
+  height: 28px;
+  overflow-wrap: break-word;
+  font-size: 0;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin: 1px 0 0 198px;
+}
+
+.text_48 {
+  width: 201px;
+  height: 28px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.text_49 {
+  width: 201px;
+  height: 28px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Normal;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.text_50 {
+  width: 201px;
+  height: 28px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.text_51 {
+  width: 144px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin-left: 287px;
+}
+
+.block_10 {
+  width: 1384px;
+  height: 29px;
+  margin: 59px 0 0 73px;
+}
+
+.text_52 {
+  width: 143px;
+  height: 29px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 30px;
+  font-family: SourceHanSansCN-Medium;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.image_10 {
+  width: 430px;
+  height: 2px;
+  margin: 24px 0 0 20px;
+}
+
+.text_53 {
+  width: 143px;
+  height: 29px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 30px;
+  font-family: SourceHanSansCN-Medium;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin-left: 198px;
+}
+
+.image_11 {
+  width: 430px;
+  height: 2px;
+  margin: 24px 0 0 20px;
+}
+
+.block_11 {
+  width: 1384px;
+  height: 139px;
+  margin: 28px 0 0 75px;
+}
+
+.box_1 {
+  width: 100px;
+  height: 135px;
+  margin-top: 1px;
+}
+
+.text-wrapper_10 {
+  background-color: rgba(160, 160, 160, 1);
+  border-radius: 4px;
+  height: 100px;
+  width: 100px;
+}
+
+.text_54 {
+  width: 44px;
+  height: 22px;
+  overflow-wrap: break-word;
+  color: rgba(255, 255, 255, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin: 38px 0 0 28px;
+}
+
+.text_55 {
+  width: 70px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin: 12px 0 0 12px;
+}
+
+.box_2 {
+  width: 100px;
+  height: 137px;
+  margin: 1px 0 0 50px;
+}
+
+.text-wrapper_11 {
+  background-color: rgba(160, 160, 160, 1);
+  border-radius: 4px;
+  height: 100px;
+  width: 100px;
+}
+
+.text_56 {
+  width: 44px;
+  height: 22px;
+  overflow-wrap: break-word;
+  color: rgba(255, 255, 255, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin: 38px 0 0 28px;
+}
+
+.text_57 {
+  width: 70px;
+  height: 22px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin: 15px 0 0 12px;
+}
+
+.box_3 {
+  width: 141px;
+  height: 138px;
+  margin: 1px 0 0 201px;
+}
+
+.text-wrapper_12 {
+  background-color: rgba(177, 178, 178, 1);
+  border-radius: 4px;
+  height: 100px;
+  margin-left: 20px;
+  width: 100px;
+}
+
+.text_58 {
+  width: 70px;
+  height: 22px;
+  overflow-wrap: break-word;
+  color: rgba(255, 255, 255, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin: 38px 0 0 15px;
+}
+
+.text_59 {
+  width: 141px;
+  height: 24px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin-top: 14px;
+}
+
+.text-wrapper_13 {
+  background-color: rgba(229, 237, 248, 1);
+  border-radius: 4px;
+  height: 139px;
+  margin-left: 196px;
+  width: 596px;
+}
+
+.text_60 {
+  width: 22px;
+  height: 21px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin: 17px 0 0 16px;
+}
+
+.text-wrapper_14 {
+  width: 245px;
+  height: 17px;
+  margin: 16px 0 0 74px;
+}
+
+.text_61 {
+  width: 94px;
+  height: 15px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 18px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.text_62 {
+  width: 94px;
+  height: 15px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 18px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin-top: 2px;
+}
+
+.block_12 {
+  width: 1386px;
+  height: 29px;
+  margin: 58px 0 0 73px;
+}
+
+.text_63 {
+  width: 143px;
+  height: 29px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 30px;
+  font-family: SourceHanSansCN-Medium;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.image_12 {
+  width: 1223px;
+  height: 2px;
+  margin-top: 25px;
+}
+
+.block_13 {
+  width: 414px;
+  height: 23px;
+  margin: 26px 0 0 71px;
+}
+
+.text_64 {
+  width: 104px;
+  height: 22px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin-top: 1px;
+}
+
+.image-text_4 {
+  width: 77px;
+  height: 23px;
+  margin-left: 26px;
+}
+
+/* ★ 治疗效果勾选框对齐：
+   旁边"良好/一般/差"的 line-height 是 60px，文字墨迹中心在行盒约 30px 处，
+   而勾选框 22px 高、margin-top:1px 时中心只有 12px，看起来高出很多。
+   把框下移到 30px 中心：margin-top = 30 - 11 = 19px。 */
+.checkbox_1 {
+  width: 22px;
+  height: 22px;
+  margin-top: 19px;
+}
+
+.text-group_4 {
+  width: 45px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.image-text_5 {
+  width: 76px;
+  height: 23px;
+  margin-left: 36px;
+}
+
+.label_1 {
+  width: 22px;
+  height: 22px;
+  /* 与 checkbox_1 同理，下移到文字墨迹中心（见 .checkbox_1 注释） */
+  margin-top: 19px;
+}
+
+.text-group_5 {
+  width: 47px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.image-text_6 {
+  width: 52px;
+  height: 23px;
+  margin-left: 43px;
+}
+
+.label_2 {
+  width: 22px;
+  height: 22px;
+  /* 与 checkbox_1 同理，下移到文字墨迹中心（见 .checkbox_1 注释） */
+  margin-top: 19px;
+}
+
+.text-group_6 {
+  width: 22px;
+  height: 22px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.block_14 {
+  width: 1385px;
+  height: 109px;
+  margin: 28px 0 0 73px;
+}
+
+.text_65 {
+  width: 102px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin-top: 14px;
+}
+
+.text-wrapper_15 {
+  background-color: rgba(229, 237, 248, 1);
+  border-radius: 4px;
+  height: 109px;
+  width: 1259px;
+}
+
+.text_66 {
+  width: 382px;
+  height: 24px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin: 16px 0 0 16px;
+}
+
+.text_67 {
+  width: 242px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(87, 87, 87, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Regular;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin: 30px 0 0 71px;
+}
+
+.block_15 {
+  width: 1388px;
+  height: 24px;
+  margin: 76px 0 0 69px;
+}
+
+.text-wrapper_16 {
+  width: 876px;
+  height: 24px;
+  overflow-wrap: break-word;
+  font-size: 0;
+  font-family: SourceHanSansCN-Normal;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.text_68 {
+  width: 876px;
+  height: 24px;
+  overflow-wrap: break-word;
+  color: rgba(54, 54, 54, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Normal;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.text_69 {
+  width: 876px;
+  height: 24px;
+  overflow-wrap: break-word;
+  color: rgba(54, 54, 54, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Normal;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.text_70 {
+  width: 876px;
+  height: 24px;
+  overflow-wrap: break-word;
+  color: rgba(54, 54, 54, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Normal;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.text_71 {
+  width: 337px;
+  height: 22px;
+  overflow-wrap: break-word;
+  color: rgba(54, 54, 54, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Normal;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+}
+
+.text-wrapper_17 {
+  width: 1363px;
+  height: 27px;
+  margin: 31px 0 58px 72px;
+}
+
+/* 治疗项目名称按模板保持两行项目，每个项目名称自身不再拆行。 */
+.text-group_1,
+.text-group_2,
+.text-group_3 {
+  white-space: nowrap;
+  overflow: visible;
+  overflow-wrap: normal;
+  word-break: keep-all;
+}
+
+/* 治疗项目勾选框与对应文本按每行基线对齐。
+   两行文字 line-height:48px，墨迹中心在第 24px / 72px；
+   图标列高 71px、内含上下两个框（框中心约在图内 12px / 59px），
+   margin-top 取 12px 时两个框分别落在 24px / 71px，与文字对齐。
+   （此前是 4px，用户实测整体仍偏上。） */
+.image-text_1,
+.image-text_2,
+.image-text_3 {
+  align-items: flex-start;
+}
+
+.image_2,
+.image_3,
+.image_4 {
+  flex: 0 0 auto;
+  margin-top: 12px;
+}
+
+.text-group_1,
+.text-group_2,
+.text-group_3 {
+  line-height: 48px;
+}
+
+
+.text_72 {
+  width: 275px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(54, 54, 54, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Normal;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin-top: 1px;
+}
+
+.text_73 {
+  width: 613px;
+  height: 26px;
+  overflow-wrap: break-word;
+  color: rgba(54, 54, 54, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Normal;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin: 1px 0 0 41px;
+}
+
+.text_74 {
+  width: 313px;
+  height: 23px;
+  overflow-wrap: break-word;
+  color: rgba(54, 54, 54, 1);
+  font-size: 24px;
+  font-family: SourceHanSansCN-Normal;
+  font-weight: NaN;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 60px;
+  margin-left: 121px;
+}
+
+/* ★ 生命体征记录表（精确版）：
+   文字墨迹中心 = 单元格 margin-top + line-height/2，目标色带中心：表头/蓝底行 25px、白行 12px。
+   表头与蓝底行单元格 margin-top 为 14~15px → line-height 取 20px（中心 24~25px）；
+   白行单元格 margin-top 1px → line-height 取 22px（中心 12px）。
+   （上一版直接设 50/24，漏算了 margin-top，表头和蓝底行仍整体下沉约 15px。） */
+.text_17,
+.text_18,
+.text_19,
+.text_20,
+.text_21,
+.text_27,
+.text_28,
+.text_29,
+.text_30,
+.text_31,
+.text_37,
+.text_38,
+.text_39,
+.text_40,
+.text_41 {
+  line-height: 20px;
+}
+
+.text_22,
+.text_23,
+.text_24,
+.text_25,
+.text_26,
+.text_32,
+.text_33,
+.text_34,
+.text_35,
+.text_36 {
+  line-height: 22px;
+}

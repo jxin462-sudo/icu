@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>URIT animal · 重症监护仓</title>
+<link rel="stylesheet" href="styles.css">
+<style>
+  /* 嵌入 App 后隐藏原型演示外壳（HUD / 页面清单抽屉） */
+  #hud, #drawer, #btn-notes, #btn-back, #btn-drawer { display:none !important; }
+  body { background:#013183; }
+  /* 表单输入框统一可编辑样式（桥接把 .inp.flex 占位转为真实 input 时使用） */
+  input.icu-input{box-sizing:border-box;width:100%;border:1px solid #c9d4e6;border-radius:8px;padding:0 14px;font-size:20px;color:#1c2430;background:#fff;outline:none}
+  input.icu-input:focus{border-color:#009cff}
+  .icu-field-row{display:flex;align-items:center;gap:8px}
+  .icu-err{color:#f0483e;font-size:16px;margin-top:4px}
+</style>
+</head>
+<body>
+  <div id="viewport">
+    <div id="hud">
+      <span id="hud-page"></span>
+      <button id="btn-notes">显示改版标注</button>
+      <button id="btn-back">返回</button>
+      <button id="btn-drawer">页面清单</button>
+    </div>
+    <div id="drawer"></div>
+    <div id="stage">
+      <div id="app-root"></div>
+    </div>
+  </div>
+
+  <script src="js/icons.js"></script>
+  <script src="js/core.js"></script>
+  <script src="js/icons_traced.js"></script>
+  <script src="js/icons_btn.js"></script>
+  <!-- 任务28：二维码生成库（qrcode-generator, kazuhikoarase, MIT，用户2026-10-01批准引入） -->
+  <script src="js/qrcode.js"></script>
+  <script src="js/screens.js"></script>
+  <script src="js/app.js"></script>
+  <script src="icu-native-bridge.js"></script>
+</body>
+</html>

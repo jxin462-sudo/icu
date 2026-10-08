@@ -1,0 +1,285 @@
+/**
+ * lanhu-1.css — 业务层:lanhu_1icuzhuangtaikaobei (ICU状态) 页面专属覆盖
+ * 层级:业务层(在 lanhu-fit.css 之后加载,优先级最高)
+ * 规则:可使用 !important;本文件应只包含 index.css 没覆盖到的页面级微调
+ */
+.text_66 {
+  width: 71px;
+}
+
+/* 删除底部医嘱大面板后，ICU 状态数据区整体下移约 77px，
+   避免 group_10 底部留下过大空白。 */
+.page.icu-page-status .box_14 {
+  margin-top: 100px !important;
+}
+
+.box_23 {
+  width: 191px;
+  height: 50px;
+  margin: 7px 0 0 22px;
+}
+.text-wrapper_24 {
+  width: 109px;
+  height: 39px;
+  margin-top: 20px;
+}
+.box_24 {
+  width: 103px;
+  height: 20px;
+  margin: 16px 0 10px 25px;
+}
+.box_28,
+.box_29,
+.box_30 {
+  top: 106px;
+}
+.group_20 {
+  width: 186px;
+  height: 47px;
+  margin: 9px 0 0 23px;
+}
+.text_81 {
+  min-width: 104px;
+  width: auto;
+  height: 41px;
+}
+.group_21 {
+  width: 185px;
+  height: 10px;
+  margin: 21px 0 16px 20px;
+  border-radius: 5px;
+}
+.text_58,
+.text_59 {
+  height: 18px;
+  margin-top: 9px;
+}
+.block_7,
+.block_8,
+.section_7,
+.group_13,
+.group_15,
+.group_16,
+.group_19,
+.group_22 {
+  position: relative;
+}
+.box_18,
+.section_6,
+.section_9,
+.box_32,
+.box_35,
+.group_18,
+.group_21,
+.section_15 {
+  position: absolute;
+  left: 22px;
+  bottom: 16px;
+  margin: 0;
+}
+.text_61,
+.text_63,
+.text_65,
+.text_69,
+.text_71,
+.text_79,
+.text_81,
+.text_83 {
+  font-family: OPPOSans-R, sans-serif;
+  font-weight: 400;
+}
+.page.icu-page-monitor .box_36 .text_73,
+.page .box_36 .text_73 {
+  display: inline-flex !important;
+  align-items: center !important;
+  width: 15px !important;
+  min-width: 15px !important;
+  max-width: 15px !important;
+  height: 20px !important;
+  margin: 4px 8px 0 0 !important;
+  font-family: SourceHanSansCN-Regular, sans-serif !important;
+  font-size: 16px !important;
+  font-weight: 400 !important;
+  line-height: 20px !important;
+}
+
+/* 3 行图标基线对齐:
+   第 1 行 (舱内温度/氧浓度)   基准: .box_16 (舱内温度) margin-top 9px
+   第 2 行 (红外体温/监护等级) 基准: .section_8 (红外体温) margin-top 9px
+   第 3 行 (治疗/红外/湿度/CO2/蓝光) 基准: .box_31 (治疗时长) margin-top 9px */
+.box_23,
+.section_8,
+.box_33,
+.group_17,
+.section_13 {
+  margin-top: 9px !important;
+}
+
+/* 3 个图标 (.box_34 红外理疗 / .box_43 CO2 / .section_14 蓝光) 仍然在 flex 流内,
+   而其他 6 个图标都被 lanhu-fit.css 改成 position: absolute; top: 0
+   这里也把 3 个改成 absolute + top: 0,让所有图标基线完全对齐 */
+.box_34,
+.box_43,
+.section_14 {
+  position: absolute !important;
+  right: 23px !important;
+  top: 0 !important;
+  margin: 0 !important;
+}
+
+/* 第 2 行行容器保持 position: relative(让图标 absolute 定位有参照) */
+.section_8,
+.box_23 {
+  position: relative !important;
+}
+
+/* 第 2 行 2 个图标 (.box_21 体温计 / .group_12 盾牌)
+   lanhu-fit.css 的 absolute 规则用了 .page.icu-page-status 限定,
+   view 1 没这个 class 所以实际不生效,这里手动加 */
+.box_21,
+.group_12 {
+  position: absolute !important;
+  right: 23px !important;
+  top: 0 !important;
+  margin: 0 !important;
+}
+
+/* 第 3 行 5 个图标(治疗时长/红外理疗/湿度/CO2/蓝光)位置:
+   行容器保持 position: relative(让图标 absolute 定位有参照),
+   图标用 top: 0 保持原位(与第 1/2 行同基线)
+   用 .page 前缀提高 specificity,确保不会被 lanhu-fit.css 覆盖 */
+.page .box_31,
+.page .box_33,
+.page .group_17,
+.page .group_20,
+.page .section_13 {
+  position: relative !important;
+}
+/* 第 3 行 4 个图标(治疗时长/红外理疗/湿度/蓝光)用 absolute + top: 0
+   CO2 图标 .box_43 不在此处:它和 .text_81 一起在 .group_20 flex 流里靠 justify-between 分布 */
+.page .block_11,
+.page .box_34,
+.page .box_41,
+.page .section_14 {
+  position: absolute !important;
+  right: 23px !important;
+  top: 0 !important;
+  margin: 0 !important;
+}
+
+/* ICU 状态页 CO2 卡片：大号数值保持左对齐，图标固定在同一卡片右侧。 */
+.page .group_19 .group_20 {
+  position: relative !important;
+  display: block !important;
+}
+
+.page .group_19 #icu-co2-value {
+  display: block !important;
+  width: auto !important;
+  /* ★ P2-问题10 修复:132px 在 55px 字号下只够 4 位数字,
+     5 位(如 10000)会被 ellipsis 截断。卡片 230px − 图标 34px
+     − 右边距 23px − 左缩进 ≈ 150px 可用,放宽到 150px。 */
+  max-width: 150px !important;
+  height: 60px !important;
+  margin: 6px 0 0 !important;
+  font-family: OPPOSans-R, sans-serif !important;
+  font-size: 55px !important;
+  font-weight: 400 !important;
+  line-height: 55px !important;
+  white-space: nowrap !important;
+}
+
+.page .group_19 #icu-co2-icon {
+  position: absolute !important;
+  top: 0 !important;
+  right: 23px !important;
+  margin: 0 !important;
+}
+
+/* ★ P2-问题10 修复(根因):湿度/CO2 值行容器不再收缩
+   lanhu-fit.css 对 .group_17/.group_20 设置 width:auto + margin-right:auto,
+   在 flex-col 卡片内会把该行收缩成内容宽度(~38px),于是 right:23px 的图标
+   落在卡片左侧并压住数值。这里与蓝光行 .section_13(183px) 保持一致,
+   让图标天然位于卡片右侧,不再依赖 JS 平移补偿。 */
+.page.icu-page-status .group_17,
+.page.icu-page-status .group_20 {
+  width: 183px !important;
+  min-width: 183px !important;
+  margin-right: 0 !important;
+}
+
+/* ★ O2 标(氧浓度图标)位置固定:氧浓度数值行原先 width:auto 随左/右舱读数长度伸缩,
+   .box_19 图标相对该行 right:23px 定位,读数一长图标就被推走,造成左右舱位置不一致。
+   与湿度/CO2 行保持一致,把该行固定为 183px,图标位置不再随数值变化。 */
+.page.icu-page-status .block_8 .section_5 {
+  width: 183px !important;
+  min-width: 183px !important;
+  margin-right: 0 !important;
+}
+
+/* P2-BUG#8 修复：治疗时间显示不全
+   当倒计时时间大于10分钟（如 120 分钟）时，固定宽度会截断显示
+   使用 width: auto 让数字自动扩展；长度自适应由
+   lanhu-live-state-v3.js statusFitFont() 按可用宽度缩小字号，
+   避免“10:00 / 120:00 / 1小时2分钟”被截断或压到右侧图标 */
+.text_69 {
+  max-width: none !important;
+  min-width: 0 !important;
+  width: auto !important;
+  overflow: visible !important;
+  white-space: nowrap !important;
+}
+
+.text_71 {
+  max-width: none !important;
+  min-width: 0 !important;
+  width: auto !important;
+  overflow: visible !important;
+  white-space: nowrap !important;
+}
+
+.text_83 {
+  max-width: none !important;
+  min-width: 0 !important;
+  width: auto !important;
+  overflow: visible !important;
+  white-space: nowrap !important;
+}
+
+/* 确保包含这些数字的容器也能自动扩展 */
+.page .box_31,
+.page .box_33,
+.page .section_13 {
+  width: auto !important;
+  min-width: 183px !important;
+}
+
+/* ★ P2-问题9 修复:监护等级顺序调换 —— 三级(绿)最左,一级(红)最右。
+   index.css 原始配色是 box_25 红 / box_26 黄 / box_27 绿,
+   这里只交换首尾两个色点的颜色,不动 DOM 顺序和几何位置
+   (选中环 .box_28/29/30 为绝对定位 left:21/61/104px,
+    改 DOM 顺序会让环与色点错位)。
+   动作绑定在 lanhu-first-phase.js renderStatusMonitorLevel() 中同步交换。 */
+.box_25 {
+  background-color: rgba(23, 177, 41, 1) !important;  /* 三级 绿 */
+}
+.box_27 {
+  background-color: rgba(233, 94, 94, 1) !important;  /* 一级 红 */
+}
+
+/* 三个选中环的静态边框统一为灰色:index.css 里 .box_28 写死了蓝框,
+   会让最左那个看起来"永远处于选中态"。真实选中态由
+   setHostMonitorLevelButton() 的 boxShadow / opacity / grayscale 表示。 */
+.box_28,
+.box_29,
+.box_30 {
+  border-color: rgba(87, 87, 87, 1) !important;
+}
+
+/* 医嘱在本页出现两处,UI 初稿(1-1 ICU状态)里两处都是画出来的,不是重复:
+     1) 患者信息栏第五列 —— .text_49 标签 + .text-wrapper_17 / .paragraph_1(321×70px)
+        初稿实测:白框 x=1561..1882(321px)、y=72..142(70px),内容形如
+        "禁食5小时 / 禁水3小时",与 index.css 的尺寸完全一致。
+     2) 页面底部大面板 —— .text-wrapper_25 + JS 注入的 .icu-status-advice(1476×127px)
+   之前这里把第 1 处整体 display:none,导致患者信息栏第五列空白,与初稿不符,
+   故移除该隐藏规则。两处都绑定 patient_edit,点任意一处都能编辑医嘱。 */

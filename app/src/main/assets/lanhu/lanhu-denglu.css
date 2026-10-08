@@ -1,0 +1,153 @@
+/**
+ * lanhu-denglu.css — 业务层:lanhu_denglu (登录) 页面专属样式
+ * 层级:业务层(在 lanhu-fit.css 之后加载,优先级最高)
+ * 规则:可使用 !important;登录表单用绝对定位固定在 1920×1200 画布上
+ */
+.icu-input {
+  position: absolute;
+  top: 0;
+  left: 40px;
+  right: 12px;
+  bottom: 0;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: #2a2a2a;
+  font-size: 18px;
+  font-family: SourceHanSansCN-Regular, "Microsoft YaHei", sans-serif;
+  line-height: 50px;
+  padding: 0;
+  box-sizing: border-box;
+}
+.icu-input::placeholder {
+  color: #999;
+}
+.icu-input-icon-left {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+.icu-message {
+  position: absolute;
+  left: 770px;
+  width: 380px;
+  top: 738px;
+  text-align: center;
+  color: #f0545c;
+  font-size: 14px;
+  line-height: 22px;
+  min-height: 22px;
+}
+.icu-current-user {
+  position: absolute;
+  left: 770px;
+  width: 380px;
+  top: 360px;
+  text-align: center;
+  color: #5ea7ff;
+  font-size: 14px;
+  line-height: 22px;
+}
+/* Login form: 1920x1200 画布上垂直居中 */
+#icuLoginForm .text_93 {
+  margin: 0 !important;
+  position: absolute;
+  left: 889px;
+  top: 442px;
+  width: 141px;
+  height: 34px;
+  line-height: 34px;
+}
+#icuLoginForm .block_35 {
+  margin: 0 !important;
+  position: absolute;
+  left: 770px;
+  top: 503px;
+  width: 380px;
+  height: 50px;
+}
+#icuLoginForm .image-wrapper_5 {
+  margin: 0 !important;
+  position: absolute;
+  left: 770px;
+  top: 572px;
+  width: 380px;
+  height: 50px;
+}
+#icuLoginForm .text-wrapper_50 {
+  margin: 0 !important;
+  position: absolute;
+  left: 770px;
+  top: 651px;
+  width: 380px;
+  height: 50px;
+}
+#icuLoginForm .text_95 {
+  margin: 0 !important;
+  position: absolute;
+  left: 770px;
+  top: 712px;
+  width: 380px;
+  height: 16px;
+  line-height: 16px;
+  text-align: center;
+}
+/* Register panel: 同样的水平居中,垂直居中 */
+.icu-register-panel {
+  position: absolute;
+  left: 770px;
+  top: 416px;
+  width: 380px;
+}
+.icu-register-panel .icu-register-title {
+  font-size: 28px;
+  color: #2a2a2a;
+  text-align: center;
+  margin: 0 0 27px 0;
+  line-height: 40px;
+  font-family: SourceHanSansCN-Regular, "Microsoft YaHei", sans-serif;
+  font-weight: 500;
+}
+.icu-register-panel .icu-register-row {
+  box-shadow: 0px 0px 1px 0px rgba(103, 103, 103, 1);
+  background-color: rgba(255, 255, 255, 0.8);
+  border-radius: 4px;
+  width: 380px;
+  height: 50px;
+  margin: 0 auto 19px auto;
+  position: relative;
+}
+.icu-register-panel .icu-register-button {
+  background-color: rgba(94, 167, 255, 1);
+  border-radius: 10px;
+  height: 50px;
+  width: 380px;
+  margin: 29px auto 0 auto;
+  color: #fff;
+  font-size: 20px;
+  text-align: center;
+  line-height: 50px;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+}
+.icu-register-panel .icu-register-toggle {
+  margin: 18px auto 0 auto;
+  width: 380px;
+  height: 16px;
+  text-align: center;
+  font-size: 16px;
+  color: #2a2a2a;
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+}
+.icu-toggle-text {
+  cursor: pointer;
+  user-select: none;
+  touch-action: manipulation;
+}
