@@ -299,16 +299,18 @@
         D.vitals = { hr: '--', bp: '--/--', map: '--', spo2: '--', pr: '--', temp: '--', rr: '--' };
         D.waveLive = null;
       }
-      /* ★ 任务38：主机/监护蓝牙连接状态边沿弹窗（"连接上给个弹窗"），断开也提示便于定位掉线 */
+      /* ★ 任务38：主机/监护蓝牙连接状态边沿弹窗（"连接上给个弹窗"），断开也提示便于定位掉线
+         ★ 2026-10-10 #59：开机动画（splash）期间不弹蓝牙提示 —— 开机自动重连属预期，不该打断动画 */
       var hostNow = !!((S.host && S.host.connected) || (S.ble && S.ble.host && S.ble.host.connected));
       var monNow = !!mon.connected;
       var hostDevName = text(((S.ble && S.ble.host) || S.host || {}).deviceName, '');
       var monDevName = text(mon.deviceName, '');
-      if (prevHostConn !== null && hostNow !== prevHostConn) {
+      var onSplash = (IcuApp.current() === 'splash');
+      if (!onSplash && prevHostConn !== null && hostNow !== prevHostConn) {
         toast(hostNow ? (TT('bleHostConnOk', '主机蓝牙已连接') + (hostDevName ? '：' + hostDevName : ''))
           : TT('bleHostConnLost', '主机蓝牙已断开'));
       }
-      if (prevMonConn !== null && monNow !== prevMonConn) {
+      if (!onSplash && prevMonConn !== null && monNow !== prevMonConn) {
         toast(monNow ? (TT('bleMonConnOk', '监护蓝牙已连接') + (monDevName ? '：' + monDevName : ''))
           : TT('bleMonConnLost', '监护蓝牙已断开'));
       }
@@ -648,7 +650,9 @@
       var ctl = fr.querySelector('.ctl');
       var holder = ctl && ctl.querySelector('.inp.flex');
       if (!holder) return;
-      var val = p[key] || '';
+      // ★ 2026-10-10 #60：草稿新建（draftNewMode）时一律空值 —— S.patient 还是上一个选中病例，
+      //   直接用它的值会把上次录入的数据带进「新建样本」弹窗
+      var val = draftNewMode ? '' : (p[key] || '');
       if (key === 'caseNo') {
         if (draftNewMode) {
           // 草稿态：住院号由原生生成，UI 显示"自动生成"占位、不可编辑
@@ -660,7 +664,7 @@
       if (key === 'age') {
         // ★ 2026-10-09 年龄单位改自定义下拉（弃用原生 <select>：真机 WebView 上宽度不受控，用户反馈收窄无效）
         //   选中值存 data-value（天/月/岁，与语言无关），显示文本随语言翻译
-        var auVal = (p && p.ageUnit) || '月';
+        var auVal = draftNewMode ? '月' : ((p && p.ageUnit) || '月');
         var auUnits = ['天', '月', '岁'];
         var auTKeys = { '天': 'ageDay', '月': 'ageMonth', '岁': 'ageYear' };
         var T = window.T || function (k, fb) { return fb; };
@@ -682,7 +686,7 @@
     var speciesMap = { 'dog': '犬', 'cat': '猫', 'rabbit': '兔', 'lizard': '蜥蜴', 'snake': '蛇', 'other': '其它' };
     function silNameOf(chip) { if (!chip) return '兔'; return speciesMap[chip.dataset.spec] || chip.textContent || '兔'; }
     if (sil) {
-      var silName = (p && p.species) || '';
+      var silName = draftNewMode ? '' : ((p && p.species) || '');
       if (!silName) {
         var chipsGroups = modal.querySelectorAll('.frow .chips');
         if (chipsGroups.length >= 2) {
@@ -736,7 +740,10 @@
     o.caseNo = o.caseNo || (S.patient && S.patient.caseNo) || '';
     o.recordNo = o.caseNo;
     o.ageUnit = auSel ? (auSel.getAttribute('data-value') || '月') : '月';
-    o.visitDate = (S.patient && S.patient.visitDate) || '';
+    /* ★ 2026-10-10 #61：草稿新建时 S.patient 还是上一个病例，其 visitDate 是旧的（昨天甚至更早），
+       若带回给原生会覆盖新病例的「今天」→ isSameDay 失败 → 新样本直接进回顾、护疗页看不到。
+       草稿态传空串，原生 optNonEmpty 不覆盖，保留 patient_new 时的当前时间。 */
+    o.visitDate = draftNewMode ? '' : ((S.patient && S.patient.visitDate) || '');
     return o;
   }
   /* ★ 任务12：新建样本必填 / 格式校验；返回错误文案（空=通过） */
