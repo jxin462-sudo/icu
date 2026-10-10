@@ -379,7 +379,9 @@
       D.sheet.date = fmtDT((p.visitDate || '').slice(0, 10));
       D.sheet.cage = (S.zone === 'left') ? TT('cabinA', 'A舱') : (S.zone === 'right' ? TT('cabinB', 'B舱') : '');
       D.sheet.weight = p.weight || '--'; D.sheet.dept = p.department || '--';
-      D.sheet.dur = fmtDT(text(p.treatmentStartTime, '')) + (p.treatmentEndTime && p.treatmentEndTime !== '进行中' ? ' ~ ' + fmtDT(p.treatmentEndTime) : '');
+      /* ★ 2026-10-10 #64：治疗时长显示「X小时Y分钟」，不再用「开始 ~ 结束」时间段；
+         进行中的按当前时间实时算 */
+      D.sheet.dur = fmtDurText(p.treatmentStartTime, p.treatmentEndTime);
       /* ★ 任务29：体征行 / 出院建议 / 治疗效果由原生 patient 回推（#26c 编辑保存后持久化在病例上） */
       D.sheet.vitalsRows = (p.vitals || []).map(function (r) {
         return [r[0] || '', r[1] || '', r[2] || '', r[3] || '', r[4] || ''];
@@ -397,6 +399,19 @@
           (t.period || TT('openPeriod', '打开时段')), t.average || '--', t.high || '--', t.low || '--'];
       });
     } catch (e) { /* noop */ }
+  }
+
+  /* ★ 2026-10-10 #64：治疗时长 → 「X小时Y分钟」。st/et 形如 yyyy-MM-dd HH:mm:ss；
+     et 为空或「进行中」时按当前时间算；解析失败给 '--' */
+  function fmtDurText(st, et) {
+    if (!st) return '--';
+    var t0 = Date.parse(String(st).replace(/-/g, '/'));
+    if (isNaN(t0)) return '--';
+    var t1 = (et && et !== '进行中') ? Date.parse(String(et).replace(/-/g, '/')) : Date.now();
+    if (isNaN(t1) || t1 < t0) t1 = t0;
+    var mins = Math.round((t1 - t0) / 60000);
+    var h = Math.floor(mins / 60), m = mins % 60;
+    return h + TT('hourUnit', '小时') + m + TT('minuteUnit', '分钟');
   }
 
   /* 新建（两段式）：仅打开草稿弹窗，不调 patient_new —— 避免"取消"也生成空病例 */
@@ -1589,6 +1604,8 @@
      ★ 2026-10-10 #53：回顾/护疗页底栏「打印」改为先打开本预览，记录单页自己的「打印」才执行真实打印 */
   function openRecordSheetFor(cid) {
     if (!cid) return;
+    /* ★ 2026-10-10 #62：记录来源页 —— 记录单顶栏高亮跟随来源（回顾→回顾，护疗→护疗），不再固定护疗 */
+    D.sheetFrom = IcuApp.current();
     var idx = indexOfCase(cid);
     if (idx >= 0 && S.zone) {
       sheetPreviewCase = null;

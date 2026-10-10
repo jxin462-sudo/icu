@@ -40,7 +40,8 @@
       lang: '语言', time: '时间', model: '型号', sn: '机号/SN', prodDate: '生产日期', reset: '恢复', factoryReset: '恢复出厂设置',
       langZh: '中文', langEn: 'English', sexFemale: '雌性', sexMale: '雄性', sexUnknown: '未知',
       ageDay: '天', ageMonth: '月', ageYear: '岁',
-      speciesDog: '犬', speciesCat: '猫', speciesRabbit: '兔', speciesLizard: '蜥蜴', speciesSnake: '蛇', speciesOther: '其它'
+      speciesDog: '犬', speciesCat: '猫', speciesRabbit: '兔', speciesLizard: '蜥蜴', speciesSnake: '蛇', speciesOther: '其它',
+      hourUnit: '小时', minuteUnit: '分钟'
     },
     en: {
       loginTitle: 'Login', loginBtn: 'Login', debugPwdTitle: 'Debug Password', debugPwdPlaceholder: 'Enter debug password', debugPwdCancel: 'Cancel', debugPwdOk: 'Confirm',
@@ -64,15 +65,19 @@
       lang: 'Language', time: 'Time', model: 'Model', sn: 'S/N', prodDate: 'Mfg. Date', reset: 'Reset', factoryReset: 'Factory Reset',
       langZh: '中文', langEn: 'English', sexFemale: 'Female', sexMale: 'Male', sexUnknown: 'Unknown',
       ageDay: 'Day', ageMonth: 'Month', ageYear: 'Year',
-      speciesDog: 'Dog', speciesCat: 'Cat', speciesRabbit: 'Rabbit', speciesLizard: 'Lizard', speciesSnake: 'Snake', speciesOther: 'Other'
+      speciesDog: 'Dog', speciesCat: 'Cat', speciesRabbit: 'Rabbit', speciesLizard: 'Lizard', speciesSnake: 'Snake', speciesOther: 'Other',
+      hourUnit: 'h ', minuteUnit: 'min'
     }
   };
   function T(k, fb) { var lang = (window.D && window.D.lang) || 'zh'; return (I18N[lang] || I18N.zh || {})[k] || fb; }
   window.T = T; // 供 core.js（顶栏/底栏/会话栏）复用
   /* ★ 2026-10-08：样本数据里物种以中文存储（犬/猫/兔/蜥蜴/蛇/其它），
-     英文界面显示时映射到物种翻译；自定义「其它物种」文本原样显示 */
+     英文界面显示时映射到物种翻译；自定义「其它物种」文本原样显示
+     ★ 2026-10-10 #63：新建弹窗实际存的是 chip 的 data-spec 英文键（dog/cat/rabbit/lizard/snake/other），
+     同步映射，否则记录单/列表在中文界面下显示英文 */
   function spTxt(sp) {
-    var m = { '犬': 'speciesDog', '猫': 'speciesCat', '兔': 'speciesRabbit', '蜥蜴': 'speciesLizard', '蛇': 'speciesSnake', '其它': 'speciesOther' };
+    var m = { '犬': 'speciesDog', '猫': 'speciesCat', '兔': 'speciesRabbit', '蜥蜴': 'speciesLizard', '蛇': 'speciesSnake', '其它': 'speciesOther',
+      'dog': 'speciesDog', 'cat': 'speciesCat', 'rabbit': 'speciesRabbit', 'lizard': 'speciesLizard', 'snake': 'speciesSnake', 'other': 'speciesOther' };
     return (sp && m[sp]) ? T(m[sp], sp) : (sp || '');
   }
   window.spTxt = spTxt;
@@ -863,7 +868,8 @@
         { id: 'pr', label: '打印', key: 'print', icon: 'print', go: 'printing' },
         { id: 'ex', label: '导出', key: 'exportReport', icon: 'export', go: 'sending' },
       ], '');
-      return PAGE(P.topbar('care'),
+      /* ★ 2026-10-10 #62：顶栏高亮跟随来源页 —— 从回顾打开的停留在「回顾」，从护疗打开的在「护疗」 */
+      return PAGE(P.topbar(D.sheetFrom === 'review' ? 'review' : 'care'),
         /* ★ 2026-10-10 #54：编辑态整单加 .editing，CSS 高亮所有可编辑区域 */
         '<div class="sheet' + (ed ? ' editing' : '') + '">'
         + '<div class="sheet-head"><div class="lg">' + (s.logoUri ? '<img src="' + s.logoUri + '" alt="LOGO">' : 'LOGO') + '</div><div class="hname">' + D.hospital + '</div>'

@@ -129,6 +129,8 @@
     printReturn: '',
     /* ★ 2026-10-10 #57：打印机扫描状态（原生 S.printerScan 映射），设置-打印页列表用 */
     printerScan: { scanning: false, printers: [] },
+    /* ★ 2026-10-10 #62：治疗记录单来源页（'review'/'care…'），记录单顶栏高亮跟随来源 */
+    sheetFrom: '',
     date: '',
     stamp: '',
     session: '',
