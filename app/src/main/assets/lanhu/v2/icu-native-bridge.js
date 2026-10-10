@@ -382,6 +382,21 @@
       /* ★ 2026-10-10 #64：治疗时长显示「X小时Y分钟」，不再用「开始 ~ 结束」时间段；
          进行中的按当前时间实时算 */
       D.sheet.dur = fmtDurText(p.treatmentStartTime, p.treatmentEndTime);
+      /* ★ 2026-10-10 #76：影像记录 —— 「治疗前 / 治疗后」图片下方加时间点（MM-dd HH:mm，如 09-01 12:00）：
+         治疗前=开始治疗时间，治疗后=结束治疗时间（仍在进行中按当前时间）。此前 imgs 恒为空，记录单该节空白 */
+      var mdhm = function (s) {
+        s = (s || '').trim();
+        return (s.length >= 16 && s.charAt(4) === '-') ? s.slice(5, 16) : s;
+      };
+      var endRaw = p.treatmentEndTime || '';
+      var _n = new Date();
+      var _p2 = function (x) { return (x < 10 ? '0' : '') + x; };
+      var nowMdHm = _p2(_n.getMonth() + 1) + '-' + _p2(_n.getDate()) + ' ' + _p2(_n.getHours()) + ':' + _p2(_n.getMinutes());
+      D.sheet.imgs = [
+        { lab: TT('sheetImgPh', '图片'), cap: TT('sheetBefore', '治疗前'), t: mdhm(p.treatmentStartTime) },
+        { lab: TT('sheetImgPh', '图片'), cap: TT('sheetAfter', '治疗后'), t: (!endRaw || endRaw === '进行中') ? nowMdHm : mdhm(endRaw) },
+        { lab: TT('sheetQrBox', '二维码'), cap: TT('sheetQrView', '扫码查看原图'), qr: true, t: '' }
+      ];
       /* ★ 任务29：体征行 / 出院建议 / 治疗效果由原生 patient 回推（#26c 编辑保存后持久化在病例上） */
       D.sheet.vitalsRows = (p.vitals || []).map(function (r) {
         return [r[0] || '', r[1] || '', r[2] || '', r[3] || '', r[4] || ''];

@@ -6629,7 +6629,7 @@ public class IcuDashboardView extends View {
                 pdfFirstNonZero(am4100Manager.getRespValue(),
                         pdfVitalsNumber(patient.monitorSnapshot.resp)));
         drawPdfTemplateEnvironment(canvas, pdfPaint);
-        drawPdfTemplateImageAlarm(canvas, pdfPaint);
+        drawPdfTemplateImageAlarm(canvas, pdfPaint, patient);
         drawPdfTemplateConclusion(canvas, pdfPaint, patient, org, createdAt);
         drawPdfTemplateFooter(canvas, pdfPaint, declaration, footerLogoUri);
     }
@@ -6858,27 +6858,52 @@ public class IcuDashboardView extends View {
                 pdfInfoColumnX(3, 4), 543, 48, envW - 48);
     }
 
-    private void drawPdfTemplateImageAlarm(Canvas canvas, Paint pdfPaint) {
-        drawPdfSectionTitle(canvas, pdfPaint, "\u3010\u5f71\u50cf\u8bb0\u5f55\u3011", 28, 581, 92, 263);
-        drawPdfSectionTitle(canvas, pdfPaint, "\u3010\u62a5\u8b66\u4e8b\u4ef6\u3011", 340, 581, 415, 568);
+    private void drawPdfTemplateImageAlarm(Canvas canvas, Paint pdfPaint, PatientCase patient) {
+        drawPdfSectionTitle(canvas, pdfPaint, "【影像记录】", 28, 581, 92, 330);
+        drawPdfSectionTitle(canvas, pdfPaint, "【报警事件】", 340, 581, 415, 568);
 
         // ★ 按当前舱过滤影像记录：右舱的报告不要再放左舱的治疗前/治疗后照片。
         CameraSnapshot first = getActiveCameraSnapshot(0);
         CameraSnapshot second = getActiveCameraSnapshot(1);
-        drawPdfSnapshotBox(canvas, pdfPaint, new RectF(31, 599, 70, 638), first, "\u56fe\u7247");
-        drawPdfSnapshotBox(canvas, pdfPaint, new RectF(91, 599, 130, 638), second, "\u56fe\u7247");
-        drawPdfSnapshotBox(canvas, pdfPaint, new RectF(216, 599, 255, 638), null, "\u4e8c\u7ef4\u7801");
-        pdfTextCenter(canvas, pdfPaint, "\u6cbb\u7597\u524d", new RectF(24, 648, 78, 663), 8.8f, Color.rgb(96, 101, 108), false);
-        pdfTextCenter(canvas, pdfPaint, "\u6cbb\u7597\u540e", new RectF(84, 648, 138, 663), 8.8f, Color.rgb(96, 101, 108), false);
-        pdfTextCenter(canvas, pdfPaint, "\u626b\u7801\u67e5\u770b\u539f\u56fe", new RectF(184, 648, 286, 663), 8.8f, Color.rgb(96, 101, 108), false);
-        pdfTextCenter(canvas, pdfPaint, pdfSnapshotTime(first), new RectF(19, 664, 83, 678), 7.2f, Color.rgb(108, 114, 122), false);
-        pdfTextCenter(canvas, pdfPaint, pdfSnapshotTime(second), new RectF(79, 664, 143, 678), 7.2f, Color.rgb(108, 114, 122), false);
+        /* ★ 2026-10-10 #76：影像区重新排版对齐设计稿（lanhu_baogao）——三个等宽图框并排，
+           框下居中标题（治疗前/治疗后/扫码查看原图），标题下再居中时间点（MM-dd HH:mm，如 09-01 12:00）；
+           治疗前=开始治疗时间，治疗后=结束治疗时间（仍在进行中按当前时间）。
+           旧版图框只有 39pt 宽、显示的是照片拍摄时间，与设计稿不一致。 */
+        RectF box1 = new RectF(28, 599, 108, 654);
+        RectF box2 = new RectF(118, 599, 198, 654);
+        RectF boxQr = new RectF(228, 599, 308, 654);
+        drawPdfSnapshotBox(canvas, pdfPaint, box1, first, "图片");
+        drawPdfSnapshotBox(canvas, pdfPaint, box2, second, "图片");
+        drawPdfSnapshotBox(canvas, pdfPaint, boxQr, null, "二维码");
+        int capColor = Color.rgb(96, 101, 108);
+        int tmColor = Color.rgb(108, 114, 122);
+        pdfTextCenter(canvas, pdfPaint, "治疗前", new RectF(box1.left, 656, box1.right, 670), 8.8f, capColor, false);
+        pdfTextCenter(canvas, pdfPaint, "治疗后", new RectF(box2.left, 656, box2.right, 670), 8.8f, capColor, false);
+        pdfTextCenter(canvas, pdfPaint, "扫码查看原图", new RectF(boxQr.left, 656, boxQr.right, 670), 8.8f, capColor, false);
+        String startTm = pdfMdHm(patient == null ? "" : patient.treatmentStartTime);
+        String endRaw = patient == null ? "" : patient.treatmentEndTime;
+        String endTm = pdfMdHm((endRaw == null || endRaw.isEmpty() || "进行中".equals(endRaw))
+                ? formatSettingsDateTime(new Date()) : endRaw);
+        pdfTextCenter(canvas, pdfPaint, startTm, new RectF(box1.left, 672, box1.right, 686), 7.6f, tmColor, false);
+        pdfTextCenter(canvas, pdfPaint, endTm, new RectF(box2.left, 672, box2.right, 686), 7.6f, tmColor, false);
 
         RectF alarmBox = new RectF(340, 599, 568, 654);
         pdfRoundRect(canvas, pdfPaint, alarmBox.left, alarmBox.top, alarmBox.right, alarmBox.bottom, 2,
                 Color.rgb(229, 239, 251), Color.TRANSPARENT, 0);
         pdfDrawWrappedText(canvas, pdfPaint, pdfAlarmText(), alarmBox.left + 8, alarmBox.top + 18,
                 alarmBox.width() - 16, 9.4f, Color.rgb(96, 101, 108), false, 3, 14);
+    }
+
+    /** 「yyyy-MM-dd HH:mm:ss」→「MM-dd HH:mm」（如 09-01 12:00）；格式不符时原样返回，空串安全。 */
+    private String pdfMdHm(String dt) {
+        if (dt == null) {
+            return "";
+        }
+        String s = dt.trim();
+        if (s.length() >= 16 && s.charAt(4) == '-') {
+            return s.substring(5, 16);
+        }
+        return s;
     }
 
     private void drawPdfTemplateConclusion(Canvas canvas, Paint pdfPaint, PatientCase patient, Organization org, String createdAt) {
