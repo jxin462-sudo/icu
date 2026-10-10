@@ -131,6 +131,10 @@
     printerScan: { scanning: false, printers: [] },
     /* ★ 2026-10-10 #62：治疗记录单来源页（'review'/'care…'），记录单顶栏高亮跟随来源 */
     sheetFrom: '',
+    /* ★ 2026-10-10 #71：发送数据页来源标记：'care' = 护疗页底栏进入（背景/底栏为护疗页），'review' = 回顾页进入 */
+    sendFrom: '',
+    /* ★ 2026-10-10 #73：发送数据页选择列表收回标记（底栏再点「发送数据」切换） */
+    sendMenuHide: false,
     date: '',
     stamp: '',
     session: '',

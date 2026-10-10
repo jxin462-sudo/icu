@@ -1057,7 +1057,8 @@
     }
 
     // 表格行点击 → patient_select_<zone>_<index>（让"选中的样本"真实切换，编辑/开始护疗/删除作用于该行）
-    if (cur === 'care' || cur === 'care-data' || cur === 'review' || cur === 'care-record') {
+    /* ★ 2026-10-10 #74：发送数据页也要能点行切换选中（勾选框随 sel 态翻转），此前漏了 'sending' */
+    if (cur === 'care' || cur === 'care-data' || cur === 'review' || cur === 'care-record' || cur === 'sending') {
       var trHit = e.target.closest('tr[data-caseid]');
       if (trHit && !e.target.closest('input')) {
         var cid = trHit.dataset.caseid;
@@ -1065,7 +1066,9 @@
         if (idx >= 0 && S.zone) {
           act('patient_select_' + S.zone + '_' + idx);
           // ★ 任务18：护理页/护理列表点行立即记录选中样本（供「编辑」按钮门禁用，无需等原生回推）
-          if (cur === 'care' || cur === 'care-data') { D.selCaseId = cid; }
+          // ★ 2026-10-10 #74：发送页点行也立即置选中（护疗/回顾来源列表都能重选）
+          if (cur === 'care' || cur === 'care-data' || cur === 'sending') { D.selCaseId = cid; }
+          if (cur === 'sending') { stop(e); if (window.IcuApp) IcuApp.render(); return; }
           // ★ 任务16(#5)：护疗记录页点行 → 选中后跳转到「治疗记录数据表」（11-1.png 表单页）
           if (cur === 'care-record') {
             stop(e);
@@ -1083,9 +1086,24 @@
     if (bb && !bb.classList.contains('dis')) {
       var bspan = bb.querySelector('span');
       var key = bb.dataset.key || (bspan ? bspan.textContent : '');
+      /* ★ 2026-10-10 #73：发送数据页底栏再点「发送数据」→ 未开始传输（无卡片）时收回/展开发送方式列表 */
+      if (cur === 'sending' && (key === 'sendData' || key === 'dataSend')) {
+        stop(e);
+        if (!sendingCard) { D.sendMenuHide = !D.sendMenuHide; if (window.IcuApp) IcuApp.render(); }
+        return;
+      }
       if (cur === 'care' || cur === 'care-data' || cur === 'care-record') {
         if (key === 'newSample') { stop(e); openNewSampleDraft(); return; }
-        if (key === 'startCare') { stop(e); act('patient_start_treatment'); IcuApp.go('status'); return; }
+        if (key === 'startCare') {
+          stop(e);
+          /* ★ 2026-10-10 #70：已结束的样本不能重复开启治疗 —— 原生会拦截，但 H5 也不能跳进状态页 */
+          var sc = (S.cases || []).filter(function (c) { return c && c.caseId === D.selCaseId; })[0];
+          if (sc && sc.treatmentStarted && sc.treatmentEndTime && sc.treatmentEndTime !== '进行中') {
+            toast(TT('careEndedNoRestart', '该记录已结束，不能重复开始护疗'));
+            return;
+          }
+          act('patient_start_treatment'); IcuApp.go('status'); return;
+        }
         if (key === 'edit') {
           stop(e);
           var Tg = window.T || function (k, fb) { return fb; };
@@ -1109,7 +1127,8 @@
           D.printFrom = 'care';
           openRecordSheetFor(D.selCaseId); return;
         }
-        if (key === 'dataSend') { stop(e); sendingCard = null; IcuApp.go('sending'); return; } // 任务9：进入发送数据页（菜单里再选文件助手/蓝牙）
+        /* ★ 2026-10-10 #71：护疗页「发送数据」→ 发送页按护疗来源渲染（已结束的样本也能直接选发送方式，不必跳回顾页） */
+        if (key === 'dataSend') { stop(e); sendingCard = null; D.sendFrom = 'care'; D.sendMenuHide = false; IcuApp.go('sending'); return; } // 任务9：进入发送数据页（菜单里再选文件助手/蓝牙）
         if (key === 'tutorial') { stop(e); IcuApp.go('tutorial'); return; } /* ★ 2026-10-09 改为进教程页（槽位绑定照片/视频） */
         if (key === 'careRecord') { /* 交给 app.js 跳 care-record */ return; }
       }
@@ -1126,8 +1145,8 @@
         if (key === 'query') { /* 交给 app.js 跳 query */ return; }
         /* ★ 2026-10-10 #53：回顾页「打印」→ 打开选中样本的治疗记录单预览（选中校验由上方 needSel 门完成），真实打印在记录单页执行 */
         if (key === 'print') { stop(e); D.printFrom = 'review'; openRecordSheetFor(D.selCaseId); return; }
-        if (key === 'exportReport') { stop(e); act('export_report'); IcuApp.go('sending'); return; }
-        if (key === 'sendData') { stop(e); sendingCard = null; IcuApp.go('sending'); return; }
+        if (key === 'exportReport') { stop(e); act('export_report'); D.sendFrom = 'review'; D.sendMenuHide = false; IcuApp.go('sending'); return; }
+        if (key === 'sendData') { stop(e); sendingCard = null; D.sendFrom = 'review'; D.sendMenuHide = false; IcuApp.go('sending'); return; }
         if (key === 'careRecord') { /* 交给 app.js */ return; }
         if (key === 'del') { stop(e); act('patient_delete'); return; }
       }
@@ -1664,14 +1683,15 @@
 
     if (hasNative()) {
       pullState(); syncD();
-      // 先播放开机动画，约 3.5s 后自动进入登录/护理；点击 splash 可跳过（data-go=login）
+      // ★ 2026-10-10 #68：动画本身约 3s 播完（logo 1.6s 延迟 + 1.2s 播放 + 标语 2s 延迟），
+      // 原 3.5s 跳转太紧（WebView 加载 CSS/字体还会推迟动画起点），延长到 5.2s 保证播完整；点击 splash 仍可跳过（data-go=login）
       IcuApp.setScreen('splash');
       splashTimer = setTimeout(function () {
         splashTimer = null;
         if (IcuApp.current() === 'splash') {
           IcuApp.setScreen(isLoggedIn() ? 'care' : 'login');
         }
-      }, 3500);
+      }, 5200);
       // 让顶栏时钟动起来（每 30s 刷一次时间显示）
       setInterval(function () { if (!pendingEditor && !pendingNavAfterSave) { syncD(); var c = IcuApp.current(); if (c !== 'new-sample' && c !== 'query' && c !== 'login' && c !== 'splash') IcuApp.render(); } }, 30000);
     } else {

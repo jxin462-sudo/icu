@@ -5515,7 +5515,8 @@ public class IcuDashboardView extends View {
         activeTab = 0;
         lastGeneratedPdf = null;
         saveTreatmentRecordsToStorage();
-        syncCurrentTreatmentEntryStatesFromDevice();
+        /* ★ 2026-10-10 #69：新建样本不再同步设备当前功能状态 —— 避免把上一样本开启的红外/雾化等功能
+           及其治疗时长带进新样本；设备遗留功能在「开始护疗」时统一关闭（见 startCareForPatient） */
         Toast.makeText(activity, "已创建新的治疗记录", Toast.LENGTH_SHORT).show();
     }
 
@@ -5543,7 +5544,9 @@ public class IcuDashboardView extends View {
             Toast.makeText(activity, "请先选中一条记录", Toast.LENGTH_SHORT).show();
             return;
         }
-        if (patient.currentTreatment) {
+        /* ★ 2026-10-10 #69：仅「已真正开始护疗」才直接进页；仅新建未开始的样本（currentTreatment=true
+           但 treatmentStarted=false）必须走下方完整开启流程，重置开始时间/治疗条目并清空设备遗留功能 */
+        if (patient.currentTreatment && patient.treatmentStarted) {
             // 已在护疗中：直接进护疗页，不重复开启。
             enterCarePage(patient);
             return;
@@ -5569,6 +5572,14 @@ public class IcuDashboardView extends View {
         patient.pendingInitialEntry = false;
         for (TreatmentEntry entry : patient.treatmentEntries) {
             resetTreatmentEntryTiming(entry, now);
+        }
+        /* ★ 2026-10-10 #69：开始新一轮治疗前关闭设备上遗留的治疗功能（红外/蓝光/雾化/负离子/紫外），
+           保证每个样本的治疗数据独立，不把上一样本开启的功能带进新样本 */
+        int[] sessionControls = {6, 7, 10, 11, 12};
+        for (int ci : sessionControls) {
+            if (bleManager.isControlOn(ci)) {
+                bleManager.setControlEnabled(ci, false);
+            }
         }
         lastGeneratedPdf = null;
         saveTreatmentRecordsToStorage(true);

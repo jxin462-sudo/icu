@@ -120,6 +120,7 @@
         /* ★ 任务15 */
         curLogo: '当前LOGO', footerLogo: '页脚LOGO', factoryConfirmBody: '确认恢复出厂设置？所有自定义设置将恢复默认。',
         reviewNoData: '暂无样本数据，无法执行该操作', reviewNoSel: '请先选择一个样本',
+        careEndedNoRestart: '该记录已结束，不能重复开始护疗',
         /* ★ 任务14：打印页 */
         printerAvail: '可用打印机', printerAddr: '打印机地址', scanPrinter: '扫描',
         addPrinter: '添加打印机', printTest: '打印测试页', uploadLogo: '上传LOGO',
@@ -167,6 +168,7 @@
         /* ★ 任务15 */
         curLogo: 'Current Logo', footerLogo: 'Footer Logo', factoryConfirmBody: 'Restore factory settings? All custom settings will be reset.',
         reviewNoData: 'No sample data; this action is unavailable', reviewNoSel: 'Please select a sample first',
+        careEndedNoRestart: 'This record has ended and cannot be restarted',
         /* ★ 任务14：打印页 */
         printerAvail: 'Available Printers', printerAddr: 'Printer Address', scanPrinter: 'Scan',
         addPrinter: 'Add Printer', printTest: 'Print Test Page', uploadLogo: 'Upload Logo',
@@ -993,16 +995,22 @@
          选「文件助手」→ 二维码卡片（15-2，微信文件助手传输）；选「蓝牙传输」→ 正在发送卡片（15-3，spinner + act('send_data')） */
       const mi = [[T('sendFileHelper', '文件助手'), 'doc', 'file'], [T('sendBle', '蓝牙传输'), 'wifi', 'ble']];
       /* ★ 任务16(#11)：默认不高亮 —— 点击后才由 bridge 加 'on' */
-      const menu = '<div class="send-menu">' + mi.map(function (m) {
+      /* ★ 2026-10-10 #73：D.sendMenuHide=true 时收回选择列表（底栏再点「发送数据」切换） */
+      const menu = '<div class="send-menu"' + (D.sendMenuHide ? ' hidden' : '') + '>' + mi.map(function (m) {
         return '<div class="mi" data-send="' + m[2] + '">' + (I[m[1]] || I.doc) + '<span>' + m[0] + '</span></div>';
       }).join('') + '</div>';
       /* ★ 任务28：二维码内容由 bridge 按原生回推的 S.shareQr.url 真实渲染（id=shareQrBox），下方附转发指引 */
       const qr = '<div class="send-qr"><div class="code" id="shareQrBox"></div><div class="cap">' + T('sendQrCap', '微信文件助手传输') + '</div>'
         + '<div class="qrtip">' + T('sendQrTip', '微信扫码打开报告 → 右上角「…」→ 发送给「文件传输助手」') + '</div></div>';
-      return PAGE(P.topbar('review'), reviewBg()
-        + '<div class="send-card qrcard" hidden>' + P.mask(qr) + '</div>'
-        + '<div class="send-card blecard" hidden>' + P.loadingMask(T('sendingNow', '正在发送......')) + '</div>'
-        + menu,
+      const cards = '<div class="send-card qrcard" hidden>' + P.mask(qr) + '</div>'
+        + '<div class="send-card blecard" hidden>' + P.loadingMask(T('sendingNow', '正在发送......')) + '</div>';
+      /* ★ 2026-10-10 #71：发送页区分来源 —— D.sendFrom='care'（护疗页底栏进入，已结束的样本也能直接发）
+         时背景/底栏/顶栏高亮均为护疗页，不再强制跳回顾页选样本 */
+      if (D.sendFrom === 'care') {
+        return PAGE(P.topbar('care'), '<div class="listwrap">' + careTable(D.careRows || []) + '</div>' + cards + menu,
+          P.bottombar(CARE_BAR_FULL, 'send'));
+      }
+      return PAGE(P.topbar('review'), reviewBg() + cards + menu,
         P.bottombar(REVIEW_BAR, 's'));
     }
   };
