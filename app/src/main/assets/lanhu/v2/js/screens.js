@@ -120,7 +120,11 @@
         addPrinter: '添加打印机', printTest: '打印测试页', uploadLogo: '上传LOGO',
         hospitalName: '医院名称', hospitalPhone: '医院电话', hospitalAddr: '医院地址', hospitalLogo: '医院LOGO',
         reportTitle: '报告标题', reportDecl: '报告声明', setBtn: '设置',
-        scanUnsupported: '暂不支持自动扫描，请手动填写打印机地址后添加'
+        scanUnsupported: '暂不支持自动扫描，请手动填写打印机地址后添加',
+        /* ★ 2026-10-10 #53-#57 */
+        scanningPrinters: '正在扫描打印机…', noPrinterFound: '未发现打印机，请点「扫描」或手动输入地址',
+        printerAdded: '已添加打印机', printOk: '打印成功', printFail: '打印失败',
+        sheetEditHint: '编辑模式：高亮区域可修改，完成后点保存'
       },
       en: {
         menuSet: 'Settings', menuDebug: 'Debug', menuClose: 'Close', menuAbout: 'About', menuLog: 'Log', menuLogout: 'Logout',
@@ -163,7 +167,11 @@
         addPrinter: 'Add Printer', printTest: 'Print Test Page', uploadLogo: 'Upload Logo',
         hospitalName: 'Hospital Name', hospitalPhone: 'Hospital Phone', hospitalAddr: 'Hospital Address', hospitalLogo: 'Hospital Logo',
         reportTitle: 'Report Title', reportDecl: 'Report Declaration', setBtn: 'Set',
-        scanUnsupported: 'Auto-scan not supported; please enter the printer address manually'
+        scanUnsupported: 'Auto-scan not supported; please enter the printer address manually',
+        /* ★ 2026-10-10 #53-#57 */
+        scanningPrinters: 'Scanning for printers…', noPrinterFound: 'No printer found; tap "Scan" or enter the address manually',
+        printerAdded: 'Printer added', printOk: 'Print succeeded', printFail: 'Print failed',
+        sheetEditHint: 'Edit mode: highlighted areas are editable; tap Save when done'
       }
     };
     ['zh', 'en'].forEach(function (l) { for (var k in more[l]) I18N[l][k] = more[l][k]; });
@@ -856,7 +864,8 @@
         { id: 'ex', label: '导出', key: 'exportReport', icon: 'export', go: 'sending' },
       ], '');
       return PAGE(P.topbar('care'),
-        '<div class="sheet">'
+        /* ★ 2026-10-10 #54：编辑态整单加 .editing，CSS 高亮所有可编辑区域 */
+        '<div class="sheet' + (ed ? ' editing' : '') + '">'
         + '<div class="sheet-head"><div class="lg">' + (s.logoUri ? '<img src="' + s.logoUri + '" alt="LOGO">' : 'LOGO') + '</div><div class="hname">' + D.hospital + '</div>'
         + '<div class="htitle">' + (s.title || T('sheetTitle', 'ICU动物舱治疗记录单')) + '</div></div>'
         + info
@@ -1161,9 +1170,22 @@
       var setBtn = '<div class="btn sm" data-print="org">' + T('setBtn', '设置') + '</div>';
       var upLogo = '<div class="btn sm" data-print="logo">' + T('uploadLogo', '上传LOGO') + '</div>';
       var upFooter = '<div class="btn sm" data-print="footerLogo">' + T('uploadLogo', '上传LOGO') + '</div>';
+      /* ★ 2026-10-10 #57：可用打印机列表 —— NSD 扫描结果只显示打印机名，点击即添加为打印机地址 */
+      var scan = D.printerScan || { scanning: false, printers: [] };
+      var plist;
+      if (scan.scanning) {
+        plist = '<div class="inp flex" style="align-items:center;color:#575f6b">' + T('scanningPrinters', '正在扫描打印机…') + '</div>';
+      } else if (scan.printers.length) {
+        plist = '<div class="printer-list">' + scan.printers.map(function (p) {
+          return '<div class="printer-item" data-printer-addr="' + (p.addr || '') + '" data-printer-name="' + (p.name || '') + '">'
+            + '<span class="pname">' + (p.name || '') + '</span></div>';
+        }).join('') + '</div>';
+      } else {
+        plist = '<div class="inp flex" style="align-items:center;color:#9aa6b6">' + T('noPrinterFound', '未发现打印机，请点「扫描」或手动输入地址') + '</div>';
+      }
       /* ★ 任务15(#5)：整页包一层 .print-fields，让字段输入框保持平铺、不凸显 */
       var body = '<div class="print-fields" style="width:1180px;margin:0 auto">'
-        + frow(T('printerAvail', '可用打印机'), '<div class="inp flex">' + I.chev + '</div><div class="btn sm" data-print="scan">' + T('scanPrinter', '扫描') + '</div>')
+        + frow(T('printerAvail', '可用打印机'), plist + '<div class="btn sm" data-print="scan">' + T('scanPrinter', '扫描') + '</div>')
         + frow(T('printerAddr', '打印机地址'), '<div class="inp flex"><input class="icu-input" data-print-addr maxlength="30" data-addr="1" placeholder="' + T('printerAddrPh', '如 192.168.1.10:9100') + '" value="'
           + ((D.settings && D.settings.printerAddress) || '') + '"></div>'
           + '<div class="btn sm" data-print="addPrinter">' + T('addPrinter', '添加打印机') + '</div><div class="btn sm" data-print="test">' + T('printTest', '打印测试页') + '</div>')

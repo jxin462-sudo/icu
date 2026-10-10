@@ -443,6 +443,16 @@ input.inp::placeholder{color:var(--ink3)}
 /* ★ 任务26a/43 记录单编辑态：行内输入框 —— 统一按新建样本 .inp 模板：卡片底色、无边框、不凸显 */
 .sheet .sheet-in{font:inherit;color:var(--ink);background:var(--card);border:none;border-radius:8px;padding:4px 12px;min-width:0;box-sizing:border-box;outline:none}
 .sheet .sheet-in::placeholder{color:#9aa6b6}
+/* ★ 2026-10-10 #54：编辑态高亮 —— 可编辑区域统一淡黄色底 + 虚线描边 + 呼吸光晕，明显区别于只读内容 */
+.sheet.editing .sheet-in{background:#fff6da;border:2px dashed #e8a33d;box-shadow:0 0 10px rgba(232,163,61,.35);animation:sheetEdGlow 1.6s ease-in-out infinite}
+.sheet.editing .tproj .p.ed,.sheet.editing .concl .opt.ed{background:#fff6da;border:2px dashed #e8a33d;border-radius:8px;box-shadow:0 0 10px rgba(232,163,61,.3)}
+.sheet.editing .vr-add,.sheet.editing .vr-del{box-shadow:0 0 8px rgba(232,163,61,.5)}
+@keyframes sheetEdGlow{0%,100%{box-shadow:0 0 6px rgba(232,163,61,.25)}50%{box-shadow:0 0 14px rgba(232,163,61,.55)}}
+/* ★ 2026-10-10 #57：扫描到的打印机列表（只显示打印机名，点击添加） */
+.printer-list{flex:1;display:flex;flex-direction:column;gap:8px}
+.printer-item{display:flex;align-items:center;padding:12px 18px;background:var(--card);border-radius:10px;cursor:pointer;font-size:22px}
+.printer-item:active{background:#dbe7f5}
+.printer-item .pname{font-weight:600}
 .sheet-info .sheet-in{width:150px}
 .tproj .p.ed{cursor:pointer}
 .tproj .p.ed .ckbox{pointer-events:none}

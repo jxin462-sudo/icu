@@ -69,7 +69,10 @@ import android.print.PageRange;
 import android.print.PrintAttributes;
 import android.print.PrintDocumentAdapter;
 import android.print.PrintDocumentInfo;
+import android.print.PrintJob;
 import android.print.PrintManager;
+import android.net.nsd.NsdManager;
+import android.net.nsd.NsdServiceInfo;
 import java.io.InputStream;
 
 import org.json.JSONArray;
@@ -164,6 +167,20 @@ public class IcuDashboardView extends View {
     private String s5FooterLogoUri = "";
     private boolean s5CloudPlatform = false;
     private boolean s5Lis = false;
+
+    /* ★ 2026-10-10 #56：打印结果回推 H5（成功/失败提示 + 关闭「正在打印」弹窗）。
+       seq 单调递增，H5 边沿检测后 toast 并退出打印页。 */
+    private int printStatusSeq = 0;
+    private boolean printStatusOk = false;
+    private String printStatusMsg = "";
+
+    /* ★ 2026-10-10 #57：NSD 局域网打印机扫描（_ipp._tcp / _pdl-datastream._tcp）。
+       结果以「打印机名 + 地址」推给 H5，H5 列表只显示打印机名，点击即添加。 */
+    private boolean printerScanning = false;
+    private final java.util.List<JSONObject> printerScanResults = new java.util.ArrayList<>();
+    private final java.util.List<NsdManager.DiscoveryListener> printerScanListeners = new java.util.ArrayList<>();
+    private final Handler printerScanHandler = new Handler(Looper.getMainLooper());
+    private WifiManager.MulticastLock printerScanLock = null;
     private static final String CAMERA_PLAYER_VERSION = "摄像头内置播放器 v1.8";
     private static final String EMPTY_MONITOR_SUMMARY = "尚未收到 AM4100 数据";
     private static final String PERIOD_ALL = "all";
@@ -1072,6 +1089,29 @@ public class IcuDashboardView extends View {
                 root.put("shareQr", shareQr);
             } catch (JSONException ignored) {
             }
+            // ★ 2026-10-10 #56：打印结果（seq 边沿检测 → H5 toast 成功/失败并关闭打印弹窗）
+            try {
+                JSONObject ps = new JSONObject();
+                ps.put("seq", printStatusSeq);
+                ps.put("ok", printStatusOk);
+                ps.put("msg", printStatusMsg);
+                root.put("printStatus", ps);
+            } catch (JSONException ignored) {
+            }
+            // ★ 2026-10-10 #57：打印机扫描状态与结果（H5 设置-打印页列表，只显示打印机名）
+            try {
+                JSONObject scan = new JSONObject();
+                scan.put("scanning", printerScanning);
+                JSONArray arr = new JSONArray();
+                synchronized (printerScanResults) {
+                    for (JSONObject item : printerScanResults) {
+                        arr.put(item);
+                    }
+                }
+                scan.put("printers", arr);
+                root.put("printerScan", scan);
+            } catch (JSONException ignored) {
+            }
             // 页面通用数据绑定使用顶层 host；与 ble.host 共用同一份实时主机状态，避免跨页面字段不一致。
             root.put("host", ble.optJSONObject("host"));
             root.put("deviceProfile", deviceProfileToJson());
@@ -1162,7 +1202,20 @@ public class IcuDashboardView extends View {
             PatientCase patient = findPatientCase(zone, json.optString("caseId", ""),
                     json.optInt("nativeIndex", -1));
             if (patient == null) {
-                return;
+                // ★ 2026-10-10 #53：回顾页编辑「病症」时病例是历史记录，不在当前舱列表，
+                //   退到全量 cases 里按 caseId 找（与 updateRecordFromText 一致），否则同步被静默丢弃
+                String cid = json.optString("caseId", "");
+                if (!TextUtils.isEmpty(cid)) {
+                    for (PatientCase c : cases) {
+                        if (c != null && cid.equals(c.caseId)) {
+                            patient = c;
+                            break;
+                        }
+                    }
+                }
+                if (patient == null) {
+                    return;
+                }
             }
             patient.petName = optNonEmpty(json, "petName", patient.petName);
             patient.species = optNonEmpty(json, "species", patient.species);
@@ -1450,6 +1503,12 @@ public class IcuDashboardView extends View {
         // ★ 任务14（V1.02 R59）：打印测试页
         if ("print_test".equals(action)) {
             printTestPageViaSystem();
+            invalidate();
+            return true;
+        }
+        // ★ 2026-10-10 #57：扫描局域网打印机（NSD 发现 _ipp._tcp / _pdl-datastream._tcp）
+        if ("printer_scan".equals(action)) {
+            startPrinterScan();
             invalidate();
             return true;
         }
@@ -6202,29 +6261,185 @@ public class IcuDashboardView extends View {
         }
     }
 
+    /* ★ 2026-10-10 #56：打印结果回推 H5 —— seq 递增触发边沿检测，H5 toast 并退出打印页 */
+    private void pushPrintStatus(boolean ok, String msg) {
+        printStatusSeq++;
+        printStatusOk = ok;
+        printStatusMsg = msg == null ? "" : msg;
+        appendUserLog("打印", ok ? "打印成功" : "打印失败", printStatusMsg);
+        invalidate();
+        if (activity instanceof MainActivity) {
+            ((MainActivity) activity).notifyLanhuStateChanged();
+        }
+    }
+
+    /* 轮询 PrintJob 直至全部进入终态（完成/失败/取消），最多 60 秒 */
+    private void watchPrintJobs(final java.util.List<PrintJob> jobs) {
+        if (jobs == null || jobs.isEmpty()) {
+            pushPrintStatus(false, "打印任务创建失败");
+            return;
+        }
+        printerScanHandler.postDelayed(new Runnable() {
+            private int elapsed = 0;
+            @Override
+            public void run() {
+                boolean allTerminal = true;
+                boolean allOk = true;
+                String failReason = "";
+                for (PrintJob job : jobs) {
+                    if (job == null) { continue; }
+                    if (job.isCompleted()) { continue; }
+                    allOk = false;
+                    if (job.isFailed()) {
+                        failReason = "打印失败";
+                    } else if (job.isCancelled()) {
+                        failReason = "打印已取消";
+                    } else {
+                        allTerminal = false;
+                    }
+                }
+                if (allTerminal) {
+                    pushPrintStatus(allOk, allOk ? "打印成功" : failReason);
+                    return;
+                }
+                elapsed += 1000;
+                if (elapsed >= 60000) {
+                    pushPrintStatus(false, "打印超时，请检查打印机");
+                    return;
+                }
+                printerScanHandler.postDelayed(this, 1000);
+            }
+        }, 1000);
+    }
+
     private void printReportViaSystem() {
         try {
             File pdf = ensureReportPdf();
-            if (pdf == null) return;
+            if (pdf == null) {
+                pushPrintStatus(false, "报告生成失败，请先补全患者信息");
+                return;
+            }
             if (activity == null) {
-                Toast.makeText(activity, "当前环境不支持打印", Toast.LENGTH_SHORT).show();
+                pushPrintStatus(false, "当前环境不支持打印");
                 return;
             }
             Object pm = activity.getSystemService(Context.PRINT_SERVICE);
             if (!(pm instanceof PrintManager)) {
-                Toast.makeText(activity, "当前设备不支持打印", Toast.LENGTH_SHORT).show();
+                pushPrintStatus(false, "当前设备不支持打印");
                 return;
             }
             PrintManager printManager = (PrintManager) pm;
             int copies = s5PrintCopies < 1 ? 1 : s5PrintCopies;
+            java.util.List<PrintJob> jobs = new java.util.ArrayList<>();
             for (int i = 1; i <= copies; i++) {
                 String jobName = "动物ICU监护报告_" + pdf.getName() + (copies > 1 ? "_" + i : "");
-                printManager.print(jobName, new PdfPrintAdapter(pdf), null);
+                PrintJob job = printManager.print(jobName, new PdfPrintAdapter(pdf), null);
+                if (job != null) {
+                    jobs.add(job);
+                }
             }
-            Toast.makeText(activity, copies > 1 ? "正在打印 " + copies + " 份…" : "正在打印…", Toast.LENGTH_SHORT).show();
             appendUserLog("打印", "打印报告", "住院号 " + (currentCase() == null ? "-" : currentCase().caseNo) + " 份数=" + copies);
+            watchPrintJobs(jobs);
         } catch (IOException e) {
-            Toast.makeText(activity, "打印失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+            pushPrintStatus(false, "打印失败: " + e.getMessage());
+        }
+    }
+
+    /* ★ 2026-10-10 #57：NSD 扫描局域网打印机（Bonjour/mDNS 广播的 _ipp._tcp 与 _pdl-datastream._tcp 服务）。
+       8 秒后自动停止；每台解析出的打印机以 {name, addr} 存入 printerScanResults 并即时回推 H5。 */
+    private void startPrinterScan() {
+        if (activity == null) {
+            return;
+        }
+        Object svc = activity.getSystemService(Context.NSD_SERVICE);
+        if (!(svc instanceof NsdManager)) {
+            Toast.makeText(activity, "当前设备不支持打印机扫描", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        final NsdManager nsd = (NsdManager) svc;
+        stopPrinterScan();
+        // mDNS 组播锁：部分设备不持锁收不到打印机应答
+        try {
+            WifiManager wm = (WifiManager) activity.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
+            if (wm != null) {
+                printerScanLock = wm.createMulticastLock("icu_printer_scan");
+                printerScanLock.setReferenceCounted(true);
+                printerScanLock.acquire();
+            }
+        } catch (Exception ignored) { }
+        synchronized (printerScanResults) {
+            printerScanResults.clear();
+        }
+        printerScanning = true;
+        final String[] types = {"_ipp._tcp.", "_pdl-datastream._tcp."};
+        for (final String type : types) {
+            NsdManager.DiscoveryListener listener = new NsdManager.DiscoveryListener() {
+                @Override public void onStartDiscoveryFailed(String serviceType, int errorCode) { }
+                @Override public void onStopDiscoveryFailed(String serviceType, int errorCode) { }
+                @Override public void onDiscoveryStarted(String serviceType) { }
+                @Override public void onDiscoveryStopped(String serviceType) { }
+                @Override public void onServiceFound(NsdServiceInfo serviceInfo) {
+                    if (serviceInfo == null) { return; }
+                    try {
+                        nsd.resolveService(serviceInfo, new NsdManager.ResolveListener() {
+                            @Override public void onResolveFailed(NsdServiceInfo info, int errorCode) { }
+                            @Override public void onServiceResolved(NsdServiceInfo info) {
+                                if (info == null || info.getHost() == null) { return; }
+                                String name = info.getServiceName() == null ? "" : info.getServiceName().trim();
+                                if (name.isEmpty()) { return; }
+                                String addr = info.getHost().getHostAddress() + ":" + info.getPort();
+                                try {
+                                    JSONObject item = new JSONObject();
+                                    item.put("name", name);
+                                    item.put("addr", addr);
+                                    synchronized (printerScanResults) {
+                                        for (JSONObject ex : printerScanResults) {
+                                            if (addr.equals(ex.optString("addr")) || name.equals(ex.optString("name"))) {
+                                                return;
+                                            }
+                                        }
+                                        printerScanResults.add(item);
+                                    }
+                                } catch (JSONException ignored) { }
+                                invalidate();
+                                if (activity instanceof MainActivity) {
+                                    ((MainActivity) activity).notifyLanhuStateChanged();
+                                }
+                            }
+                        });
+                    } catch (Exception ignored) { }
+                }
+                @Override public void onServiceLost(NsdServiceInfo serviceInfo) { }
+            };
+            try {
+                nsd.discoverServices(type, NsdManager.PROTOCOL_DNS_SD, listener);
+                printerScanListeners.add(listener);
+            } catch (Exception ignored) { }
+        }
+        // 8 秒扫描窗口
+        printerScanHandler.postDelayed(new Runnable() {
+            @Override public void run() {
+                stopPrinterScan();
+                invalidate();
+                if (activity instanceof MainActivity) {
+                    ((MainActivity) activity).notifyLanhuStateChanged();
+                }
+            }
+        }, 8000);
+    }
+
+    private void stopPrinterScan() {
+        printerScanning = false;
+        Object svc = activity == null ? null : activity.getSystemService(Context.NSD_SERVICE);
+        if (svc instanceof NsdManager) {
+            for (NsdManager.DiscoveryListener l : printerScanListeners) {
+                try { ((NsdManager) svc).stopServiceDiscovery(l); } catch (Exception ignored) { }
+            }
+        }
+        printerScanListeners.clear();
+        if (printerScanLock != null) {
+            try { printerScanLock.release(); } catch (Exception ignored) { }
+            printerScanLock = null;
         }
     }
 

@@ -53,7 +53,7 @@
 
   /* ★ 任务38：蓝牙连接状态边沿检测（false→true / true→false 时弹窗提示）。
      null 表示尚未初始化，首次同步不弹。 */
-  var prevHostConn = null, prevMonConn = null, prevScreen = null;
+  var prevHostConn = null, prevMonConn = null, prevScreen = null, prevPrintSeq = null;
 
   /* ★ 任务38：原生状态事件驱动的前导+尾随节流渲染。
      AM4100 连接后每帧 emit → 原生 50ms 节流推送（≈20次/秒），
@@ -320,6 +320,23 @@
       }
       prevHostConn = hostNow;
       prevMonConn = monNow;
+      /* ★ 2026-10-10 #56：打印结果边沿检测 —— seq 变化即 toast 成功/失败，并退出「正在打印」页回到来源页 */
+      var pstat = S.printStatus || {};
+      if (prevPrintSeq === null) {
+        prevPrintSeq = pstat.seq || 0; // 首次同步只记录基线，不弹
+      } else if ((pstat.seq || 0) !== prevPrintSeq) {
+        prevPrintSeq = pstat.seq || 0;
+        toast(pstat.msg || (pstat.ok ? TT('printOk', '打印成功') : TT('printFail', '打印失败')));
+        if (IcuApp.current() === 'printing') {
+          var back = D.printReturn || (D.printFrom === 'care' ? 'care-data' : 'review');
+          D.printFrom = '';
+          D.printReturn = '';
+          IcuApp.go(back);
+        }
+      }
+      /* ★ 2026-10-10 #57：打印机扫描状态映射（设置-打印页列表用，只显示打印机名） */
+      var pscan = S.printerScan || {};
+      D.printerScan = { scanning: !!pscan.scanning, printers: Array.isArray(pscan.printers) ? pscan.printers : [] };
       /* ★ 任务22：BPM 血压仪（监护页「实时⇄物理」）。S.bpm 由原生 buildFirstPhaseStateJson 下发；
          mode: 'manual'=物理 / 'auto'=实时，数值实时/物理同数据源（设备侧模式不同） */
       var bpm = S.bpm || {};
@@ -1059,7 +1076,7 @@
           pendingEditor = true; IcuApp.go('new-sample'); return;
         } // 用 H5 弹窗就地编辑（不弹原生框）
         if (key === 'del') { stop(e); act('patient_delete'); return; }
-        /* ★ 2026-10-10：护疗页「打印」（复用回顾页 print_report），需先在护疗列表选中样本 */
+        /* ★ 2026-10-10 #53：护疗页「打印」→ 打开选中样本的治疗记录单预览，真实打印由记录单页「打印」执行 */
         if (key === 'print') {
           stop(e);
           var TgP = window.T || function (k, fb) { return fb; };
@@ -1068,7 +1085,7 @@
           var pPicked = pRows.some(function (r) { return r.caseId && r.caseId === D.selCaseId; });
           if (!pPicked) { toast(TgP('reviewNoSel', '请先选择一个样本')); return; }
           D.printFrom = 'care';
-          act('print_report'); IcuApp.go('printing'); return;
+          openRecordSheetFor(D.selCaseId); return;
         }
         if (key === 'dataSend') { stop(e); sendingCard = null; IcuApp.go('sending'); return; } // 任务9：进入发送数据页（菜单里再选文件助手/蓝牙）
         if (key === 'tutorial') { stop(e); IcuApp.go('tutorial'); return; } /* ★ 2026-10-09 改为进教程页（槽位绑定照片/视频） */
@@ -1085,7 +1102,8 @@
           if (!picked) { stop(e); toast(Tg('reviewNoSel', '请先选择一个样本')); return; }
         }
         if (key === 'query') { /* 交给 app.js 跳 query */ return; }
-        if (key === 'print') { stop(e); D.printFrom = 'review'; act('print_report'); IcuApp.go('printing'); return; }
+        /* ★ 2026-10-10 #53：回顾页「打印」→ 打开选中样本的治疗记录单预览（选中校验由上方 needSel 门完成），真实打印在记录单页执行 */
+        if (key === 'print') { stop(e); D.printFrom = 'review'; openRecordSheetFor(D.selCaseId); return; }
         if (key === 'exportReport') { stop(e); act('export_report'); IcuApp.go('sending'); return; }
         if (key === 'sendData') { stop(e); sendingCard = null; IcuApp.go('sending'); return; }
         if (key === 'careRecord') { /* 交给 app.js */ return; }
@@ -1182,11 +1200,11 @@
       var rb = e.target.closest('.bottombar .bbtn');
       if (rb) {
         var rk = rb.dataset.key || (function () { var rsp = rb.querySelector('span'); return rsp ? rsp.textContent : ''; })();
-        /* ★ 任务26a：编辑 / 保存 / 取消 */
-        if (rk === 'recordEdit') { stop(e); openSheetEdit(); return; }
-        if (rk === 'recordCancel') { stop(e); D.sheetEdit = null; IcuApp.render(); return; }
+        /* ★ 任务26a：编辑 / 保存 / 取消（★ 2026-10-10 #54 修复：底栏实际 key 是 edit/cancel，此前只对 recordEdit/recordCancel 响应导致点击无反应） */
+        if (rk === 'recordEdit' || rk === 'edit') { stop(e); openSheetEdit(); toast(TT('sheetEditHint', '编辑模式：高亮区域可修改，完成后点保存')); return; }
+        if (rk === 'recordCancel' || rk === 'cancel') { stop(e); D.sheetEdit = null; IcuApp.render(); return; }
         if (rk === 'recordSave') { stop(e); saveSheetEdit(); return; }
-        if (rk === 'print' || rk === '打印' || rk === TT('print', '打印')) { stop(e); D.printFrom = ''; act('print_report'); IcuApp.go('printing'); return; }
+        if (rk === 'print' || rk === '打印' || rk === TT('print', '打印')) { stop(e); D.printFrom = ''; D.printReturn = 'record-sheet'; act('print_report'); IcuApp.go('printing'); return; }
         if (rk === 'exportReport' || rk === '导出' || rk === TT('exportReport', '导出')) { stop(e); act('export_report'); IcuApp.go('sending'); return; }
         /* 上一样本/下一样本：在 S.cases 全量列表中定位当前样本，切换选中后停留本页并刷新 */
         var rkPrev = TT('recordPrev', '上一样本'), rkNext = TT('recordNext', '下一样本');
@@ -1302,8 +1320,9 @@
           return el ? (el.value || '').trim() : '';
         };
         if (pk === 'scan') {
-          // 原生无自动扫描能力：如实提示，避免"点了没反应"
-          toast(T2('scanUnsupported', '暂不支持自动扫描，请手动填写打印机地址后添加'));
+          /* ★ 2026-10-10 #57：真实扫描 —— 原生 NSD 发现局域网打印机，结果经 S.printerScan 回推渲染 */
+          act('printer_scan');
+          toast(T2('scanningPrinters', '正在扫描打印机…'));
           return;
         }
         if (pk === 'addPrinter') {
@@ -1312,6 +1331,7 @@
           /* ★ 任务32：打印机地址格式校验（IPv4，可带端口） */
           if (!/^(\d{1,3}\.){3}\d{1,3}(:\d{1,5})?$/.test(addr)) { toast(T2('errPrinterAddrFmt', '打印机地址格式不正确，示例 192.168.1.10:9100')); return; }
           act('settings_save', JSON.stringify({ printerAddress: addr }));
+          toast(T2('printerAdded', '已添加打印机'));
           return;
         }
         if (pk === 'test') { act('print_test'); return; }
@@ -1333,6 +1353,19 @@
           act('settings_save', JSON.stringify({ reportDeclaration: val('input[data-print-decl]') }));
           return;
         }
+      }
+      /* ★ 2026-10-10 #57：点击扫描到的打印机名 → 直接添加为打印机地址（无需手输） */
+      var pi = e.target.closest('[data-printer-addr]');
+      if (pi) {
+        stop(e);
+        var paddr = pi.getAttribute('data-printer-addr') || '';
+        var pname = pi.getAttribute('data-printer-name') || paddr;
+        if (!paddr) return;
+        var inp = document.querySelector('input[data-print-addr]');
+        if (inp) inp.value = paddr;
+        act('settings_save', JSON.stringify({ printerAddress: paddr }));
+        toast((window.T ? T('printerAdded', '已添加打印机') : '已添加打印机') + '：' + pname);
+        return;
       }
     }
 
@@ -1543,17 +1576,12 @@
     syncPatient({ caseId: caseId, disease: t.value.trim() });
   }
 
-  /* ★ 任务23：回顾页连续点击（双击）数据行 → 预览该样本的治疗记录单（record-sheet）。
+  /* ★ 任务23：打开指定样本的治疗记录单预览（record-sheet）。
      病例在当前舱 S.cases 里 → patient_select 让原生回推全量数据（sheetPreviewCase 由 syncD 自动清除）；
-     纯历史病例（不在 S.cases）→ 用 historyCases 里的对象直接渲染，缺的字段按约定显示 -- */
-  function onDblClick(e) {
-    var cur = IcuApp.current();
-    if (cur !== 'review') return;
-    var trHit = e.target.closest('tr[data-caseid]');
-    if (!trHit || e.target.closest('input')) return;
-    var cid = trHit.dataset.caseid;
+     纯历史病例（不在 S.cases）→ 用 historyCases 里的对象直接渲染，缺的字段按约定显示 --
+     ★ 2026-10-10 #53：回顾/护疗页底栏「打印」改为先打开本预览，记录单页自己的「打印」才执行真实打印 */
+  function openRecordSheetFor(cid) {
     if (!cid) return;
-    stop(e);
     var idx = indexOfCase(cid);
     if (idx >= 0 && S.zone) {
       sheetPreviewCase = null;
@@ -1574,7 +1602,7 @@
   /* ---------- 启动 ---------- */
   function boot() {
     document.getElementById('app-root').addEventListener('click', onClick, true);
-    document.getElementById('app-root').addEventListener('dblclick', onDblClick, true); // 任务23：回顾双击预览治疗记录单
+    /* ★ 2026-10-10 #53：回顾页双击预览记录单已移除（改为底栏「打印」→记录单预览→记录单「打印」真打印） */
     document.getElementById('app-root').addEventListener('change', onDiseaseChange, true);
     /* ★ 2026-10-08 用户日志：日期过滤（空=全部） */
     document.getElementById('app-root').addEventListener('change', function (e) {

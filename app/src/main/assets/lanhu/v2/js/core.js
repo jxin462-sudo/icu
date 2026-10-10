@@ -125,6 +125,10 @@
     selCaseId: '',
     /* ★ 2026-10-10 打印页来源标记：'care' = 护疗页底栏打印进入（背景/底栏显示护疗页），其余默认回顾页 */
     printFrom: '',
+    /* ★ 2026-10-10 #56：打印完成后返回的页面（记录单打印='record-sheet'）；打印结果由原生 printStatus 回推 */
+    printReturn: '',
+    /* ★ 2026-10-10 #57：打印机扫描状态（原生 S.printerScan 映射），设置-打印页列表用 */
+    printerScan: { scanning: false, printers: [] },
     date: '',
     stamp: '',
     session: '',
