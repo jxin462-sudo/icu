@@ -45,6 +45,8 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.FrameLayout;
+import android.widget.VideoView;
+import android.media.MediaPlayer;
 import android.widget.TextView;
 import android.widget.Toast;
 
@@ -76,6 +78,7 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
     private IcuDashboardView dashboardView;
     private WebView lanhuWebView;
     private FrameLayout rootView;
+    private VideoView bootVideoView;
     private CameraInlinePreviewView cameraInlinePreviewView;
     private FrameLayout cameraFullscreenOverlay;
     private CameraInlinePreviewView cameraFullscreenPreviewView;
@@ -154,9 +157,60 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         rootView.addView(cameraFullscreenOverlay, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
+        setupBootVideo(); // ★ 方案A：原生开机动画视频覆盖层
         setContentView(rootView);
         installImeVisibilityListener();
         reconnectLastHostIfAvailable();
+    }
+
+    /* ★ 2026-10-10 方案A：原生开机动画（boot.mp4，res/raw，不循环）覆盖 WebView，
+       播完/出错/点击跳过均淡出并通知 H5 立即进登录/护理（避免视频结束后的黑底缝隙；5.2s 兜底 timer 会因 current≠splash 自动失效） */
+    private void setupBootVideo() {
+        try {
+            bootVideoView = new VideoView(this);
+            FrameLayout.LayoutParams vp = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT);
+            bootVideoView.setLayoutParams(vp);
+            bootVideoView.setBackgroundColor(0xFF000000);
+            bootVideoView.setVideoURI(Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.boot));
+            bootVideoView.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+                @Override
+                public void onPrepared(MediaPlayer mp) {
+                    try { mp.setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING); } catch (Throwable ignore) {}
+                }
+            });
+            bootVideoView.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                @Override
+                public void onCompletion(MediaPlayer mp) { finishBootVideo(); }
+            });
+            bootVideoView.setOnErrorListener(new MediaPlayer.OnErrorListener() {
+                @Override
+                public boolean onError(MediaPlayer mp, int what, int extra) { finishBootVideo(); return true; }
+            });
+            bootVideoView.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) { finishBootVideo(); }
+            });
+            rootView.addView(bootVideoView); // 最后添加 = 最上层覆盖 WebView
+            bootVideoView.start();
+        } catch (Throwable t) {
+            // 视频异常绝不影响主流程
+        }
+    }
+
+    private void finishBootVideo() {
+        if (bootVideoView == null || bootVideoView.getVisibility() == View.GONE) return;
+        if (lanhuWebView != null) {
+            lanhuWebView.evaluateJavascript("if(window.finishSplash)window.finishSplash();", null);
+        }
+        bootVideoView.animate().alpha(0f).setDuration(400).withEndAction(new Runnable() {
+            @Override
+            public void run() {
+                bootVideoView.setVisibility(View.GONE);
+                try { bootVideoView.stopPlayback(); } catch (Throwable ignore) {}
+            }
+        });
     }
 
     /* ★ 2026-10-08 日志页：未捕获异常 → 错误记录 + 堆栈信息，随后交还原默认处理器（不改变崩溃行为） */

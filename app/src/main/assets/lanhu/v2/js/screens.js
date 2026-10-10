@@ -322,9 +322,9 @@
       /* ★ 2026-10-10 #77：启动页重构为播放真实开机动画 boot.gif（1920x1200，全长 4.5s）——
          旧的 CSS 粒子/Logo 动画起点受 WebView 加载时机影响播不完整；GIF 由解码器驱动时序稳定。
          时间戳参数强制每次进入从头播放，避免缓存导致从中间续播；点击仍可跳过（data-go=login）。 */
-      return '<div class="screen"><div class="splash" data-go="login">'
-        + '<img class="bootgif" src="boot.gif?ts=' + Date.now() + '" alt="">'
-        + '</div></div>';
+      /* ★ 2026-10-10 方案A：开机动画改由原生层 VideoView 播放 boot.mp4（不循环、硬解不闪）；
+         此处 splash 仅作占位/兜底，真实动画由原生覆盖，故不再引用 boot.gif */
+      return '<div class="screen"><div class="splash" data-go="login"></div></div>';
     }
   };
 

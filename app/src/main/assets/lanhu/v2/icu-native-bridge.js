@@ -34,6 +34,12 @@
     IcuApp.render();
   }
   function isLoggedIn() { var n = N(); try { return !!(n && n.isLoggedIn && n.isLoggedIn()); } catch (e) { return false; } }
+  // ★ 2026-10-10 方案A：原生开机视频（boot.mp4）播完/跳过后由 Java 调用，立即跳过 splash 进登录/护理
+  window.finishSplash = function () {
+    if (IcuApp.current() === 'splash') {
+      IcuApp.setScreen(isLoggedIn() ? 'care' : 'login');
+    }
+  };
   function doLogin(name, pwd) { var n = N(); try { if (n && n.login) return n.login(name, pwd); } catch (e) {} return false; }
   function doLogout() { var n = N(); try { if (n && n.logout) { n.logout(); return true; } } catch (e) {} return false; }
   /* ★ 任务21：调试页密码（菜单→调试 进入前校验）。如需修改密码改这一行即可。 */
