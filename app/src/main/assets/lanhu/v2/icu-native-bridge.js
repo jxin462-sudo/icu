@@ -359,11 +359,12 @@
          注：ctrlRow1 是环境传感器实时读数（温/氧/湿/CO2），非样本设定项，故保留不清空。 */
       var curPat = S.patient || {};
       var treatOK = (curPat.treatmentEndTime === '进行中');
+      /* ★ V15 ⑦：row1 环境卡带开关态（temp/氧气/CO2 的 enable 由主机回包驱动；湿度只读，值存在即视为开） */
       D.ctrlRow1 = [
-        { tKey: 'ctrlTemp', t: '舱内温度 ℃', v: num(h.temp, '--'), p: 60, set: 1, ico: 'thermo' },
-        { tKey: 'ctrlO2', t: '氧浓度 %', v: num(h.oxygen, '--'), p: 43, set: 1, ico: 'o2' },
-        { tKey: 'ctrlHum', t: '湿度 %', v: num(h.humidity, '--'), p: 35, set: 1, ico: 'drop' },
-        { tKey: 'ctrlCo2', t: '二氧化碳浓度 PPM', v: num(h.co2, '--'), p: 66, set: 1, ico: 'co2' },
+        { tKey: 'ctrlTemp', t: '舱内温度 ℃', v: num(h.temp, '--'), p: 60, set: 1, on: !!c.tempOn, ico: 'thermo' },
+        { tKey: 'ctrlO2', t: '氧浓度 %', v: num(h.oxygen, '--'), p: 43, set: 1, on: !!c.oxygenOn, ico: 'o2' },
+        { tKey: 'ctrlHum', t: '湿度 %', v: num(h.humidity, '--'), p: 35, set: 1, on: num(h.humidity, '') !== '', ico: 'drop' },
+        { tKey: 'ctrlCo2', t: '二氧化碳浓度 PPM', v: num(h.co2, '--'), p: 66, set: 1, on: !!c.co2On, ico: 'co2' },
         { tKey: 'ctrlLevel', t: '监护等级', v: '', level: 1 }
       ];
       D.ctrlRow2 = [
@@ -880,8 +881,10 @@
     return m[title] || '';
   }
   /* ★ 任务12：主控卡动作按 data-tkey 路由（与显示语言解耦） */
+  /* ★ V15 ⑦：row1 环境卡（温/氧/湿/CO2）的开关走 *_switch —— 开/关功能并主动读取主机数据；
+     「设置」按钮仍走原 action（弹数值框 → 确定后下发主机蓝牙命令）。 */
   var CTRL_ACT_BY_TKEY = {
-    ctrlTemp: 'control_temp', ctrlO2: 'control_oxygen', ctrlHum: 'control_humidity', ctrlCo2: 'control_co2', ctrlLevel: '',
+    ctrlTemp: 'control_temp_switch', ctrlO2: 'control_oxygen_switch', ctrlHum: 'control_humidity_switch', ctrlCo2: 'control_co2_switch', ctrlLevel: '',
     ctrlRed: 'control_red', ctrlBlue: 'control_blue', ctrlUv: 'control_uv', ctrlNeb: 'control_nebulizer', ctrlAnion: 'control_anion',
     ctrlCold: 'control_cold_light', ctrlWarm: 'control_warm_light', ctrlOuter: 'control_outer', ctrlInner: 'control_inner', ctrlTime: 'control_time'
   };
@@ -1001,7 +1004,9 @@
       var mode = e.target.closest('.modecard');
       if (mode) {
         var mkey = mode.dataset.mkey;
-        if (mkey) { stop(e); act(mkey); }
+        /* ★ V15 ⑧：点击模式卡开关 → 打开该模式的参数设置弹窗（弹窗名=模式名，原生 showCustomHostModeDialog），
+           在弹窗里手动设置所有功能的数值和开关（不含监护等级/治疗时长）；左右舱均走当前舱下发 */
+        if (mkey) { stop(e); act(mkey + '_settings'); }
         return;
       }
       return;
@@ -1093,7 +1098,7 @@
     // 会话底栏：结束 = 结束护疗 + 回护理列表
     var sess = e.target.closest('.sessbar .bbtn');
     if (sess) {
-      if (sess.dataset.key === 'finish') { stop(e); act('treatment_finish'); IcuApp.go('care'); return; }
+      if (sess.dataset.key === 'finish') { stop(e); act('treatment_finish', (S.patient && (S.patient.caseNo || S.patient.recordNo)) || ''); IcuApp.go('care'); return; }
       // 其余（状态/主控/监护/视频）交给 app.js 内部跳转
       return;
     }
@@ -1142,12 +1147,17 @@
           var sc = careSelCase() /* ★ #81 用有效高亮行 */ ;
           /* ★ 2026-10-10 #85：无样本（列表为空 / 未选中 / 样本已全部删除或全部进入回顾）不能开始治疗 */
           if (!sc) { toast(TT('careNoSample', '暂无样本数据，无法开始治疗')); return; }
-          if (sc && sc.treatmentStarted && sc.treatmentEndTime && sc.treatmentEndTime !== '进行中') {
+          /* ★ V15 ①：开始护疗按住院号定位同一样本 —— 选中行同步给原生（不依赖原生当前下标） */
+          var scIdx = indexOfCase(sc.caseId);
+          if (scIdx >= 0 && S.zone) { act('patient_select_' + S.zone + '_' + scIdx); }
+          if (sc.treatmentStarted && sc.treatmentEndTime && sc.treatmentEndTime !== '进行中') {
+            /* ★ V15 ④：已结束的样本不重启治疗，但仍可进入状态/主控等页面查看 */
             toast(TT('careEndedNoRestart', '该记录已结束，不能重复开始护疗'));
+            IcuApp.go('status');
             return;
           }
           /* ★ #79：不填病症不能开始护疗 */ if (sc && !String(sc.disease || sc.illness || '').trim()) { toast(TT('careNeedDisease', '请先填写病症再开始护疗')); return; }
-          act('patient_start_treatment'); IcuApp.go('status'); return;
+          act('patient_start_treatment', sc.caseNo || sc.recordNo || ''); IcuApp.go('status'); return;
         }
         if (key === 'edit') {
           stop(e);
@@ -1293,8 +1303,26 @@
         if (rk === 'recordEdit' || rk === 'edit') { stop(e); openSheetEdit(); toast(TT('sheetEditHint', '编辑模式：高亮区域可修改，完成后点保存')); return; }
         if (rk === 'recordCancel' || rk === 'cancel') { stop(e); D.sheetEdit = null; IcuApp.render(); return; }
         if (rk === 'recordSave') { stop(e); saveSheetEdit(); return; }
-        if (rk === 'print' || rk === '打印' || rk === TT('print', '打印')) { stop(e); D.printFrom = ''; D.printReturn = 'record-sheet'; act('print_report'); IcuApp.go('printing'); return; }
-        if (rk === 'exportReport' || rk === '导出' || rk === TT('exportReport', '导出')) { stop(e); act('export_report'); IcuApp.go('sending'); return; }
+        /* ★ V15 ⑤⑥：打印/导出按记录单来源（护疗/回顾）保持上下文；并把当前预览样本的住院号传给原生，
+           保证打印/导出的是记录单里这条样本（此前预览历史样本时原生打的是 currentCase，导致“打印没反应/打错样本”） */
+        if (rk === 'print' || rk === '打印' || rk === TT('print', '打印')) {
+          stop(e);
+          var pc = sheetPreviewCase || S.patient || {};
+          D.printFrom = (D.sheetFrom === 'review') ? 'review' : 'care';
+          D.printReturn = 'record-sheet';
+          act('print_report', pc.caseNo || pc.recordNo || '');
+          IcuApp.go('printing');
+          return;
+        }
+        if (rk === 'exportReport' || rk === '导出' || rk === TT('exportReport', '导出')) {
+          stop(e);
+          var ec = sheetPreviewCase || S.patient || {};
+          D.sendFrom = (D.sheetFrom === 'review') ? 'review' : 'care';
+          sendingCard = null; D.sendMenuHide = false;
+          act('export_report', ec.caseNo || ec.recordNo || '');
+          IcuApp.go('sending');
+          return;
+        }
         /* 上一样本/下一样本：在 S.cases 全量列表中定位当前样本，切换选中后停留本页并刷新 */
         var rkPrev = TT('recordPrev', '上一样本'), rkNext = TT('recordNext', '下一样本');
         if (rk === 'recordPrev' || rk === 'recordNext' || rk === 'p' || rk === '上一样本' || rk === 'n' || rk === '下一样本' || rk === rkPrev || rk === rkNext) {

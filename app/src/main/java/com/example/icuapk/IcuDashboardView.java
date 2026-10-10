@@ -186,10 +186,12 @@ public class IcuDashboardView extends View {
     private static final String PERIOD_ALL = "all";
     private static final String PERIOD_ENABLED = "enabled";
     private static final String PERIOD_CUSTOM = "custom";
-    private static final String[] CUSTOM_NUMBER_KEYS = {"temp", "oxygen", "humidity", "co2", "treatmentMinutes"};
-    private static final String[] CUSTOM_NUMBER_LABELS = {"舱内温度 ℃", "氧浓度 %", "湿度 %", "CO2目标值 PPM", "治疗时长 分钟"};
-    private static final int[] CUSTOM_NUMBER_INDICES = {0, 1, 14, 3, 15};
-    private static final boolean[] CUSTOM_NUMBER_INTEGER = {false, false, false, true, true};
+    /* ★ 2026-10-10 V15 ⑧：模式弹窗不再包含「治疗时长」（治疗时长为自动统计，不随模式下发）；
+       监护等级本就不在列。数值仅保留 温度/氧浓度/湿度/CO2目标值。 */
+    private static final String[] CUSTOM_NUMBER_KEYS = {"temp", "oxygen", "humidity", "co2"};
+    private static final String[] CUSTOM_NUMBER_LABELS = {"舱内温度 ℃", "氧浓度 %", "湿度 %", "CO2目标值 PPM"};
+    private static final int[] CUSTOM_NUMBER_INDICES = {0, 1, 14, 3};
+    private static final boolean[] CUSTOM_NUMBER_INTEGER = {false, false, false, true};
     private static final String[] CUSTOM_SWITCH_KEYS = {"co2Enabled", "coldLight", "warmLight", "redTherapy", "blueTherapy", "uv", "nebulizer", "anion", "outerCycle", "innerCycle"};
     private static final String[] CUSTOM_SWITCH_LABELS = {"CO2开关", "冷光照明", "暖光照明", "红外理疗", "蓝光理疗", "紫外消毒", "雾化器", "负离子", "外循环", "内循环"};
     private static final int[] CUSTOM_SWITCH_INDICES = {3, 4, 5, 6, 7, 12, 10, 11, 8, 9};
@@ -1782,6 +1784,37 @@ public class IcuDashboardView extends View {
     }
 
     private boolean performHostControlAction(String action) {
+        /* ★ 2026-10-10 V15 ⑦：主控页 舱内温度/氧浓度/湿度/CO2 的「开关」与「设置」分离 ——
+           开关 = 开/关该功能并主动读取主机蓝牙数据回显；设置 = 弹数值框，确定后下发主机（原有路径）。 */
+        if ("control_temp_switch".equals(action)) {
+            boolean next = !Boolean.TRUE.equals(bleManager.getTemperatureEnabledValue());
+            boolean sent = bleManager.setTemperatureEnabled(next);
+            bleManager.readEnvironmentStatus();
+            showSendResult("恒温开关", sent);
+            invalidate();
+            return true;
+        }
+        if ("control_oxygen_switch".equals(action)) {
+            boolean next = !Boolean.TRUE.equals(bleManager.getOxygenEnabledValue());
+            boolean sent = bleManager.setOxygenEnabled(next);
+            bleManager.readEnvironmentStatus();
+            showSendResult("氧气开关", sent);
+            invalidate();
+            return true;
+        }
+        if ("control_co2_switch".equals(action)) {
+            boolean sent = bleManager.toggleCo2Enable();
+            bleManager.requestCo2();
+            showSendResult("CO2开关", sent);
+            invalidate();
+            return true;
+        }
+        if ("control_humidity_switch".equals(action)) {
+            // 湿度按协议只读：开关点击 = 主动向主机读取实时湿度并回显。
+            handleControlCardTap(14, "湿度");
+            invalidate();
+            return true;
+        }
         if ("control_temp".equals(action)) {
             // ★ 修复 P1-3:用 lastSet 值而非设备实测值,保留用户上次输入
             showNumberDialog(0, "设置舱内温度", "℃", bleManager.getLastSetCabinTempValue(), false);
@@ -2730,6 +2763,9 @@ public class IcuDashboardView extends View {
         json.put("disease", safeJsonText(patient.disease));
         json.put("transferredOut", patient.transferredOut);
         json.put("currentTreatment", patient.currentTreatment);
+        // ★ 2026-10-10 V15：treatmentStarted 此前未下发，H5 无法识别「已结束的样本」，
+        //   导致结束后还能重复开始治疗、打印/发送门控（careEndedOK）失效。
+        json.put("treatmentStarted", patient.treatmentStarted);
         json.put("treatmentStartTime", patient.treatmentStartTime);
         json.put("treatmentEndTime", patient.treatmentEndTime);
         // ★ V1.02 UI：H5 需要据此区分"新建样本/编辑样本"弹窗标题
@@ -5249,8 +5285,7 @@ public class IcuDashboardView extends View {
 
     // ★ 重名检查也只在本舱内进行：左右舱允许存在相同的编号。
     //   住院号现为「前缀+日期+序号」字符串，直接按完整字符串比对（同时兼容旧版纯数字编号）。
-    private boolean caseNoUsedByOther(String zone, String text, PatientCase current) {
-        if (TextUtils.isEmpty(text)) {
+    private boolean caseNoUsedByOther(String zone, String text, PatientCase current) {        if (TextUtils.isEmpty(text)) {
             return false;
         }
         for (PatientCase patient : patientStateForZone(zone).cases) {
@@ -5264,8 +5299,56 @@ public class IcuDashboardView extends View {
         return false;
     }
 
-    private String formatCaseNo(long value, int width) {
-        int safeWidth = Math.max(6, Math.min(12, width));
+    /* ★ 2026-10-10 V15：按住院号定位样本 —— 开始/结束护疗、打印、导出的目标样本由 H5 选中行的
+       住院号决定（H5 经 act(action, caseNo) 传入），不再只依赖原生 selectedCaseIndex，
+       避免「开始护疗不能识别是同一样本」。先在当前舱找，找不到再搜另一舱。 */
+    private PatientCase findCaseByNoInZone(String zone, String no) {
+        if (TextUtils.isEmpty(zone) || TextUtils.isEmpty(no)) {
+            return null;
+        }
+        for (PatientCase patient : patientStateForZone(zone).cases) {
+            if (no.equals(patient.caseNo) || no.equals(patient.recordNo)) {
+                return patient;
+            }
+        }
+        return null;
+    }
+
+    private PatientCase findCaseByNo(String no) {
+        if (TextUtils.isEmpty(no)) {
+            return null;
+        }
+        String curZone = currentZoneNormalized();
+        PatientCase hit = findCaseByNoInZone(curZone, no);
+        if (hit == null) {
+            hit = findCaseByNoInZone("left".equals(curZone) ? "right" : "left", no);
+        }
+        return hit;
+    }
+
+    /** 按住院号选中样本（必要时切舱）；找到返回 true。供 MainActivity 在分发动作前调用。 */
+    boolean selectCaseByNo(String no) {
+        PatientCase patient = findCaseByNo(no);
+        if (patient == null) {
+            return false;
+        }
+        String zone = zoneOfPatient(patient);
+        if (!zone.equals(currentZoneNormalized()) && canSwitchZone()) {
+            switchPatientZone(zone);
+        }
+        PatientZoneState state = patientStateForZone(zone);
+        int index = state.cases.indexOf(patient);
+        if (index >= 0) {
+            state.selectedCaseIndex = index;
+            if (zone.equals(currentZoneNormalized())) {
+                selectedCaseIndex = index;
+            }
+            lastGeneratedPdf = null;
+        }
+        return true;
+    }
+
+    private String formatCaseNo(long value, int width) {        int safeWidth = Math.max(6, Math.min(12, width));
         String digits = String.valueOf(Math.max(0L, value));
         if (digits.length() >= safeWidth) {
             return digits;
