@@ -5581,6 +5581,8 @@ public class IcuDashboardView extends View {
                 bleManager.setControlEnabled(ci, false);
             }
         }
+        /* ★ 2026-10-10 #80：治疗时长按样本独立 —— 新样本开始护疗时清零本舱治疗计时 */
+        bleManager.resetTreatmentTimer();
         lastGeneratedPdf = null;
         saveTreatmentRecordsToStorage(true);
         appendUserLog("护疗", "开始护疗", "住院号 " + patient.caseNo + " / " + patient.petName);

@@ -133,6 +133,7 @@
     sheetFrom: '',
     /* ★ 2026-10-10 #71：发送数据页来源标记：'care' = 护疗页底栏进入（背景/底栏为护疗页），'review' = 回顾页进入 */
     sendFrom: '',
+    /* #83 */ sampleDialogMode: '',
     /* ★ 2026-10-10 #73：发送数据页选择列表收回标记（底栏再点「发送数据」切换） */
     sendMenuHide: false,
     date: '',

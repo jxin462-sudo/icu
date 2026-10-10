@@ -121,6 +121,7 @@
         curLogo: '当前LOGO', footerLogo: '页脚LOGO', factoryConfirmBody: '确认恢复出厂设置？所有自定义设置将恢复默认。',
         reviewNoData: '暂无样本数据，无法执行该操作', reviewNoSel: '请先选择一个样本',
         careEndedNoRestart: '该记录已结束，不能重复开始护疗',
+        careNeedDisease: '请先填写病症再开始护疗', careNotEndedPrint: '该样本治疗未结束，不能打印', careNotEndedSend: '该样本治疗未结束，不能发送数据',
         /* ★ 任务14：打印页 */
         printerAvail: '可用打印机', printerAddr: '打印机地址', scanPrinter: '扫描',
         addPrinter: '添加打印机', printTest: '打印测试页', uploadLogo: '上传LOGO',
@@ -169,6 +170,7 @@
         curLogo: 'Current Logo', footerLogo: 'Footer Logo', factoryConfirmBody: 'Restore factory settings? All custom settings will be reset.',
         reviewNoData: 'No sample data; this action is unavailable', reviewNoSel: 'Please select a sample first',
         careEndedNoRestart: 'This record has ended and cannot be restarted',
+        careNeedDisease: 'Enter the diagnosis before starting treatment', careNotEndedPrint: 'Treatment not finished; printing is unavailable', careNotEndedSend: 'Treatment not finished; sending is unavailable',
         /* ★ 任务14：打印页 */
         printerAvail: 'Available Printers', printerAddr: 'Printer Address', scanPrinter: 'Scan',
         addPrinter: 'Add Printer', printTest: 'Print Test Page', uploadLogo: 'Upload Logo',
@@ -317,10 +319,12 @@
   SCREENS['splash'] = {
     name: '启动页', group: '0 引导',
     render() {
+      /* ★ 2026-10-10 #77：启动页重构为播放真实开机动画 boot.gif（1920x1200，全长 4.5s）——
+         旧的 CSS 粒子/Logo 动画起点受 WebView 加载时机影响播不完整；GIF 由解码器驱动时序稳定。
+         时间戳参数强制每次进入从头播放，避免缓存导致从中间续播；点击仍可跳过（data-go=login）。 */
       return '<div class="screen"><div class="splash" data-go="login">'
-        + '<div class="boot-core"></div><div class="boot-ring"></div>'
-        + '<div class="brand"><span class="particles"></span><span class="en">URIT</span><span class="cn">优利特</span></div>'
-        + '<div class="tag">Better Health For All</div></div></div>';
+        + '<img class="bootgif" src="boot.gif?ts=' + Date.now() + '" alt="">'
+        + '</div></div>';
     }
   };
 
@@ -419,13 +423,13 @@
         + '<div class="frow" data-row="doctor"><label>' + T('fieldDoctor', '主治医生') + '</label><div class="ctl"><div class="inp flex"></div></div></div>'
         + '</div></div>';
       return PAGE(P.topbar('care'),
-        '<div class="listwrap">' + careTable([]) + '</div>'
+        '<div class="listwrap">' + careTable(D.careRows || []) /* ★ #82：编辑/新建弹窗停留在数据页，不再是空白背景 */ + '</div>'
         + P.mask('<div class="modal wide"><div class="mhead">' + T('newSampleTitle', '新建样本') + '</div>'
           + '<div class="mbody">' + body + '</div>'
           + '<div class="mfoot"><div class="btn" data-foot="confirm">' + T('confirm', '确认') + '</div><div class="btn primary" data-foot="cancel">' + T('cancel', '取消') + '</div></div></div>')
         + A(441, 227, '住院号') + A(441, 271, '样本号', 'strike') + A(466, 695, '主人', 'strike') + A(416, 748, '宠物主人')
         + A(764, 534, '兔') + A(656, 676, '蛇') + A(880, 470, '鸟', 'strike') + A(880, 620, '蜘蛛', 'strike'),
-        P.bottombar(CARE_BAR, 'new'));
+        P.bottombar(CARE_BAR, D.sampleDialogMode === 'edit' ? 'edit' : 'new') /* ★ #83 */);
     }
   };
 
@@ -1010,10 +1014,10 @@
          时背景/底栏/顶栏高亮均为护疗页，不再强制跳回顾页选样本 */
       if (D.sendFrom === 'care') {
         return PAGE(P.topbar('care'), '<div class="listwrap">' + careTable(D.careRows || []) + '</div>' + cards + menu,
-          P.bottombar(CARE_BAR_FULL, 'send'));
+          P.bottombar(CARE_BAR_FULL, D.sendMenuHide ? '' : 'send') /* ★ #84：菜单收回时不高亮 */);
       }
       return PAGE(P.topbar('review'), reviewBg() + cards + menu,
-        P.bottombar(REVIEW_BAR, 's'));
+        P.bottombar(REVIEW_BAR, D.sendMenuHide ? '' : 's') /* ★ #84 */);
     }
   };
   SCREENS['del-confirm'] = {

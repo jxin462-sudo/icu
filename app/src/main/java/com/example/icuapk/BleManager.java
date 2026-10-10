@@ -722,6 +722,15 @@ public class BleManager {
         return total;
     }
 
+    /** ★ 2026-10-10 #80：治疗时长按样本独立 —— 开始新样本护疗时清零本舱计时，避免跨样本叠加。 */
+    public void resetTreatmentTimer() {
+        treatmentAccumulatedMs = 0L;
+        treatmentRunningSinceMs = 0L;
+        saveZoneTreatmentAccumulatedMs();
+        saveZoneTreatmentRunningSinceMs(0L);
+        emit();
+    }
+
     public String getTreatmentTimeText() {
         long totalMs = getCurrentTreatmentElapsedMs();
         if (totalMs <= 0L) {

@@ -430,7 +430,22 @@
   }
 
   /* 新建（两段式）：仅打开草稿弹窗，不调 patient_new —— 避免"取消"也生成空病例 */
+  /* ★ 2026-10-10 #81：护疗表的「视觉高亮行」即有效选中 —— 表格未点击时默认高亮第一行，
+     打印/发送等操作不能再因为 D.selCaseId 为空而误报「未勾选」 */
+  function careEffSelId() {
+    var rows = D.careRows || [];
+    if (D.selCaseId && rows.some(function (r) { return r.caseId === D.selCaseId; })) return D.selCaseId;
+    return (rows[0] && rows[0].caseId) || '';
+  }
+  function careSelCase() {
+    var id = careEffSelId();
+    return (S.cases || []).filter(function (c) { return c && c.caseId === id; })[0] || null;
+  }
+  /* 治疗已结束 = 已开始过 + 结束时间为具体时刻（非「进行中」） */
+  function careEndedOK(c) { return !!(c && c.treatmentStarted && c.treatmentEndTime && c.treatmentEndTime !== '进行中'); }
+
   function openNewSampleDraft() {
+    D.sampleDialogMode = 'new'; // ★ #83 底栏高亮「新建」
     draftNewMode = true;
     IcuApp.go('new-sample');
   }
@@ -1107,16 +1122,17 @@
         if (!sendingCard) { D.sendMenuHide = !D.sendMenuHide; if (window.IcuApp) IcuApp.render(); }
         return;
       }
-      if (cur === 'care' || cur === 'care-data' || cur === 'care-record') {
+      if (cur === 'care' || cur === 'care-data' || cur === 'care-record' || (cur === 'sending' && D.sendFrom === 'care') /* ★ #84 护疗来源的发送页也走护疗分支 */) {
         if (key === 'newSample') { stop(e); openNewSampleDraft(); return; }
         if (key === 'startCare') {
           stop(e);
           /* ★ 2026-10-10 #70：已结束的样本不能重复开启治疗 —— 原生会拦截，但 H5 也不能跳进状态页 */
-          var sc = (S.cases || []).filter(function (c) { return c && c.caseId === D.selCaseId; })[0];
+          var sc = careSelCase() /* ★ #81 用有效高亮行 */ ;
           if (sc && sc.treatmentStarted && sc.treatmentEndTime && sc.treatmentEndTime !== '进行中') {
             toast(TT('careEndedNoRestart', '该记录已结束，不能重复开始护疗'));
             return;
           }
+          /* ★ #79：不填病症不能开始护疗 */ if (sc && !String(sc.disease || sc.illness || '').trim()) { toast(TT('careNeedDisease', '请先填写病症再开始护疗')); return; }
           act('patient_start_treatment'); IcuApp.go('status'); return;
         }
         if (key === 'edit') {
@@ -1128,7 +1144,7 @@
           var selId = selEl ? selEl.getAttribute('data-caseid') : (D.selCaseId || '');
           var picked = rows.some(function (r) { return r.caseId && r.caseId === selId; });
           if (!picked) { toast(Tg('reviewNoSel', '请先选择一个样本')); return; }
-          pendingEditor = true; IcuApp.go('new-sample'); return;
+          pendingEditor = true; D.sampleDialogMode = 'edit'; /* ★ #83 底栏高亮「编辑」 */ IcuApp.go('new-sample'); return;
         } // 用 H5 弹窗就地编辑（不弹原生框）
         if (key === 'del') { stop(e); act('patient_delete'); return; }
         /* ★ 2026-10-10 #53：护疗页「打印」→ 打开选中样本的治疗记录单预览，真实打印由记录单页「打印」执行 */
@@ -1137,17 +1153,20 @@
           var TgP = window.T || function (k, fb) { return fb; };
           var pRows = D.careRows || [];
           if (!pRows.length) { toast(TgP('reviewNoData', '暂无样本数据，无法执行该操作')); return; }
-          var pPicked = pRows.some(function (r) { return r.caseId && r.caseId === D.selCaseId; });
-          if (!pPicked) { toast(TgP('reviewNoSel', '请先选择一个样本')); return; }
+          /* ★ #81：视觉高亮行即有效选中，不再因 D.selCaseId 为空误报未勾选 */
+          var effP = careEffSelId();
+          if (!effP) { toast(TgP('reviewNoSel', '请先选择一个样本')); return; }
+          /* ★ #79：治疗未结束的样本不能打印 */
+          if (!careEndedOK(careSelCase())) { toast(TT('careNotEndedPrint', '该样本治疗未结束，不能打印')); return; }
           D.printFrom = 'care';
-          openRecordSheetFor(D.selCaseId); return;
+          D.selCaseId = effP; openRecordSheetFor(effP); return;
         }
         /* ★ 2026-10-10 #71：护疗页「发送数据」→ 发送页按护疗来源渲染（已结束的样本也能直接选发送方式，不必跳回顾页） */
-        if (key === 'dataSend') { stop(e); sendingCard = null; D.sendFrom = 'care'; D.sendMenuHide = false; IcuApp.go('sending'); return; } // 任务9：进入发送数据页（菜单里再选文件助手/蓝牙）
+        if (key === 'dataSend') { stop(e); var dRows = D.careRows || []; if (!dRows.length) { toast(TT('reviewNoData', '暂无样本数据，无法执行该操作')); return; } var effS = careEffSelId(); if (!effS) { toast(TT('reviewNoSel', '请先选择一个样本')); return; } /* ★ #79：治疗未结束不能发送 */ if (!careEndedOK(careSelCase())) { toast(TT('careNotEndedSend', '该样本治疗未结束，不能发送数据')); return; } D.selCaseId = effS; sendingCard = null; D.sendFrom = 'care'; D.sendMenuHide = false; IcuApp.go('sending'); return; } // 任务9：进入发送数据页（菜单里再选文件助手/蓝牙）
         if (key === 'tutorial') { stop(e); IcuApp.go('tutorial'); return; } /* ★ 2026-10-09 改为进教程页（槽位绑定照片/视频） */
         if (key === 'careRecord') { /* 交给 app.js 跳 care-record */ return; }
       }
-      if (cur === 'review' || cur === 'printing' || cur === 'sending' || cur === 'del-confirm') {
+      if (cur === 'review' || cur === 'printing' || (cur === 'sending' && D.sendFrom !== 'care') /* ★ #84 */ || cur === 'del-confirm') {
         /* ★ 任务15(#9)：回顾页 — 无数据或未选样本时，禁止打印/导出报告/发送数据/删除 */
         var needSel = (key === 'print' || key === 'exportReport' || key === 'sendData' || key === 'del');
         if (needSel) {
@@ -1199,7 +1218,7 @@
           draftNewMode = false;
           pendingEditor = false;
           pendingSaveAfterCreate = null;
-          IcuApp.go('care');
+          IcuApp.go((D.careRows || []).length ? 'care-data' : 'care'); /* ★ #82 取消留在数据页 */
           return;
         }
       }
