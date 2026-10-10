@@ -96,6 +96,8 @@
         compTemp: '温度补偿（℃）', compO2: '氧浓度补偿（%）', compHum: '湿度补偿（%）',
         compCo2: '二氧化碳浓度补偿（PPM）', compIr: '红外体温补偿（℃）',
         aboutBasic: '基础信息', aboutVer: '版本信息',
+        tuTitle: '使用教程', tuPick: '＋ 选择照片/视频', tuChange: '重选', tuClear: '移除',
+        tuSlot: '教程位', tuHint: '点击空位从相册选择照片或视频；点击已绑定的内容可播放/查看。',
         logFront: '前端调试', logBack: '后端调试', logErr: '错误记录', logComm: '通信记录',
         logStack: '堆栈信息', logNormal: '常规信息', logUser: '用户日志',
         /* ★ 任务13：用户管理 / 舱区 / 连接 */
@@ -137,6 +139,8 @@
         compTemp: 'Temp Comp (℃)', compO2: 'O₂ Comp (%)', compHum: 'Humidity Comp (%)',
         compCo2: 'CO₂ Comp (PPM)', compIr: 'IR Temp Comp (℃)',
         aboutBasic: 'Basic Info', aboutVer: 'Version Info',
+        tuTitle: 'Tutorial', tuPick: '＋ Pick photo/video', tuChange: 'Change', tuClear: 'Remove',
+        tuSlot: 'Slot', tuHint: 'Tap an empty slot to pick a photo or video from the gallery; tap a bound item to play/view it.',
         logFront: 'Frontend', logBack: 'Backend', logErr: 'Errors', logComm: 'Comm',
         logStack: 'Stack', logNormal: 'General', logUser: 'User Log',
         /* ★ 任务13：用户管理 / 舱区 / 连接 */
@@ -348,7 +352,7 @@
     { id: 'edit', label: '编辑', key: 'edit', icon: 'pencil', go: 'new-sample' },
     { id: 'send', label: '数据发送', key: 'dataSend', icon: 'upload', go: 'sending' },
     { id: 'del', label: '删除', key: 'del', icon: 'trash', go: 'del-confirm' },
-    { id: 'tu', label: '教程', key: 'tutorial', icon: 'cap', go: 'about' },
+    { id: 'tu', label: '教程', key: 'tutorial', icon: 'cap', go: 'tutorial' },
   ];
   /* 设计图 5.png（有数据态）底栏不含「教程」，仅空态（3.png）显示 —— 故有数据态过滤掉 */
   const CARE_BAR_FULL = CARE_BAR.slice(0, -1);
@@ -374,7 +378,12 @@
         var label = T('species' + k.charAt(0).toUpperCase() + k.slice(1), ['犬', '猫', '兔', '蜥蜴', '蛇', '其它'][i]);
         return '<div class="chip' + (k === 'rabbit' ? ' on' : '') + '" data-spec="' + k + '">' + label + '</div>';
       }).join('');
-      const au = '<select data-ageunit class="age-unit"><option value="天">' + T('ageDay', '天') + '</option><option value="月" selected>' + T('ageMonth', '月') + '</option><option value="岁">' + T('ageYear', '岁') + '</option></select>';
+      /* ★ 2026-10-09 自定义下拉（弃用原生 <select>：部分 WebView 上 select 宽度不受 CSS 控制） */
+      const au = '<div class="age-sel" data-ageunit data-value="月"><span class="age-sel-v">' + T('ageMonth', '月') + '</span><svg class="age-sel-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+        + '<div class="age-sel-list">'
+        + '<div class="age-sel-opt" data-v="天">' + T('ageDay', '天') + '</div>'
+        + '<div class="age-sel-opt on" data-v="月">' + T('ageMonth', '月') + '</div>'
+        + '<div class="age-sel-opt" data-v="岁">' + T('ageYear', '岁') + '</div></div></div>';
       const body = '<div class="form-grid">'
         + '<div class="col">'
         + '<div class="frow" data-row="caseNo"><label>' + T('fieldCaseNo', '住院号') + '</label><div class="ctl"><div class="inp flex"></div></div></div>'
@@ -569,9 +578,10 @@
       + '</div>';
   }
   function monitorBody(units) {
-    /* ★ 任务19：未连蓝牙时默认演示波形（动态滚动，不显示平线）；标签固定英文（ECG/SpO₂/RESP）
+    /* ★ 任务19：未连蓝牙时默认演示波形（动态滚动，不显示平线）；标签固定英文（ECG/PLETH/RESP）
        ★ 任务33/41：监护宝 BLE 一连接即退出演示模式，切到读取 AM4100 实时采样：
-       有采样画实时波形；已连接但采样未到画平线占位；只有未连接才跑演示滚动波形 */
+       有采样画实时波形；已连接但采样未到画平线占位；只有未连接才跑演示滚动波形
+       ★ 2026-10-09：血氧/脉率行波形标签按用户要求由 SpO₂ 改为 PLETH */
     var WL = D.waveLive || {};
     var live = !!D.monitorLive;
     var flat = function (c, lab) {
@@ -582,12 +592,12 @@
     var wb = function (k, c, lab) {
       if (!live) return P.waveBox(k, c, lab);
       var s = WL[k];
-      if (s && s.length > 1) return P.liveWaveBox(s, c, lab);
+      if (s && s.length > 1) return P.liveWaveBox(s, c, lab, k);
       return flat(c, lab);
     };
     const rows = '<div class="monitor">'
       + '<div class="mrow r1">' + wb('ecg', '#60F471', 'ECG') + vitalsHalf(units, 0) + '</div>'
-      + '<div class="mrow r2">' + wb('pleth', '#FF6969', 'SpO₂') + vitalsHalf(units, 1) + '</div>'
+      + '<div class="mrow r2">' + wb('pleth', '#FF6969', 'PLETH') + vitalsHalf(units, 1) + '</div>'
       + '<div class="mrow r3">' + wb('resp', '#009DFF', 'RESP') + vitalsHalf(units, 2) + '</div>'
       + '</div>';
     return rows;
@@ -1244,7 +1254,7 @@
   SCREENS['upgrade-sw'] = {
     name: '升级 · 软件', group: '5 设置', render() {
       return setPage('upgrade-sw', upTabs('upgrade-sw')
-        + '<div style="width:1000px;margin:0 auto;display:flex;gap:20px;align-items:center"><div class="prog"></div><div class="btn sm">' + T('chooseFile', '选择文件') + '</div><div class="btn sm">' + T('upgrade', '升级') + '</div></div>'
+        + '<div style="width:1000px;margin:0 auto;display:flex;gap:20px;align-items:center"><div class="prog"></div><div class="btn sm" data-apk-update="1">' + T('chooseFile', '选择文件') + '</div><div class="btn sm">' + T('upgrade', '升级') + '</div></div>'
         + QR + A(700, 520, '增加微信"传输助手"互传二维码。', 'plain'));
     }
   };
@@ -1315,6 +1325,38 @@
         '<div class="about-grid">'
         + '<div class="aboutcard"><h3>' + T('aboutBasic', '基础信息') + '</h3>' + base + '</div>'
         + '<div class="aboutcard"><h3>' + T('aboutVer', '版本信息') + '</h3>' + ver + '</div></div>', null, true);
+    }
+  };
+
+  /* ★ 2026-10-09 使用教程页：6 个媒体槽位（2 行×3），用户从平板相册选择照片/视频绑定。
+     数据 D.tutorialSlots 由 icu-native-bridge 从 IcuNative.tutorialState().slots 注入。 */
+  SCREENS['tutorial'] = {
+    name: '使用教程', group: '1 主流程', render() {
+      const slots = (D.tutorialSlots && D.tutorialSlots.length) ? D.tutorialSlots : [];
+      let cards = '';
+      for (let i = 0; i < 6; i++) {
+        const s = slots[i] || {};
+        const bound = !!(s.uri);
+        const body = bound
+          ? (s.thumb
+            ? '<img class="tut-thumb" src="' + s.thumb + '">'
+            : '<div class="tut-empty">' + (s.mime && s.mime.indexOf('video/') === 0 ? '🎬' : '🖼') + '</div>')
+            + '<div class="tut-name">' + (s.name || '') + '</div>'
+          : '<div class="tut-empty">' + T('tuPick', '＋ 选择照片/视频') + '</div>';
+        const tools = bound
+          ? '<div class="tut-tools">'
+            + '<span class="tut-btn" data-tslot-pick="' + i + '">' + T('tuChange', '重选') + '</span>'
+            + '<span class="tut-btn" data-tslot-clear="' + i + '">' + T('tuClear', '移除') + '</span>'
+            + '</div>'
+          : '';
+        cards += '<div class="tut-slot' + (bound ? ' bound' : '') + '" '
+          + (bound ? 'data-tslot-play="' + i + '"' : 'data-tslot-pick="' + i + '"') + '>'
+          + '<div class="tut-tag">' + T('tuSlot', '教程位') + ' ' + (i + 1) + '</div>'
+          + body + tools + '</div>';
+      }
+      return PAGE(P.topbarBack('care'),
+        '<div class="tut-wrap"><div class="tut-hint">' + T('tuHint', '点击空位从相册选择照片或视频；点击已绑定的内容可播放/查看。') + '</div>'
+        + '<div class="tut-grid">' + cards + '</div></div>', null, true);
     }
   };
 

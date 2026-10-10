@@ -58,8 +58,14 @@
   /* ★ 任务38：原生状态事件驱动的前导+尾随节流渲染。
      AM4100 连接后每帧 emit → 原生 50ms 节流推送（≈20次/秒），
      整页重渲染风暴会把 rAF 演示波形反复打回初始帧；这里收敛到 ≤8次/秒 */
-  var lastRenderAt = 0, renderTimer = 0;
+  var lastRenderAt = 0, renderTimer = 0, lastFullRenderAt = 0;
   function scheduleRender() {
+    /* ★ 2026-10-09 新建/编辑样本弹窗打开期间跳过后台重渲染：
+       表单内容只存在于 DOM（未持久化到 S.patient），原生状态推送触发整页重绘
+       会把正在填写的内容全部清掉（用户反馈）。该弹窗无实时数据需求，
+       确认/取消切屏后渲染自然恢复。 */
+    var curNow = IcuApp.current && IcuApp.current();
+    if (curNow === 'new-sample') { lastRenderAt = Date.now(); return; }
     /* ★ 任务42：输入框聚焦（软键盘弹起）期间推迟整页重渲染——
        监护连接后原生 ≈8次/秒 推状态，若不推迟，重建 DOM 会销毁聚焦中的输入框、
        键盘被反复收起、文本无法输入。聚焦时 300ms 轮询重试，失焦后自动补渲染 */
@@ -69,9 +75,28 @@
       return;
     }
     var now = Date.now();
-    if (now - lastRenderAt >= 120 && !renderTimer) { lastRenderAt = now; IcuApp.render(); return; }
+    if (now - lastRenderAt >= 120 && !renderTimer) { lastRenderAt = now; lastFullRenderAt = now; IcuApp.render(); return; }
     if (renderTimer) return;
-    renderTimer = setTimeout(function () { renderTimer = 0; lastRenderAt = Date.now(); IcuApp.render(); }, 120);
+    renderTimer = setTimeout(function () { renderTimer = 0; lastRenderAt = Date.now(); lastFullRenderAt = lastRenderAt; IcuApp.render(); }, 120);
+  }
+
+  /* ★ 2026-10-09：监护页实时波形"打点"刷新。
+     监护宝连接后原生 ≈8次/秒推 icu-native-state，每次都整页 innerHTML 重建太重——
+     波形卡顿、看起来像"不是实时的"。这里直接更新已上屏 polyline 的 points（平滑滚动），
+     体征数值/连接态等仍按 ≤1次/秒 整页刷新。
+     返回 true=本帧已用打点方式处理；false=结构缺失（平线占位/未上屏），需整页渲染。 */
+  function patchLiveWaves() {
+    var WL = D.waveLive || {};
+    var kinds = ['ecg', 'pleth', 'resp'], want = 0;
+    for (var i = 0; i < kinds.length; i++) { var s = WL[kinds[i]]; if (s && s.length > 1) want++; }
+    var pls = document.querySelectorAll('polyline[data-lw]');
+    if (!pls.length || pls.length !== want) return false;
+    if (!window.P || !P.liveWavePath) return false;
+    for (var j = 0; j < pls.length; j++) {
+      var kind = pls[j].getAttribute('data-lw');
+      pls[j].setAttribute('points', P.liveWavePath(WL[kind] || [], 1448, 289));
+    }
+    return true;
   }
 
   /* ---------- ★ 2026-10-08 日志页：前端调试 / 错误记录（H5 侧捕获） ----------
@@ -164,9 +189,9 @@
     return out;
   }
 
-  /* 治疗项时长文本：无限→常开；有剩余毫秒→mm:ss；否则用原生 control 值 */
+  /* 治疗项时长文本：无限→24h常开；有剩余毫秒→mm:ss；否则用原生 control 值 */
   function durText(val, unlimited, remainingMs) {
-    if (unlimited) return TT('alwaysOn', '常开');
+    if (unlimited) return TT('uv24h', '24h常开');
     if (remainingMs && remainingMs > 0) {
       var s = Math.floor(remainingMs / 1000);
       return pad(Math.floor(s / 60)) + ':' + pad(s % 60);
@@ -281,10 +306,14 @@
         toast(monNow ? (TT('bleMonConnOk', '监护蓝牙已连接') + (monDevName ? '：' + monDevName : ''))
           : TT('bleMonConnLost', '监护蓝牙已断开'));
       }
+      /* ★ Fix D（2026-10-08）：蓝牙连接态翻转时立即重绘当前屏，保证监护页与连接页蓝牙按钮状态即时同步
+         ★ 2026-10-09 修复：此前每次状态推送都 scheduleRender（≈8次/秒整页重建），
+         波形/输入框全被冲；改为仅在连接态真正翻转时重绘 */
+      if ((prevHostConn !== null && hostNow !== prevHostConn) || (prevMonConn !== null && monNow !== prevMonConn)) {
+        scheduleRender();
+      }
       prevHostConn = hostNow;
       prevMonConn = monNow;
-      /* ★ Fix D（2026-10-08）：蓝牙连接态翻转时立即重绘当前屏，保证监护页与连接页蓝牙按钮状态即时同步 */
-      scheduleRender();
       /* ★ 任务22：BPM 血压仪（监护页「实时⇄物理」）。S.bpm 由原生 buildFirstPhaseStateJson 下发；
          mode: 'manual'=物理 / 'auto'=实时，数值实时/物理同数据源（设备侧模式不同） */
       var bpm = S.bpm || {};
@@ -384,6 +413,10 @@
     if (cur === 'new-sample' || cur === 'query' || cur === 'login') return;
     /* ★ 任务26a：记录单编辑态中不随原生推送重渲染，避免正在输入的内容被冲掉（一致性处理见 #26d） */
     if (cur === 'record-sheet' && D.sheetEdit) return;
+    /* ★ 2026-10-09：监护页且波形已上屏 → 打点刷新波形，整页渲染压到 ≤1次/秒（更新体征数值） */
+    if ((cur === 'monitor' || cur === 'monitor-unit') && D.monitorLive && patchLiveWaves()) {
+      if (Date.now() - lastFullRenderAt < 1000) return;
+    }
     /* ★ 任务38：前导+尾随节流渲染，压住 AM4100 连接后的推送风暴（保护演示波形滚动） */
     scheduleRender();
   }
@@ -602,16 +635,17 @@
         val = p.caseNo || p.recordNo || '';
       }
       if (key === 'age') {
-        // ★ 任务12：年龄单位下拉（天/月/岁），编辑态预选 S.patient.ageUnit；选项随语言切换
+        // ★ 2026-10-09 年龄单位改自定义下拉（弃用原生 <select>：真机 WebView 上宽度不受控，用户反馈收窄无效）
+        //   选中值存 data-value（天/月/岁，与语言无关），显示文本随语言翻译
         var auVal = (p && p.ageUnit) || '月';
         var auUnits = ['天', '月', '岁'];
         var auTKeys = { '天': 'ageDay', '月': 'ageMonth', '岁': 'ageYear' };
         var T = window.T || function (k, fb) { return fb; };
         var auOpts = auUnits.map(function (u) {
-          return '<option value="' + u + '"' + (u === auVal ? ' selected' : '') + '>' + T(auTKeys[u], u) + '</option>';
+          return '<div class="age-sel-opt' + (u === auVal ? ' on' : '') + '" data-v="' + u + '">' + T(auTKeys[u], u) + '</div>';
         }).join('');
         holder.outerHTML = '<div class="inp flex icu-field-row">' + inp(val, 'age', 'text')
-          + '<select data-ageunit class="age-unit">' + auOpts + '</select></div>';
+          + '<div class="age-sel" data-ageunit data-value="' + auVal + '"><span class="age-sel-v">' + T(auTKeys[auVal] || 'ageMonth', auVal) + '</span><svg class="age-sel-chev" viewBox="0 0 24 24"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg><div class="age-sel-list">' + auOpts + '</div></div></div>';
         return;
       }
       holder.outerHTML = '<div class="inp flex">' + inp(val, key, key === 'ownerPhone' ? 'tel' : 'text') + '</div>';
@@ -674,11 +708,11 @@
     var otherInp = modal.querySelector('input[data-other-species]');
     var otherKey = (allChips.length >= 2) ? (allChips[1].querySelector('.chip.on') || {}).dataset.spec : '';
     if ((o.species === '其它' || otherKey === 'other') && otherInp) o.species = otherInp.value.trim() || '其它';
-    // ★ 任务12：年龄单位读取下拉（天/月/岁）
-    var auSel = modal.querySelector('select[data-ageunit]');
+    // ★ 任务12：年龄单位读取自定义下拉（天/月/岁，存 data-value）
+    var auSel = modal.querySelector('[data-ageunit]');
     o.caseNo = o.caseNo || (S.patient && S.patient.caseNo) || '';
     o.recordNo = o.caseNo;
-    o.ageUnit = auSel ? auSel.value : '月';
+    o.ageUnit = auSel ? (auSel.getAttribute('data-value') || '月') : '月';
     o.visitDate = (S.patient && S.patient.visitDate) || '';
     return o;
   }
@@ -764,8 +798,13 @@
     ctrlRed: 'control_red', ctrlBlue: 'control_blue', ctrlUv: 'control_uv', ctrlNeb: 'control_nebulizer', ctrlAnion: 'control_anion',
     ctrlCold: 'control_cold_light', ctrlWarm: 'control_warm_light', ctrlOuter: 'control_outer', ctrlInner: 'control_inner', ctrlTime: 'control_time'
   };
+  /* ★ 2026-10-09 定时类治疗项（红外/蓝光/紫外/雾化/负离子）的「设置」按钮 = 设定开启时长：
+     走原生 *_time 动作（IcuDashboardView.handleControlButtonTap → showNumberDialog“设置X时间·分钟”
+     → BleManager.startTimedControlWithConfiguredDuration，按蓝牙协议下发时长并开启倒计时） */
   var CTRL_SET_BY_TKEY = {
-    ctrlTemp: 'control_temp', ctrlO2: 'control_oxygen', ctrlHum: 'control_humidity', ctrlCo2: 'control_co2', ctrlTime: 'control_time'
+    ctrlTemp: 'control_temp', ctrlO2: 'control_oxygen', ctrlHum: 'control_humidity', ctrlCo2: 'control_co2', ctrlTime: 'control_time',
+    ctrlRed: 'control_red_time', ctrlBlue: 'control_blue_time', ctrlUv: 'control_uv_time',
+    ctrlNeb: 'control_nebulizer_time', ctrlAnion: 'control_anion_time'
   };
 
   /* ---------- 点击拦截（capture，先于 app.js 的 bubble 处理） ---------- */
@@ -775,11 +814,16 @@
     var cur = IcuApp.current();
     var n = N();
 
-    /* ★ 2026-10-08 日志页：「更新」按钮重新拉取原生状态（userLogs 等）并重渲染 */
-    if (cur === 'log') {
-      var lr = e.target.closest('[data-logrefresh]');
-      if (lr) { stop(e); pullState(); syncD(); IcuApp.render(); return; }
-    }
+    /* ★ 2026-10-09 教程页：槽位 选择/播放/清除（clear/pick 优先于 play，工具钮在槽位内部） */
+    var tClear = e.target.closest('[data-tslot-clear]');
+    if (tClear) { stop(e); act('tutorial_slot_clear_' + tClear.dataset.tslotClear); return; }
+    var tPick = e.target.closest('[data-tslot-pick]');
+    if (tPick) { stop(e); act('tutorial_slot_pick_' + tPick.dataset.tslotPick); return; }
+    var tPlay = e.target.closest('[data-tslot-play]');
+    if (tPlay) { stop(e); act('tutorial_slot_play_' + tPlay.dataset.tslotPlay); return; }
+
+    /* ★ 2026-10-09 升级·软件页「选择文件」：打开微信文件传输助手覆盖层 */
+    if (e.target.closest('[data-apk-update]')) { stop(e); act('apk_update_open'); return; }
 
     /* ★ 2026-10-08 蓝牙设备选择弹窗：点设备=连接；重新搜索；取消=停止扫描并关闭 */
     if (D.blePick) {
@@ -1005,7 +1049,7 @@
         } // 用 H5 弹窗就地编辑（不弹原生框）
         if (key === 'del') { stop(e); act('patient_delete'); return; }
         if (key === 'dataSend') { stop(e); sendingCard = null; IcuApp.go('sending'); return; } // 任务9：进入发送数据页（菜单里再选文件助手/蓝牙）
-        if (key === 'tutorial') { stop(e); act('tutorial_operation_video'); return; }
+        if (key === 'tutorial') { stop(e); IcuApp.go('tutorial'); return; } /* ★ 2026-10-09 改为进教程页（槽位绑定照片/视频） */
         if (key === 'careRecord') { /* 交给 app.js 跳 care-record */ return; }
       }
       if (cur === 'review' || cur === 'printing' || cur === 'sending' || cur === 'del-confirm') {
@@ -1446,6 +1490,7 @@
     if (cur === 'new-sample') patchNewSample();
     if (cur === 'query') patchQuery();
     if (cur === 'comp') bindComp();
+    if (cur === 'tutorial') loadTutorialSlots();
     if (cur === 'sending') { applySendingCard(); alignSendMenu(); } // 任务9：原生 invalidate 重渲染后恢复弹层状态
   }
 
@@ -1574,6 +1619,23 @@
       els.forEach(function (el) { if (el.textContent !== txt) el.textContent = txt; });
     }
     setInterval(tickSysClock, 1000);
+  }
+
+  /* ★ 2026-10-09 教程页：渲染后拉取原生槽位绑定，内容变化才重渲染（防循环） */
+  var lastTutorialSlotsJson = '';
+  function loadTutorialSlots() {
+    var n = N();
+    if (!n || !n.tutorialState) return;
+    try {
+      var st = JSON.parse(n.tutorialState() || '{}');
+      var slots = st.slots || [];
+      var json = JSON.stringify(slots);
+      if (json !== lastTutorialSlotsJson) {
+        lastTutorialSlotsJson = json;
+        D.tutorialSlots = slots;
+        IcuApp.render();
+      }
+    } catch (e) { /* noop */ }
   }
 
   window.IcuOnRender = onRender;

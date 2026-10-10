@@ -82,7 +82,46 @@
 
   /* 事件委托 -------------------------------------------------------------- */
   /* capture 阶段先于桥接层判定是否拦截；桥接层若调用 e.stopImmediatePropagation 则不进入此处 */
+  function ageSelCloseFloat() {
+    document.querySelectorAll('.age-sel.open').forEach(function (s) { s.classList.remove('open'); });
+    document.querySelectorAll('.age-sel-list.float').forEach(function (l) { l.remove(); });
+  }
   root.addEventListener('click', function (e) {
+    /* ★ 2026-10-09 自定义年龄单位下拉 v2：展开时把列表克隆挂到 .modal 下定位。
+       原因：stage 用 CSS zoom 缩放时，溢出小父框(.age-sel 仅 110x50)的绝对定位列表
+       在 WebView 里"画在上层但点不到"（命中测试穿透到底层 chip）。挂到大容器内即正常。 */
+    const aopt = e.target.closest('.age-sel-list.float .age-sel-opt');
+    if (aopt) {
+      const host = document.querySelector('.age-sel.open');
+      if (host) {
+        host.dataset.value = aopt.dataset.v;
+        host.querySelector('.age-sel-v').textContent = aopt.textContent;
+        host.querySelectorAll('.age-sel-opt').forEach(function (o) { o.classList.toggle('on', o.dataset.v === aopt.dataset.v); });
+      }
+      ageSelCloseFloat();
+      return;
+    }
+    const asel = e.target.closest('.age-sel');
+    if (asel) {
+      if (asel.classList.contains('open')) { ageSelCloseFloat(); return; }
+      ageSelCloseFloat();
+      asel.classList.add('open');
+      const modal = asel.closest('.modal');
+      const src = asel.querySelector('.age-sel-list');
+      if (modal && src) {
+        /* 注意：getBoundingClientRect 在该 WebView 的 CSS zoom 下返回的是"布局像素"
+           （未乘 zoom），与内联 style 长度同坐标系，无需再换算 */
+        const r = asel.getBoundingClientRect(), mr = modal.getBoundingClientRect();
+        const fl = src.cloneNode(true);
+        fl.classList.add('float');
+        fl.style.left = (r.left - mr.left - 1) + 'px';
+        fl.style.top = (r.bottom - mr.top + 4) + 'px';
+        fl.style.width = (r.width + 2) + 'px';
+        modal.appendChild(fl);
+      }
+      return;
+    }
+    ageSelCloseFloat();
     const sw = e.target.closest('[data-sw]');
     if (sw) { sw.classList.toggle('on'); const l = sw.querySelector('.l'); if (l) { const TT = window.T || function (k, f) { return f; }; l.textContent = sw.classList.contains('on') ? TT('on', '开') : TT('off', '关'); } return; }
     const ck = e.target.closest('.ckbox');

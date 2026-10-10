@@ -184,6 +184,9 @@
     upLog: '',
     aboutBase: [],
     aboutVer: [],
+    /* ★ 2026-10-09 教程页：6 个槽位的绑定媒体（原生 tutorialState().slots 注入），
+       元素 {uri, mime, name, thumb}，uri 空串 = 未绑定 */
+    tutorialSlots: [],
     /* ★ V1.02·任务8 补偿页（5 项补偿值，本地状态，初始 0 = 中性默认值，非虚构数据）
        由 comp 屏 +/− 按钮 ±1 步进，不落原生 */
     compVals: [0, 0, 0, 0, 0],
@@ -350,24 +353,31 @@
     return pts.join(' ');
   }
   /* ★ 任务33：实时波形（AM4100 采样数组 → polyline 点串）。
-     samples 为原生整数采样；按窗口 min/max 自适应归一化映射到 [h*0.08, h*0.92]。 */
+     samples 为原生整数采样；按窗口 min/max 自适应归一化映射到 [h*0.08, h*0.92]。
+     ★ 2026-10-09 修复：固定窗口滚动渲染——只取末尾 LIVE_WIN 个采样、按固定点距铺满全宽。
+     旧版把整条累积缓冲拉伸到全宽，缓冲从 0 涨到 720 的过程中波形一直在压缩变形，
+     用户看到的就是"不是实时的、一直在形成波形"；固定窗口后波形稳定滚动。 */
+  var LIVE_WIN = 360;
   function liveWavePath(samples, w, h) {
     if (!samples || !samples.length) return '';
+    if (samples.length > LIVE_WIN) samples = samples.slice(samples.length - LIVE_WIN);
     var n = samples.length, mn = samples[0], mx = samples[0];
     for (var i = 1; i < n; i++) { var v = samples[i]; if (v < mn) mn = v; if (v > mx) mx = v; }
     var span = (mx - mn) || 1, base = h * 0.92, amp = h * 0.84;
+    var dx = w / (LIVE_WIN - 1);
     var pts = [];
     for (var j = 0; j < n; j++) {
-      var x = j / (n - 1 || 1) * w;
+      var x = j * dx;
       var y = base - (samples[j] - mn) / span * amp;
       pts.push(x.toFixed(1) + ',' + y.toFixed(1));
     }
     return pts.join(' ');
   }
-  /* 实时波形框：快照式渲染（原生节流推送，每次 icu-native-state 后随渲染刷新，无需 rAF） */
-  function liveWaveBox(samples, color, label) {
+  /* 实时波形框：快照式渲染（原生节流推送，每次 icu-native-state 后随渲染刷新，无需 rAF）
+     ★ 2026-10-09：polyline 带 data-lw 标识，桥层可在不整页重渲染的情况下直接打点刷新 */
+  function liveWaveBox(samples, color, label, kind) {
     return '<div class="wave"><svg viewBox="0 0 1448 289" preserveAspectRatio="none">'
-      + '<polyline points="' + liveWavePath(samples, 1448, 289) + '" fill="none" stroke="' + color + '" stroke-width="4"/></svg>'
+      + '<polyline' + (kind ? ' data-lw="' + kind + '"' : '') + ' points="' + liveWavePath(samples, 1448, 289) + '" fill="none" stroke="' + color + '" stroke-width="4"/></svg>'
       + (label ? '<div class="lab" style="color:' + color + '">' + label + '</div>' : '') + '</div>';
   }
   function waveBox(kind, color, label) {

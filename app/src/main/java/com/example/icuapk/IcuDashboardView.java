@@ -482,6 +482,11 @@ public class IcuDashboardView extends View {
         String disease = "";      // 病症（列表"状态"列，PDF 改名为"病症"）
         boolean transferredOut;   // 是否已转出（转出后护疗列表不再显示）
         boolean currentTreatment;
+        // ★ 2026-10-09 回顾转入修复：区分"新建未护疗"与"护疗进行中"。
+        //   新建样本时 currentTreatment=true 仅是占位（作为当前选中病例），并未真正开始护疗；
+        //   只有点过「开始护疗」才置本标志。跨天转入回顾只认本标志，
+        //   否则昨天新建的样本会因 currentTreatment=true 永远留在护疗列表、进不了回顾。
+        boolean treatmentStarted;
         String treatmentStartTime;
         String treatmentEndTime;
         long lastTreatmentSampleAt;
@@ -1589,7 +1594,37 @@ public class IcuDashboardView extends View {
             applyMonitorLevel("green");
             return true;
         }
+        if ("apk_update_open".equals(action)) {
+            /* ★ 2026-10-09 微信文件传输助手升级：打开全屏 WebView 覆盖层 */
+            activity.openApkUpdatePage();
+            return true;
+        }
         if (action.startsWith("tutorial_")) {
+            /* ★ 2026-10-09 教程槽位绑定：pick/play/clear 先于旧 showTutorialAction 处理 */
+            if (action.startsWith("tutorial_slot_pick_")) {
+                try {
+                    activity.pickTutorialMedia(Integer.parseInt(action.substring("tutorial_slot_pick_".length())));
+                } catch (NumberFormatException ignored) {
+                }
+                return true;
+            }
+            if (action.startsWith("tutorial_slot_play_")) {
+                try {
+                    playTutorialSlot(Integer.parseInt(action.substring("tutorial_slot_play_".length())));
+                } catch (NumberFormatException ignored) {
+                }
+                return true;
+            }
+            if (action.startsWith("tutorial_slot_clear_")) {
+                try {
+                    clearTutorialSlot(Integer.parseInt(action.substring("tutorial_slot_clear_".length())));
+                } catch (NumberFormatException ignored) {
+                }
+                if (activity instanceof MainActivity) {
+                    ((MainActivity) activity).notifyLanhuStateChanged();
+                }
+                return true;
+            }
             showTutorialAction(action);
             return true;
         }
@@ -3142,6 +3177,160 @@ public class IcuDashboardView extends View {
         return !TextUtils.isEmpty(getTutorialFingerprint());
     }
 
+    /* ★ 2026-10-09 教程页槽位绑定：6 个槽位各自存一条 JSON {uri, mime, name}，
+       用户通过系统选择器主动挑选照片/视频绑定，替换旧的"按日期倒序取第 N 个"被动模式。 */
+    static final int TUTORIAL_SLOT_COUNT = 6;
+    private static final String KEY_TUTORIAL_SLOT_PREFIX = "tutorial_slot_";
+
+    private SharedPreferences tutorialPrefs() {
+        return activity.getSharedPreferences(PREFS_NAME, 0);
+    }
+
+    /** 读取某槽位绑定；未绑定返回 null。 */
+    private JSONObject tutorialSlotBinding(int slot) {
+        try {
+            String raw = tutorialPrefs().getString(KEY_TUTORIAL_SLOT_PREFIX + slot, "");
+            if (TextUtils.isEmpty(raw)) return null;
+            return new JSONObject(raw);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 供 tutorialState() 扩展：6 槽数组，元素 {uri, mime, name, thumb}，未绑定字段为空串。 */
+    JSONArray getTutorialSlotsJson() {
+        JSONArray arr = new JSONArray();
+        for (int i = 0; i < TUTORIAL_SLOT_COUNT; i++) {
+            JSONObject slot = new JSONObject();
+            try {
+                JSONObject b = tutorialSlotBinding(i);
+                slot.put("uri", b == null ? "" : b.optString("uri", ""));
+                slot.put("mime", b == null ? "" : b.optString("mime", ""));
+                slot.put("name", b == null ? "" : b.optString("name", ""));
+                File thumb = tutorialThumbFile(i);
+                slot.put("thumb", b != null && thumb.exists() ? Uri.fromFile(thumb).toString() : "");
+            } catch (JSONException ignored) {
+            }
+            arr.put(slot);
+        }
+        return arr;
+    }
+
+    private File tutorialThumbFile(int slot) {
+        return new File(new File(activity.getFilesDir(), "tutorial_thumbs"), "slot" + slot + ".jpg");
+    }
+
+    /** 选择器返回后调用：持久化授权、存绑定、后台生成缩略图。 */
+    void onTutorialMediaSelected(int slot, Uri uri) {
+        if (uri == null || slot < 0 || slot >= TUTORIAL_SLOT_COUNT) return;
+        try {
+            activity.getContentResolver().takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (SecurityException ignored) {
+            // 部分提供方不支持持久权限，当前会话仍可读
+        }
+        String mime = activity.getContentResolver().getType(uri);
+        if (TextUtils.isEmpty(mime)) mime = "";
+        String name = displayNameForUri(uri);
+        try {
+            JSONObject b = new JSONObject();
+            b.put("uri", uri.toString());
+            b.put("mime", mime);
+            b.put("name", name);
+            tutorialPrefs().edit().putString(KEY_TUTORIAL_SLOT_PREFIX + slot, b.toString()).apply();
+        } catch (JSONException ignored) {
+        }
+        generateTutorialThumb(slot, uri, mime);
+        Toast.makeText(activity, "已绑定到教程位 " + (slot + 1) + "：" + name, Toast.LENGTH_SHORT).show();
+    }
+
+    void clearTutorialSlot(int slot) {
+        tutorialPrefs().edit().remove(KEY_TUTORIAL_SLOT_PREFIX + slot).apply();
+        File thumb = tutorialThumbFile(slot);
+        if (thumb.exists()) thumb.delete();
+        invalidate();
+    }
+
+    /** 播放/查看某槽位绑定的媒体；未绑定则提示先选择。 */
+    void playTutorialSlot(int slot) {
+        JSONObject b = tutorialSlotBinding(slot);
+        if (b == null) {
+            Toast.makeText(activity, "该教程位还未选择照片或视频", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            Uri uri = Uri.parse(b.optString("uri", ""));
+            String mime = b.optString("mime", "video/*");
+            if (TextUtils.isEmpty(mime)) mime = "video/*";
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(uri, mime);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            activity.startActivity(intent);
+        } catch (Exception e) {
+            Toast.makeText(activity, "打开失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /** 后台线程生成缩略图：图片采样解码 / 视频取首帧（MediaMetadataRetriever，framework 自带）。 */
+    private void generateTutorialThumb(final int slot, final Uri uri, final String mime) {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                Bitmap bmp = null;
+                try {
+                    if (mime != null && mime.startsWith("image/")) {
+                        bmp = decodeSampled(uri, 900, 600);
+                    } else {
+                        android.media.MediaMetadataRetriever mmr = new android.media.MediaMetadataRetriever();
+                        try {
+                            mmr.setDataSource(activity, uri);
+                            bmp = mmr.getFrameAtTime(0);
+                        } finally {
+                            mmr.release();
+                        }
+                    }
+                    if (bmp == null) return;
+                    File out = tutorialThumbFile(slot);
+                    out.getParentFile().mkdirs();
+                    FileOutputStream fos = new FileOutputStream(out);
+                    bmp.compress(Bitmap.CompressFormat.JPEG, 85, fos);
+                    fos.close();
+                    bmp.recycle();
+                    activity.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            if (activity instanceof MainActivity) {
+                                ((MainActivity) activity).notifyLanhuStateChanged();
+                            }
+                        }
+                    });
+                } catch (Exception ignored) {
+                }
+            }
+        }, "tutorial-thumb").start();
+    }
+
+    /** 按目标尺寸采样解码 content Uri 图片，避免大图 OOM。 */
+    private Bitmap decodeSampled(Uri uri, int reqW, int reqH) throws IOException {
+        BitmapFactory.Options bounds = new BitmapFactory.Options();
+        bounds.inJustDecodeBounds = true;
+        java.io.InputStream in = activity.getContentResolver().openInputStream(uri);
+        if (in == null) return null;
+        BitmapFactory.decodeStream(in, null, bounds);
+        in.close();
+        int sample = 1;
+        while (bounds.outWidth / (sample * 2) >= reqW && bounds.outHeight / (sample * 2) >= reqH) {
+            sample *= 2;
+        }
+        BitmapFactory.Options opts = new BitmapFactory.Options();
+        opts.inSampleSize = sample;
+        in = activity.getContentResolver().openInputStream(uri);
+        if (in == null) return null;
+        Bitmap bmp = BitmapFactory.decodeStream(in, null, opts);
+        in.close();
+        return bmp;
+    }
+
     private String normalizeMonitorLevelColor(String color) {
         if ("red".equals(color) || "yellow".equals(color) || "green".equals(color)) {
             return color;
@@ -3616,6 +3805,7 @@ public class IcuDashboardView extends View {
         item.put("department", safeJsonText(patient.department));
         item.put("followUpDate", safeJsonText(patient.followUpDate));
         item.put("currentTreatment", patient.currentTreatment);
+        item.put("treatmentStarted", patient.treatmentStarted);
         item.put("treatmentStartTime", patient.treatmentStartTime);
         item.put("treatmentEndTime", patient.treatmentEndTime);
         item.put("lastTreatmentSampleAt", patient.lastTreatmentSampleAt);
@@ -3694,6 +3884,7 @@ public class IcuDashboardView extends View {
                 item.put("disease", patient.disease);
                 item.put("transferredOut", patient.transferredOut);
                 item.put("currentTreatment", patient.currentTreatment);
+                item.put("treatmentStarted", patient.treatmentStarted);
                 item.put("treatmentStartTime", patient.treatmentStartTime);
                 item.put("treatmentEndTime", patient.treatmentEndTime);
                 item.put("lastTreatmentSampleAt", patient.lastTreatmentSampleAt);
@@ -3969,6 +4160,8 @@ public class IcuDashboardView extends View {
         patient.disease = item.optString("disease", "");
         patient.transferredOut = item.optBoolean("transferredOut", false);
         patient.currentTreatment = item.optBoolean("currentTreatment", index == 0);
+        // 旧数据没有 treatmentStarted 字段：按 currentTreatment 兜底（保持旧行为，不意外转回顾）
+        patient.treatmentStarted = item.optBoolean("treatmentStarted", patient.currentTreatment);
         patient.treatmentStartTime = item.optString("treatmentStartTime", patient.visitDate);
         patient.treatmentEndTime = item.optString("treatmentEndTime",
                 patient.currentTreatment ? "进行中" : patient.visitDate);
@@ -4065,6 +4258,8 @@ public class IcuDashboardView extends View {
                         item.optString("visitDate", currentTimeText()),
                         item.optString("note", ""));
                 patient.currentTreatment = item.optBoolean("currentTreatment", i == 0);
+                // 旧版存储路径同样读取（缺省按 currentTreatment 兜底，保持旧行为）
+                patient.treatmentStarted = item.optBoolean("treatmentStarted", patient.currentTreatment);
                 patient.treatmentStartTime = item.optString("treatmentStartTime", patient.visitDate);
                 patient.treatmentEndTime = item.optString("treatmentEndTime", patient.currentTreatment ? "进行中" : patient.visitDate);
                 patient.lastTreatmentSampleAt = item.optLong("lastTreatmentSampleAt", 0L);
@@ -5027,10 +5222,7 @@ public class IcuDashboardView extends View {
     private List<PatientCase> getCareListCases() {
         List<PatientCase> out = new ArrayList<>();
         for (PatientCase patient : cases) {
-            if (patient.transferredOut) {
-                continue;
-            }
-            if (patient.currentTreatment || isSameDay(patient.visitDate)) {
+            if (isInCareList(patient)) {
                 out.add(patient);
             }
         }
@@ -5067,7 +5259,9 @@ public class IcuDashboardView extends View {
         if (patient.transferredOut) {
             return false;
         }
-        return patient.currentTreatment || isSameDay(patient.visitDate);
+        // 当天新建必显示；跨天后仅「真正开始过护疗且未结束」的才保留（连续多日护疗），
+        // 仅新建未护疗的样本过凌晨 0 点转入回顾。
+        return (patient.currentTreatment && patient.treatmentStarted) || isSameDay(patient.visitDate);
     }
 
     private JSONArray historyCasesToJson() throws JSONException {
@@ -5241,6 +5435,7 @@ public class IcuDashboardView extends View {
                 "", "", "", nextNo, now, "");
         created.pendingInitialEntry = true;
         created.currentTreatment = true;
+        created.treatmentStarted = false;   // 仅新建，未开始护疗：跨天后转入回顾
         created.treatmentStartTime = now;
         created.treatmentEndTime = "进行中";
         for (TreatmentEntry entry : created.treatmentEntries) {
@@ -5299,6 +5494,7 @@ public class IcuDashboardView extends View {
             }
         }
         patient.currentTreatment = true;
+        patient.treatmentStarted = true;    // 真正开始护疗：连续多日跨天保留在护疗列表
         patient.treatmentStartTime = now;
         patient.treatmentEndTime = "进行中";
         patient.pendingInitialEntry = false;

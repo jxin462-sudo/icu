@@ -34,6 +34,16 @@ import android.webkit.ValueCallback;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.ConsoleMessage;
+import android.webkit.CookieManager;
+import android.webkit.WebChromeClient;
+import android.webkit.WebResourceRequest;
+import android.webkit.URLUtil;
+import android.os.Environment;
+import android.os.Message;
+import android.widget.Button;
+import android.widget.LinearLayout;
+import android.widget.ProgressBar;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -52,6 +62,10 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
     private static final int REQUEST_VIDEO_PERMISSION = 1002;
     private static final int REQUEST_IMAGE_PERMISSION = 1003;
     private static final int REQUEST_TUTORIAL_PERMISSION = 1004;
+    /* ★ 2026-10-09 教程页槽位媒体选择 / 升级安装未知来源授权 */
+    private static final int REQUEST_TUTORIAL_MEDIA_PICK = 1005;
+    private static final int REQUEST_UNKNOWN_SOURCES = 1006;
+    private int pendingTutorialSlot = -1;
     private static final String HOST_CONNECTION_PREFS = "host_connection";
     private static final String KEY_LAST_HOST_DEVICE_ID = "last_host_device_id";
     private static final String KEY_TUTORIAL_PERMISSION_ASKED = "tutorial_permission_asked";
@@ -1047,6 +1061,21 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
+        /* ★ 2026-10-09 教程槽位媒体选择：SAF 选择器无需存储权限，取消时只需复位 pendingSlot */
+        if (requestCode == REQUEST_TUTORIAL_MEDIA_PICK) {
+            int slot = pendingTutorialSlot;
+            pendingTutorialSlot = -1;
+            if (resultCode == RESULT_OK && data != null && data.getData() != null && slot >= 0) {
+                dashboardView.onTutorialMediaSelected(slot, data.getData());
+                notifyLanhuStateChanged();
+            }
+            return;
+        }
+        /* ★ 2026-10-09 未知来源授权返回后继续安装 */
+        if (requestCode == REQUEST_UNKNOWN_SOURCES) {
+            resumePendingApkInstall();
+            return;
+        }
         if (resultCode != RESULT_OK || data == null || data.getData() == null) {
             return;
         }
@@ -1094,6 +1123,25 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         SharedPreferences preferences = getSharedPreferences(HOST_CONNECTION_PREFS, MODE_PRIVATE);
         if (!TextUtils.equals(deviceId, preferences.getString(KEY_LAST_HOST_DEVICE_ID, ""))) {
             preferences.edit().putString(KEY_LAST_HOST_DEVICE_ID, deviceId).apply();
+        }
+    }
+
+    /**
+     * ★ 2026-10-09 教程页槽位选择：调起系统文档选择器挑照片/视频。
+     * SAF ACTION_OPEN_DOCUMENT 由用户显式授权，无需 READ_MEDIA_* 权限。
+     */
+    public void pickTutorialMedia(int slot) {
+        pendingTutorialSlot = slot;
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "video/*"});
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        try {
+            startActivityForResult(intent, REQUEST_TUTORIAL_MEDIA_PICK);
+        } catch (Exception e) {
+            pendingTutorialSlot = -1;
+            Toast.makeText(this, "无法打开文件选择器: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
 
@@ -1333,6 +1381,10 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
 
     @Override
     public void onBackPressed() {
+        if (updateOverlay != null && updateOverlay.getVisibility() == View.VISIBLE) {
+            closeApkUpdatePage();
+            return;
+        }
         if (dismissCameraFullscreenOverlay()) {
             return;
         }
@@ -1789,6 +1841,7 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
                 root.put("canAskAgain", canAskTutorialPermission());
                 root.put("thumbnails", queryTutorialThumbnails());
                 root.put("videoIds", queryTutorialVideoIds());
+                root.put("slots", dashboardView.getTutorialSlotsJson());
                 root.put("firstLoad", !dashboardView.hasRecordedTutorialFingerprint());
                 return root.toString();
             } catch (Exception exception) {
@@ -2318,5 +2371,432 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
                 });
             }
         });
+    }
+
+    /* ======================================================================
+       ★ 2026-10-09 微信文件传输助手 APK 升级（移植自 test project 的 Kotlin demo）
+       流程：全屏 WebView 打开 filehelper.weixin.qq.com（伪装桌面 UA）→
+       拦截下载（DownloadListener / window.open 接管 / Blob JS hook 三路）→
+       带 Cookie 子线程下载 → 校验包名+versionCode → PackageInstaller 调起安装。
+       ====================================================================== */
+
+    private static final String FILE_HELPER_URL = "https://filehelper.weixin.qq.com/";
+
+    /* 传输助手网页版只放行电脑浏览器，需伪装成桌面版 Chrome */
+    private static final String DESKTOP_UA =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+                    "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+    /* 网页可能用 JS 生成 Blob 触发下载（不经过 DownloadListener），
+       注入该脚本把 Blob 内容转成 base64 交给原生层 */
+    private static final String BLOB_HOOK_JS =
+            "(function() {" +
+            "  if (window.__apkHookInstalled) return 'already';" +
+            "  window.__apkHookInstalled = true;" +
+            "  var blobMap = {};" +
+            "  var origCreate = URL.createObjectURL.bind(URL);" +
+            "  URL.createObjectURL = function(obj) {" +
+            "    var url = origCreate(obj);" +
+            "    try { if (obj instanceof Blob) blobMap[url] = obj; } catch (e) {}" +
+            "    return url;" +
+            "  };" +
+            "  function sendBlob(blob, name) {" +
+            "    var reader = new FileReader();" +
+            "    reader.onload = function() {" +
+            "      AndroidUpdateBridge.onBlobDownload(String(reader.result), name || ('file_' + Date.now()));" +
+            "    };" +
+            "    reader.onerror = function() { AndroidUpdateBridge.onJsError('FileReader 读取失败'); };" +
+            "    reader.readAsDataURL(blob);" +
+            "  }" +
+            "  function handleAnchor(a) {" +
+            "    try {" +
+            "      var href = a.href || '';" +
+            "      if (href.indexOf('blob:') !== 0) return;" +
+            "      var name = a.getAttribute('download') || '';" +
+            "      AndroidUpdateBridge.onJsLog('捕获到 Blob 下载: ' + (name || '(无文件名)'));" +
+            "      var blob = blobMap[href];" +
+            "      if (blob) { sendBlob(blob, name); }" +
+            "      else {" +
+            "        fetch(href).then(function(r){ return r.blob(); }).then(function(b){ sendBlob(b, name); })" +
+            "          .catch(function(err){ AndroidUpdateBridge.onJsError('Blob 读取失败: ' + err); });" +
+            "      }" +
+            "    } catch (e) { AndroidUpdateBridge.onJsError('handleAnchor: ' + e); }" +
+            "  }" +
+            "  document.addEventListener('click', function(e) {" +
+            "    var el = e.target;" +
+            "    while (el && el.tagName !== 'A') el = el.parentElement;" +
+            "    if (el) handleAnchor(el);" +
+            "  }, true);" +
+            "  var origClick = HTMLAnchorElement.prototype.click;" +
+            "  HTMLAnchorElement.prototype.click = function() {" +
+            "    handleAnchor(this);" +
+            "    return origClick.apply(this, arguments);" +
+            "  };" +
+            "  return 'ok';" +
+            "})();";
+
+    private LinearLayout updateOverlay;
+    private WebView updateWebView;
+    private TextView updateStatus;
+    private ProgressBar updateProgress;
+    private File pendingInstallApk;
+
+    /** 由 upgrade-sw 页「选择文件」按钮触发（action = apk_update_open）。 */
+    public void openApkUpdatePage() {
+        if (updateOverlay == null) {
+            buildUpdateOverlay();
+        }
+        updateOverlay.setVisibility(View.VISIBLE);
+        updateWebView.loadUrl(FILE_HELPER_URL);
+        setUpdateStatus("正在打开微信文件传输助手…");
+    }
+
+    void closeApkUpdatePage() {
+        if (updateOverlay != null) {
+            updateOverlay.setVisibility(View.GONE);
+        }
+        if (updateWebView != null) {
+            updateWebView.stopLoading();
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void buildUpdateOverlay() {
+        updateOverlay = new LinearLayout(this);
+        updateOverlay.setOrientation(LinearLayout.VERTICAL);
+        updateOverlay.setBackgroundColor(Color.WHITE);
+        updateOverlay.setVisibility(View.GONE);
+
+        /* 标题栏：标题 + 状态 + 关闭 */
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setBackgroundColor(Color.rgb(245, 247, 251));
+        int pad = (int) (12 * getResources().getDisplayMetrics().density);
+        header.setPadding(pad, pad, pad, pad);
+
+        TextView title = new TextView(this);
+        title.setText("检查更新 · 微信文件传输助手");
+        title.setTextSize(16);
+        title.setTextColor(Color.rgb(28, 36, 48));
+        header.addView(title, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1));
+
+        Button close = new Button(this);
+        close.setText("关闭");
+        close.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                closeApkUpdatePage();
+            }
+        });
+        header.addView(close, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        updateOverlay.addView(header, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        updateStatus = new TextView(this);
+        updateStatus.setTextSize(13);
+        updateStatus.setTextColor(Color.rgb(90, 100, 120));
+        updateStatus.setPadding(pad, pad / 2, pad, pad / 2);
+        updateOverlay.addView(updateStatus, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        updateProgress = new ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+        updateProgress.setVisibility(View.GONE);
+        updateOverlay.addView(updateProgress, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        updateWebView = new WebView(this);
+        setupUpdateWebView(updateWebView);
+        updateOverlay.addView(updateWebView, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1));
+
+        rootView.addView(updateOverlay, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private void setupUpdateWebView(final WebView webView) {
+        CookieManager.getInstance().setAcceptCookie(true);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
+
+        WebSettings settings = webView.getSettings();
+        settings.setJavaScriptEnabled(true);
+        settings.setDomStorageEnabled(true);
+        settings.setUserAgentString(DESKTOP_UA);
+        /* 桌面版网页在平板上的显示适配 */
+        settings.setUseWideViewPort(true);
+        settings.setLoadWithOverviewMode(true);
+        settings.setSupportZoom(true);
+        settings.setBuiltInZoomControls(true);
+        settings.setDisplayZoomControls(false);
+        /* 网页可能用 window.open 触发下载，需要接管新窗口请求 */
+        settings.setSupportMultipleWindows(true);
+
+        webView.addJavascriptInterface(new UpdateJsBridge(), "AndroidUpdateBridge");
+
+        webView.setWebViewClient(new WebViewClient() {
+            @Override
+            public void onPageFinished(WebView view, String url) {
+                super.onPageFinished(view, url);
+                view.evaluateJavascript(BLOB_HOOK_JS, null);
+                setUpdateStatus("已打开文件传输助手。扫码登录后发送 APK，并在页面中点击该文件的下载按钮。");
+            }
+        });
+
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onConsoleMessage(ConsoleMessage msg) {
+                if (msg.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                    setUpdateStatus("页面 JS 错误：" + msg.message());
+                }
+                return true;
+            }
+
+            /* 接管 window.open / target=_blank：下载链接自己处理，普通链接在主 WebView 打开 */
+            @Override
+            public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
+                WebView temp = new WebView(view.getContext());
+                temp.setWebViewClient(new WebViewClient() {
+                    @Override
+                    public boolean shouldOverrideUrlLoading(WebView v, WebResourceRequest request) {
+                        String u = request.getUrl().toString();
+                        String name = extractApkName(u);
+                        if (name != null) {
+                            startApkDownload(u, name);
+                        } else {
+                            setUpdateStatus("捕获到新窗口请求：" + u);
+                            if (u.startsWith("http")) {
+                                webView.loadUrl(u);
+                            }
+                        }
+                        v.destroy();
+                        return true;
+                    }
+                });
+                ((WebView.WebViewTransport) resultMsg.obj).setWebView(temp);
+                resultMsg.sendToTarget();
+                return true;
+            }
+        });
+
+        webView.setDownloadListener(new android.webkit.DownloadListener() {
+            @Override
+            public void onDownloadStart(String url, String userAgent, String contentDisposition,
+                                        String mimetype, long contentLength) {
+                String rawName = URLUtil.guessFileName(url, contentDisposition, mimetype);
+                String fileName = normalizeApkName(rawName);
+                if (fileName != null) {
+                    startApkDownload(url, fileName);
+                } else {
+                    Toast.makeText(MainActivity.this, "已忽略非 APK 文件：" + rawName, Toast.LENGTH_SHORT).show();
+                }
+            }
+        });
+    }
+
+    public class UpdateJsBridge {
+        @JavascriptInterface
+        public void onBlobDownload(final String dataUrl, final String fileName) {
+            final String normalized = normalizeApkName(fileName);
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    if (normalized == null) {
+                        Toast.makeText(MainActivity.this, "已忽略非 APK 文件：" + fileName, Toast.LENGTH_SHORT).show();
+                    } else {
+                        Toast.makeText(MainActivity.this, "已拦截到 APK 下载：" + normalized, Toast.LENGTH_SHORT).show();
+                        setUpdateStatus("已捕获网页内文件 " + normalized + "，正在保存…");
+                        new Thread(new Runnable() {
+                            @Override
+                            public void run() {
+                                saveBlobApk(dataUrl, normalized);
+                            }
+                        }, "apk-blob-save").start();
+                    }
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void onJsError(final String msg) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    setUpdateStatus("JS 异常：" + msg);
+                }
+            });
+        }
+
+        @JavascriptInterface
+        public void onJsLog(final String msg) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    setUpdateStatus(msg);
+                }
+            });
+        }
+    }
+
+    private void saveBlobApk(String dataUrl, String fileName) {
+        try {
+            String base64 = dataUrl.substring(dataUrl.indexOf("base64,") < 0 ? 0 : dataUrl.indexOf("base64,"));
+            base64 = base64.replace("base64,", "");
+            byte[] bytes = Base64.decode(base64, Base64.DEFAULT);
+            File target = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName);
+            if (target.getParentFile() != null) {
+                target.getParentFile().mkdirs();
+            }
+            java.io.FileOutputStream fos = new java.io.FileOutputStream(target);
+            fos.write(bytes);
+            fos.close();
+            final long size = bytes.length;
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    Toast.makeText(MainActivity.this, "下载完成（" + formatSize(size) + "）", Toast.LENGTH_SHORT).show();
+                    onApkDownloaded(target);
+                }
+            });
+        } catch (final Exception e) {
+            runOnUiThread(new Runnable() {
+                @Override
+                public void run() {
+                    setUpdateStatus("保存失败：" + e.getMessage());
+                }
+            });
+        }
+    }
+
+    private void startApkDownload(String url, final String fileName) {
+        Toast.makeText(this, "已拦截到 APK 下载：" + fileName, Toast.LENGTH_SHORT).show();
+        setUpdateStatus("拦截到 APK：" + fileName + "，开始下载…");
+        updateProgress.setVisibility(View.VISIBLE);
+        updateProgress.setIndeterminate(true);
+        updateProgress.setProgress(0);
+
+        String cookie = CookieManager.getInstance().getCookie(url);
+        String userAgent = updateWebView.getSettings().getUserAgentString();
+        final File target = new File(getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), fileName);
+
+        ApkDownloader.download(url, cookie, userAgent, target, new ApkDownloader.Callback() {
+            @Override
+            public void onProgress(final long downloadedBytes, final long totalBytes) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        if (totalBytes > 0) {
+                            updateProgress.setIndeterminate(false);
+                            updateProgress.setProgress((int) ((downloadedBytes * 100) / totalBytes));
+                            setUpdateStatus("正在下载 " + fileName + "：" + formatSize(downloadedBytes) + " / " + formatSize(totalBytes));
+                        } else {
+                            updateProgress.setIndeterminate(true);
+                            setUpdateStatus("正在下载 " + fileName + "：已下载 " + formatSize(downloadedBytes));
+                        }
+                    }
+                });
+            }
+
+            @Override
+            public void onComplete(final File file, final Exception error) {
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        updateProgress.setVisibility(View.GONE);
+                        updateProgress.setIndeterminate(false);
+                        if (error != null) {
+                            setUpdateStatus("下载失败：" + error.getMessage());
+                            Toast.makeText(MainActivity.this, "APK 下载失败，请重试", Toast.LENGTH_LONG).show();
+                        } else if (file != null) {
+                            Toast.makeText(MainActivity.this, "下载完成：" + fileName, Toast.LENGTH_SHORT).show();
+                            onApkDownloaded(file);
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    /* 微信会把 APK 改名为 xxx.apk.1 甚至 xxx.apk.1.1，保存前剥掉所有数字后缀 */
+    private String normalizeApkName(String raw) {
+        if (raw == null) return null;
+        if (raw.toLowerCase().endsWith(".apk")) return raw;
+        String stripped = raw.replaceAll("(?i)(\\.apk)(\\.\\d+)+$", "$1");
+        return stripped.toLowerCase().endsWith(".apk") ? stripped : null;
+    }
+
+    /* 微信媒体下载链接的文件名在 encryfilename 参数里，退而求其次再从 URL 猜测 */
+    private String extractApkName(String url) {
+        if (url == null || !url.startsWith("http")) return null;
+        String encry = Uri.parse(url).getQueryParameter("encryfilename");
+        if (encry != null) {
+            String n = normalizeApkName(encry);
+            if (n != null) return n;
+        }
+        return normalizeApkName(URLUtil.guessFileName(url, null, null));
+    }
+
+    private void onApkDownloaded(File file) {
+        ApkInstaller.CheckResult result = ApkInstaller.checkUpdate(this, file);
+        switch (result.code) {
+            case ApkInstaller.CHECK_NEWER:
+                setUpdateStatus("发现新版本 v" + result.newVersionName + "（当前 v" + result.currentVersionName + "），开始安装…");
+                requestApkInstall(file);
+                break;
+            case ApkInstaller.CHECK_NOT_NEWER:
+                setUpdateStatus("下载的 APK（v" + result.newVersionName + "）不高于当前版本，已忽略。");
+                break;
+            case ApkInstaller.CHECK_WRONG_PACKAGE:
+                setUpdateStatus("APK 包名（" + result.apkPackage + "）与本应用不一致，已忽略。");
+                break;
+            default:
+                setUpdateStatus("APK 文件无法解析，可能下载不完整，请重试。");
+                break;
+        }
+    }
+
+    private void requestApkInstall(File file) {
+        if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+            pendingInstallApk = file;
+            Toast.makeText(this, "请允许本应用安装未知来源应用", Toast.LENGTH_LONG).show();
+            startActivityForResult(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:" + getPackageName())), REQUEST_UNKNOWN_SOURCES);
+        } else {
+            doApkInstall(file);
+        }
+    }
+
+    /* 未知来源授权返回后继续（onActivityResult REQUEST_UNKNOWN_SOURCES） */
+    void resumePendingApkInstall() {
+        File apk = pendingInstallApk;
+        pendingInstallApk = null;
+        if (apk == null) return;
+        if (Build.VERSION.SDK_INT < 26 || getPackageManager().canRequestPackageInstalls()) {
+            doApkInstall(apk);
+        } else {
+            Toast.makeText(this, "未授予安装权限，无法更新", Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private void doApkInstall(File file) {
+        try {
+            ApkInstaller.install(this, file);
+            setUpdateStatus("已提交安装，请在系统弹窗中确认。");
+        } catch (Exception e) {
+            setUpdateStatus("调起安装失败：" + e.getMessage());
+        }
+    }
+
+    private void setUpdateStatus(final String msg) {
+        if (updateStatus != null) {
+            updateStatus.setText(msg);
+        }
+    }
+
+    private static String formatSize(long bytes) {
+        if (bytes >= 1024 * 1024) return String.format("%.1f MB", bytes / 1024.0 / 1024.0);
+        if (bytes >= 1024) return String.format("%.1f KB", bytes / 1024.0);
+        return bytes + " B";
     }
 }
