@@ -123,6 +123,8 @@
     user: '',
     time: '--:--',
     selCaseId: '',
+    /* ★ 2026-10-10 打印页来源标记：'care' = 护疗页底栏打印进入（背景/底栏显示护疗页），其余默认回顾页 */
+    printFrom: '',
     date: '',
     stamp: '',
     session: '',

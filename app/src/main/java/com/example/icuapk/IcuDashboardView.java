@@ -9,6 +9,7 @@ import android.content.DialogInterface;
 import android.database.Cursor;
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
 import android.provider.Settings;
@@ -1019,6 +1020,15 @@ public class IcuDashboardView extends View {
             JSONObject root = new JSONObject();
             String zone = bleManager.getCurrentZone();
             root.put("schemaVersion", TREATMENT_CASES_SCHEMA_VERSION);
+            // ★ 2026-10-10 版本控制：关于页「版本信息」框显示真实 APK 版本（versionName/versionCode 取自 PackageManager，与 build.gradle 单一来源）
+            try {
+                PackageInfo pi = activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0);
+                JSONObject av = new JSONObject();
+                av.put("name", pi.versionName);
+                av.put("code", Build.VERSION.SDK_INT >= 28 ? pi.getLongVersionCode() : pi.versionCode);
+                root.put("appVersion", av);
+            } catch (Exception ignored) {
+            }
             root.put("zone", zone);
             root.put("organization", organizationToJson(currentOrganization()));
             root.put("accountName", accountStore.getCurrentAccount());

@@ -95,7 +95,7 @@
         liveView: '实况', playback: '回放', shot: '截图', rec: '录制', full: '全屏',
         compTemp: '温度补偿（℃）', compO2: '氧浓度补偿（%）', compHum: '湿度补偿（%）',
         compCo2: '二氧化碳浓度补偿（PPM）', compIr: '红外体温补偿（℃）',
-        aboutBasic: '基础信息', aboutVer: '版本信息',
+        aboutBasic: '基础信息', aboutVer: '版本信息', verApp: '软件版本', verCode: '内部版本号',
         tuTitle: '使用教程', tuPick: '＋ 选择照片/视频', tuChange: '重选', tuClear: '移除',
         tuSlot: '教程位', tuHint: '点击空位从相册选择照片或视频；点击已绑定的内容可播放/查看。',
         logFront: '前端调试', logBack: '后端调试', logErr: '错误记录', logComm: '通信记录',
@@ -138,7 +138,7 @@
         liveView: 'Live', playback: 'Playback', shot: 'Snapshot', rec: 'Record', full: 'Full',
         compTemp: 'Temp Comp (℃)', compO2: 'O₂ Comp (%)', compHum: 'Humidity Comp (%)',
         compCo2: 'CO₂ Comp (PPM)', compIr: 'IR Temp Comp (℃)',
-        aboutBasic: 'Basic Info', aboutVer: 'Version Info',
+        aboutBasic: 'Basic Info', aboutVer: 'Version Info', verApp: 'App Version', verCode: 'Version Code',
         tuTitle: 'Tutorial', tuPick: '＋ Pick photo/video', tuChange: 'Change', tuClear: 'Remove',
         tuSlot: 'Slot', tuHint: 'Tap an empty slot to pick a photo or video from the gallery; tap a bound item to play/view it.',
         logFront: 'Frontend', logBack: 'Backend', logErr: 'Errors', logComm: 'Comm',
@@ -352,6 +352,8 @@
     { id: 'edit', label: '编辑', key: 'edit', icon: 'pencil', go: 'new-sample' },
     { id: 'send', label: '数据发送', key: 'dataSend', icon: 'upload', go: 'sending' },
     { id: 'del', label: '删除', key: 'del', icon: 'trash', go: 'del-confirm' },
+    /* ★ 2026-10-10：护疗页加「打印」，复用回顾页打印（act print_report + printing 页） */
+    { id: 'pr', label: '打印', key: 'print', icon: 'print', go: 'printing' },
     { id: 'tu', label: '教程', key: 'tutorial', icon: 'cap', go: 'tutorial' },
   ];
   /* 设计图 5.png（有数据态）底栏不含「教程」，仅空态（3.png）显示 —— 故有数据态过滤掉 */
@@ -958,6 +960,11 @@
   }
   SCREENS['printing'] = {
     name: '打印中', group: '3 回顾', render() {
+      /* ★ 2026-10-10：打印页复用——D.printFrom='care' 时背景/底栏为护疗页（护疗页底栏打印按钮进入），否则回顾页 */
+      if (D.printFrom === 'care') {
+        return PAGE(P.topbar('care'), '<div class="listwrap">' + careTable(D.careRows || []) + '</div>' + CARE_NOTE
+          + P.loadingMask(T('printing', '正在打印......')), P.bottombar(CARE_BAR_FULL, 'pr'));
+      }
       return PAGE(P.topbar('review'), reviewBg() + P.loadingMask(T('printing', '正在打印......')), P.bottombar(REVIEW_BAR, 'p'));
     }
   };

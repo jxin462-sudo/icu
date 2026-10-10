@@ -248,6 +248,12 @@
       D.debugLogs = Array.isArray(S.debugLogs) ? S.debugLogs : [];
       D.commLogs = Array.isArray(S.commLogs) ? S.commLogs : [];
       D.stackLogs = Array.isArray(S.stackLogs) ? S.stackLogs : [];
+      /* ★ 2026-10-10 版本控制：关于页「版本信息」框（原生 appVersion 回推真实 APK 版本） */
+      var av = S.appVersion || {};
+      D.aboutVer = av.name ? [
+        [TT('verApp', '软件版本'), String(av.name)],
+        [TT('verCode', '内部版本号'), String(av.code == null ? '-' : av.code)]
+      ] : [];
       // 当前选中的病例 caseId（用于表格行 sel 类）
       D.selCaseId = (S.patient && S.patient.caseId) || '';
 
@@ -975,6 +981,11 @@
       var sItem = e.target.closest('.send-menu .mi');
       if (sItem) {
         stop(e);
+        /* ★ 2026-10-10：须先在回顾/护疗列表选中样本（或记录单预览历史样本）才可选择发送方式 */
+        var selOk = !!(sheetPreviewCase && sheetPreviewCase.caseId)
+          || (!!D.selCaseId && ((D.reviewRows || []).some(function (r) { return r.caseId && r.caseId === D.selCaseId; })
+            || (D.careRows || []).some(function (r) { return r.caseId && r.caseId === D.selCaseId; })));
+        if (!selOk) { toast(TT('reviewNoSel', '请先选择一个样本')); return; }
         var kind = sItem.dataset.send;
         if (kind === 'file') {
           sendingCard = 'file';
@@ -1048,6 +1059,17 @@
           pendingEditor = true; IcuApp.go('new-sample'); return;
         } // 用 H5 弹窗就地编辑（不弹原生框）
         if (key === 'del') { stop(e); act('patient_delete'); return; }
+        /* ★ 2026-10-10：护疗页「打印」（复用回顾页 print_report），需先在护疗列表选中样本 */
+        if (key === 'print') {
+          stop(e);
+          var TgP = window.T || function (k, fb) { return fb; };
+          var pRows = D.careRows || [];
+          if (!pRows.length) { toast(TgP('reviewNoData', '暂无样本数据，无法执行该操作')); return; }
+          var pPicked = pRows.some(function (r) { return r.caseId && r.caseId === D.selCaseId; });
+          if (!pPicked) { toast(TgP('reviewNoSel', '请先选择一个样本')); return; }
+          D.printFrom = 'care';
+          act('print_report'); IcuApp.go('printing'); return;
+        }
         if (key === 'dataSend') { stop(e); sendingCard = null; IcuApp.go('sending'); return; } // 任务9：进入发送数据页（菜单里再选文件助手/蓝牙）
         if (key === 'tutorial') { stop(e); IcuApp.go('tutorial'); return; } /* ★ 2026-10-09 改为进教程页（槽位绑定照片/视频） */
         if (key === 'careRecord') { /* 交给 app.js 跳 care-record */ return; }
@@ -1063,7 +1085,7 @@
           if (!picked) { stop(e); toast(Tg('reviewNoSel', '请先选择一个样本')); return; }
         }
         if (key === 'query') { /* 交给 app.js 跳 query */ return; }
-        if (key === 'print') { stop(e); act('print_report'); IcuApp.go('printing'); return; }
+        if (key === 'print') { stop(e); D.printFrom = 'review'; act('print_report'); IcuApp.go('printing'); return; }
         if (key === 'exportReport') { stop(e); act('export_report'); IcuApp.go('sending'); return; }
         if (key === 'sendData') { stop(e); sendingCard = null; IcuApp.go('sending'); return; }
         if (key === 'careRecord') { /* 交给 app.js */ return; }
@@ -1164,7 +1186,7 @@
         if (rk === 'recordEdit') { stop(e); openSheetEdit(); return; }
         if (rk === 'recordCancel') { stop(e); D.sheetEdit = null; IcuApp.render(); return; }
         if (rk === 'recordSave') { stop(e); saveSheetEdit(); return; }
-        if (rk === 'print' || rk === '打印' || rk === TT('print', '打印')) { stop(e); act('print_report'); IcuApp.go('printing'); return; }
+        if (rk === 'print' || rk === '打印' || rk === TT('print', '打印')) { stop(e); D.printFrom = ''; act('print_report'); IcuApp.go('printing'); return; }
         if (rk === 'exportReport' || rk === '导出' || rk === TT('exportReport', '导出')) { stop(e); act('export_report'); IcuApp.go('sending'); return; }
         /* 上一样本/下一样本：在 S.cases 全量列表中定位当前样本，切换选中后停留本页并刷新 */
         var rkPrev = TT('recordPrev', '上一样本'), rkNext = TT('recordNext', '下一样本');
