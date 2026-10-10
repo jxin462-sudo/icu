@@ -45,7 +45,10 @@ import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.ProgressBar;
 import android.widget.FrameLayout;
-import android.widget.VideoView;
+import android.view.TextureView;
+import android.view.Surface;
+import android.graphics.SurfaceTexture;
+import android.content.res.AssetFileDescriptor;
 import android.media.MediaPlayer;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -78,7 +81,9 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
     private IcuDashboardView dashboardView;
     private WebView lanhuWebView;
     private FrameLayout rootView;
-    private VideoView bootVideoView;
+    private FrameLayout bootOverlay;
+    private TextureView bootTexture;
+    private MediaPlayer bootPlayer;
     private CameraInlinePreviewView cameraInlinePreviewView;
     private FrameLayout cameraFullscreenOverlay;
     private CameraInlinePreviewView cameraFullscreenPreviewView;
@@ -163,52 +168,92 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         reconnectLastHostIfAvailable();
     }
 
-    /* ★ 2026-10-10 方案A：原生开机动画（boot.mp4，res/raw，不循环）覆盖 WebView，
-       播完/出错/点击跳过均淡出并通知 H5 立即进登录/护理（避免视频结束后的黑底缝隙；5.2s 兜底 timer 会因 current≠splash 自动失效） */
+    /* ★ 2026-10-10 方案A（修订 2）：开机动画改用 TextureView + MediaPlayer 播放 res/raw/boot.mp4。
+       关键：不能用 VideoView——其内部是 SurfaceView，Z-order 默认在宿主窗口之下（"打洞"机制），
+       会被同层的 WebView 遮挡，表现为"黑屏"；TextureView 是普通 View，正常参与 View 层级。
+       数据源用 AssetFileDescriptor 直接读 raw（比 android.resource:// URI 更可靠）。 */
     private void setupBootVideo() {
         try {
-            bootVideoView = new VideoView(this);
-            FrameLayout.LayoutParams vp = new FrameLayout.LayoutParams(
+            bootOverlay = new FrameLayout(this);
+            bootOverlay.setLayoutParams(new FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
-                    FrameLayout.LayoutParams.MATCH_PARENT);
-            bootVideoView.setLayoutParams(vp);
-            bootVideoView.setBackgroundColor(0xFF000000);
-            bootVideoView.setVideoURI(Uri.parse("android.resource://" + getPackageName() + "/" + R.raw.boot));
-            bootVideoView.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+                    FrameLayout.LayoutParams.MATCH_PARENT));
+            bootOverlay.setBackgroundColor(0xFF000000);
+
+            bootTexture = new TextureView(this);
+            bootTexture.setLayoutParams(new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT));
+            bootOverlay.addView(bootTexture);
+
+            bootTexture.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
                 @Override
-                public void onPrepared(MediaPlayer mp) {
-                    try { mp.setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING); } catch (Throwable ignore) {}
+                public void onSurfaceTextureAvailable(SurfaceTexture st, int w, int h) {
+                    startBootPlayer(new Surface(st));
                 }
-            });
-            bootVideoView.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
                 @Override
-                public void onCompletion(MediaPlayer mp) { finishBootVideo(); }
-            });
-            bootVideoView.setOnErrorListener(new MediaPlayer.OnErrorListener() {
+                public void onSurfaceTextureSizeChanged(SurfaceTexture st, int w, int h) {}
                 @Override
-                public boolean onError(MediaPlayer mp, int what, int extra) { finishBootVideo(); return true; }
+                public boolean onSurfaceTextureDestroyed(SurfaceTexture st) {
+                    releaseBootPlayer();
+                    return true;
+                }
+                @Override
+                public void onSurfaceTextureUpdated(SurfaceTexture st) {}
             });
-            bootVideoView.setOnClickListener(new View.OnClickListener() {
+            bootOverlay.setOnClickListener(new View.OnClickListener() {
                 @Override
                 public void onClick(View v) { finishBootVideo(); }
             });
-            rootView.addView(bootVideoView); // 最后添加 = 最上层覆盖 WebView
-            bootVideoView.start();
+            rootView.addView(bootOverlay); // 最后添加 = 最上层覆盖 WebView
         } catch (Throwable t) {
             // 视频异常绝不影响主流程
         }
     }
 
+    private void startBootPlayer(Surface surface) {
+        try {
+            AssetFileDescriptor afd = getResources().openRawResourceFd(R.raw.boot);
+            bootPlayer = new MediaPlayer();
+            bootPlayer.setDataSource(afd.getFileDescriptor(), afd.getStartOffset(), afd.getLength());
+            try { afd.close(); } catch (Throwable ignore) {}
+            bootPlayer.setSurface(surface);
+            bootPlayer.setVideoScalingMode(MediaPlayer.VIDEO_SCALING_MODE_SCALE_TO_FIT_WITH_CROPPING);
+            bootPlayer.setOnCompletionListener(new MediaPlayer.OnCompletionListener() {
+                @Override
+                public void onCompletion(MediaPlayer mp) { finishBootVideo(); }
+            });
+            bootPlayer.setOnErrorListener(new MediaPlayer.OnErrorListener() {
+                @Override
+                public boolean onError(MediaPlayer mp, int what, int extra) { finishBootVideo(); return true; }
+            });
+            bootPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
+                @Override
+                public void onPrepared(MediaPlayer mp) { try { mp.start(); } catch (Throwable ignore) {} }
+            });
+            bootPlayer.prepareAsync();
+        } catch (Throwable t) {
+            finishBootVideo();
+        }
+    }
+
+    private void releaseBootPlayer() {
+        if (bootPlayer != null) {
+            try { bootPlayer.release(); } catch (Throwable ignore) {}
+            bootPlayer = null;
+        }
+    }
+
     private void finishBootVideo() {
-        if (bootVideoView == null || bootVideoView.getVisibility() == View.GONE) return;
+        if (bootOverlay == null || bootOverlay.getVisibility() == View.GONE) return;
         if (lanhuWebView != null) {
             lanhuWebView.evaluateJavascript("if(window.finishSplash)window.finishSplash();", null);
         }
-        bootVideoView.animate().alpha(0f).setDuration(400).withEndAction(new Runnable() {
+        bootOverlay.animate().alpha(0f).setDuration(400).withEndAction(new Runnable() {
             @Override
             public void run() {
-                bootVideoView.setVisibility(View.GONE);
-                try { bootVideoView.stopPlayback(); } catch (Throwable ignore) {}
+                bootOverlay.setVisibility(View.GONE);
+                releaseBootPlayer();
             }
         });
     }
