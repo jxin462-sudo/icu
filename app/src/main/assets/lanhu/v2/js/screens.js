@@ -122,6 +122,7 @@
         reviewNoData: '暂无样本数据，无法执行该操作', reviewNoSel: '请先选择一个样本',
         careEndedNoRestart: '该记录已结束，不能重复开始护疗',
         careNeedDisease: '请先填写病症再开始护疗', careNotEndedPrint: '该样本治疗未结束，不能打印', careNotEndedSend: '该样本治疗未结束，不能发送数据',
+        careNoSample: '暂无样本数据，无法开始治疗',
         /* ★ 任务14：打印页 */
         printerAvail: '可用打印机', printerAddr: '打印机地址', scanPrinter: '扫描',
         addPrinter: '添加打印机', printTest: '打印测试页', uploadLogo: '上传LOGO',

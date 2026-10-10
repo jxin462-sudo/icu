@@ -1421,6 +1421,14 @@ public class IcuDashboardView extends View {
                     if (zone.equals(bleManager.getCurrentZone())) {
                         selectedCaseIndex = index;
                     }
+                    /* ★ 2026-10-10 #85：治疗时长每个样本独立（左右舱各自独立）——
+                       仅当切换的是「当前舱」的样本、且目标不是正在护疗中的那条时，清零本舱治疗计时，
+                       避免把上一个样本的时长带到当前样本；切换另一舱的样本不影响本舱计时 */
+                    PatientCase switched = state.cases.get(index);
+                    boolean keepTimer = switched != null && switched.currentTreatment && switched.treatmentStarted;
+                    if (!keepTimer && zone.equals(bleManager.getCurrentZone())) {
+                        bleManager.resetTreatmentTimer();
+                    }
                     lastGeneratedPdf = null;
                     showingSettings = false;
                     saveTreatmentRecordsToStorage();
@@ -3851,6 +3859,9 @@ public class IcuDashboardView extends View {
                 entry.customPeriod = false;
             }
         }
+        /* ★ 2026-10-10 #85：样本结束/归档/删除后清零本舱治疗计时，
+           使状态页与主控页不再显示该样本的残留治疗时长 */
+        bleManager.resetTreatmentTimer();
         lastGeneratedPdf = null;
         saveTreatmentRecordsToStorage();
     }
@@ -5513,6 +5524,8 @@ public class IcuDashboardView extends View {
         cases.add(0, created);
         selectedCaseIndex = 0;
         activeTab = 0;
+        /* ★ 2026-10-10 #85：新样本的治疗数据独立 —— 治疗计时从默认值(0)开始，不沿用上一样本 */
+        bleManager.resetTreatmentTimer();
         lastGeneratedPdf = null;
         saveTreatmentRecordsToStorage();
         /* ★ 2026-10-10 #69：新建样本不再同步设备当前功能状态 —— 避免把上一样本开启的红外/雾化等功能
@@ -5984,6 +5997,9 @@ public class IcuDashboardView extends View {
                         if (selectedCaseIndex >= cases.size()) {
                             selectedCaseIndex = Math.max(0, cases.size() - 1);
                         }
+                        /* ★ 2026-10-10 #85：删除样本后清零本舱治疗计时（左右舱各自独立），
+                           避免已删除样本的治疗时长残留在状态页/主控页 */
+                        bleManager.resetTreatmentTimer();
                         recomputeDailyCaseNoCursor();
                         lastGeneratedPdf = null;
                         saveTreatmentRecordsToStorage();

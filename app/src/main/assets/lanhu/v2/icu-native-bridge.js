@@ -353,6 +353,12 @@
         pr: text(bpm.pr, ''), error: text(bpm.error, ''), mode: text(bpm.mode, '')
       };
       D.bpMode = (bpm.mode === 'manual') ? 'physical' : 'live';
+      /* ★ 2026-10-10 #85：无有效治疗样本（无样本 / 选中已结束 / 样本全删 / 全部进入回顾页）时，
+         状态页与主控页的「设定数据」全部清空，避免把上一个样本的残留值带到新样本。
+         判据与「开始护疗」一致：treatmentEndTime === '进行中' 才算有效治疗中样本。
+         注：ctrlRow1 是环境传感器实时读数（温/氧/湿/CO2），非样本设定项，故保留不清空。 */
+      var curPat = S.patient || {};
+      var treatOK = (curPat.treatmentEndTime === '进行中');
       D.ctrlRow1 = [
         { tKey: 'ctrlTemp', t: '舱内温度 ℃', v: num(h.temp, '--'), p: 60, set: 1, ico: 'thermo' },
         { tKey: 'ctrlO2', t: '氧浓度 %', v: num(h.oxygen, '--'), p: 43, set: 1, ico: 'o2' },
@@ -361,18 +367,18 @@
         { tKey: 'ctrlLevel', t: '监护等级', v: '', level: 1 }
       ];
       D.ctrlRow2 = [
-        { tKey: 'ctrlRed', t: '红外理疗', v: durText(c.redTherapy, c.redTherapyUnlimited, c.redTherapyRemainingMs), on: !!c.redTherapyOn, ico: 'rays' },
-        { tKey: 'ctrlBlue', t: '蓝光理疗', v: durText(c.blueTherapy, c.blueTherapyUnlimited, c.blueTherapyRemainingMs), on: !!c.blueTherapyOn, ico: 'blueLight' },
-        { tKey: 'ctrlUv', t: '紫外消毒', v: c.uvUnlimited ? TT('uv24h', '24h常开') : (c.uvOn ? TT('on', '开') : TT('off', '关')), on: !!c.uvOn, ico: 'uv24' },
-        { tKey: 'ctrlNeb', t: '雾化器', v: durText(c.nebulizer, c.nebulizerUnlimited, c.nebulizerRemainingMs), on: !!c.nebulizerOn, ico: 'neb' },
-        { tKey: 'ctrlAnion', t: '负离子', v: durText(c.anion, c.anionUnlimited, c.anionRemainingMs), on: !!c.anionOn, ico: 'neg' }
+        { tKey: 'ctrlRed', t: '红外理疗', v: treatOK ? durText(c.redTherapy, c.redTherapyUnlimited, c.redTherapyRemainingMs) : '--', on: treatOK ? !!c.redTherapyOn : false, ico: 'rays' },
+        { tKey: 'ctrlBlue', t: '蓝光理疗', v: treatOK ? durText(c.blueTherapy, c.blueTherapyUnlimited, c.blueTherapyRemainingMs) : '--', on: treatOK ? !!c.blueTherapyOn : false, ico: 'blueLight' },
+        { tKey: 'ctrlUv', t: '紫外消毒', v: treatOK ? (c.uvUnlimited ? TT('uv24h', '24h常开') : (c.uvOn ? TT('on', '开') : TT('off', '关'))) : TT('off', '关'), on: treatOK ? !!c.uvOn : false, ico: 'uv24' },
+        { tKey: 'ctrlNeb', t: '雾化器', v: treatOK ? durText(c.nebulizer, c.nebulizerUnlimited, c.nebulizerRemainingMs) : '--', on: treatOK ? !!c.nebulizerOn : false, ico: 'neb' },
+        { tKey: 'ctrlAnion', t: '负离子', v: treatOK ? durText(c.anion, c.anionUnlimited, c.anionRemainingMs) : '--', on: treatOK ? !!c.anionOn : false, ico: 'neg' }
       ];
       D.ctrlRow3 = [
-        { tKey: 'ctrlCold', t: '冷光照明', v: '', on: !!c.coldLightOn, ico: 'cold' },
-        { tKey: 'ctrlWarm', t: '暖光照明', v: '', on: !!c.warmLightOn, ico: 'sun' },
-        { tKey: 'ctrlOuter', t: '外循环', v: '', on: !!c.outerCycleOn, ico: 'loopOut' },
-        { tKey: 'ctrlInner', t: '内循环', v: '', on: !!c.innerCycleOn, ico: 'loopIn' },
-        { tKey: 'ctrlTime', t: '治疗时长', v: text(h.treatmentTime, '--'), on: !!(h.treatmentTime && h.treatmentTime !== '--'), ico: 'spin', big: 1 }
+        { tKey: 'ctrlCold', t: '冷光照明', v: '', on: treatOK ? !!c.coldLightOn : false, ico: 'cold' },
+        { tKey: 'ctrlWarm', t: '暖光照明', v: '', on: treatOK ? !!c.warmLightOn : false, ico: 'sun' },
+        { tKey: 'ctrlOuter', t: '外循环', v: '', on: treatOK ? !!c.outerCycleOn : false, ico: 'loopOut' },
+        { tKey: 'ctrlInner', t: '内循环', v: '', on: treatOK ? !!c.innerCycleOn : false, ico: 'loopIn' },
+        { tKey: 'ctrlTime', t: '治疗时长', v: treatOK ? text(h.treatmentTime, '--') : '--', on: treatOK ? !!(h.treatmentTime && h.treatmentTime !== '--') : false, ico: 'spin', big: 1 }
       ];
 
       /* ★ 任务23：回顾页双击行预览治疗记录单。预览历史病例（不在 S.cases 当前舱列表）时
@@ -1134,6 +1140,8 @@
           stop(e);
           /* ★ 2026-10-10 #70：已结束的样本不能重复开启治疗 —— 原生会拦截，但 H5 也不能跳进状态页 */
           var sc = careSelCase() /* ★ #81 用有效高亮行 */ ;
+          /* ★ 2026-10-10 #85：无样本（列表为空 / 未选中 / 样本已全部删除或全部进入回顾）不能开始治疗 */
+          if (!sc) { toast(TT('careNoSample', '暂无样本数据，无法开始治疗')); return; }
           if (sc && sc.treatmentStarted && sc.treatmentEndTime && sc.treatmentEndTime !== '进行中') {
             toast(TT('careEndedNoRestart', '该记录已结束，不能重复开始护疗'));
             return;
