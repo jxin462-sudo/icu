@@ -244,8 +244,9 @@
   function clockBox() { return '<div class="clock"><b>' + D.time + '</b>' + D.date + '</div>'; }
   function userBox() { return '<div class="userbox">' + I.user + '<span>' + D.user + '</span></div>'; }
 
-  /* 顶栏（带 护理/回顾/菜单 主航） */
-  function topbar(active) {
+  /* 顶栏（带 护理/回顾/菜单 主航）
+     ★ 2026-10-10 #65：可选 backGo —— 左上角爪印位渲染返回箭头（详情页用，如治疗记录单），主航高亮仍按 active */
+  function topbar(active, backGo) {
     /* 设计 7.png 实测：爪印区 x0-138（图标居中 x26-54），护理 active 蓝块 x139-318 w180，
        回顾 x~340-480、菜单 x~520-660（图标+文字），右侧 管理员 + 时钟。无竖分隔线。 */
     const tabs = [
@@ -254,7 +255,9 @@
       ['menu', '菜单', 'menu', 520, 141, 'navMenu']
     ];
     return '<div class="topbar">'
-      + '<div class="paw">' + pawLogo() + '</div>'
+      + (backGo
+        ? '<div class="paw backpaw" data-go="' + backGo + '">' + I.back + '<span>' + T('back', '返回') + '</span></div>'
+        : '<div class="paw">' + pawLogo() + '</div>')
       + '<div class="navtabs">' + tabs.map(function (t) {
         return '<div class="navtab' + (t[0] === active ? ' on' : '') + '" data-go="' + t[0]
           + '" style="left:' + t[3] + 'px;width:' + t[4] + 'px">' + I[t[2]] + '<span>' + T(t[5], t[1]) + '</span></div>';

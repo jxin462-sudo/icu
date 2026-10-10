@@ -48,6 +48,10 @@ input,select{font-family:inherit}
 .topbar{position:absolute;left:0;right:0;top:0;height:var(--topbar-h);background:var(--navy);display:flex;align-items:center;color:#fff;z-index:6}
 .topbar .paw{width:139px;height:100%;display:flex;align-items:center;justify-content:center;flex:0 0 auto}
 .topbar .paw svg{width:44px;height:44px;fill:currentColor}
+/* ★ 2026-10-10 #65：详情页顶栏左上角返回箭头（占爪印位，宽度不变） */
+.topbar .backpaw{cursor:pointer;gap:8px;font-size:22px;color:#fff}
+.topbar .backpaw svg{width:28px;height:28px;fill:none}
+.topbar .backpaw:active{opacity:.7}
 .topbar .vsep{display:none}
 .navtabs{position:absolute;left:0;top:0;height:100%;width:100%}
 .navtab{position:absolute;top:0;height:var(--topbar-h);display:flex;align-items:center;justify-content:center;gap:16px;font-size:28px;color:rgba(255,255,255,.88)}
@@ -443,11 +447,12 @@ input.inp::placeholder{color:var(--ink3)}
 /* ★ 任务26a/43 记录单编辑态：行内输入框 —— 统一按新建样本 .inp 模板：卡片底色、无边框、不凸显 */
 .sheet .sheet-in{font:inherit;color:var(--ink);background:var(--card);border:none;border-radius:8px;padding:4px 12px;min-width:0;box-sizing:border-box;outline:none}
 .sheet .sheet-in::placeholder{color:#9aa6b6}
-/* ★ 2026-10-10 #54：编辑态高亮 —— 可编辑区域统一淡黄色底 + 虚线描边 + 呼吸光晕，明显区别于只读内容 */
-.sheet.editing .sheet-in{background:#fff6da;border:2px dashed #e8a33d;box-shadow:0 0 10px rgba(232,163,61,.35);animation:sheetEdGlow 1.6s ease-in-out infinite}
-.sheet.editing .tproj .p.ed,.sheet.editing .concl .opt.ed{background:#fff6da;border:2px dashed #e8a33d;border-radius:8px;box-shadow:0 0 10px rgba(232,163,61,.3)}
-.sheet.editing .vr-add,.sheet.editing .vr-del{box-shadow:0 0 8px rgba(232,163,61,.5)}
-@keyframes sheetEdGlow{0%,100%{box-shadow:0 0 6px rgba(232,163,61,.25)}50%{box-shadow:0 0 14px rgba(232,163,61,.55)}}
+/* ★ 2026-10-10 #67：编辑态高亮改版 —— 去掉黄底+虚线+呼吸光晕（用户反馈不美观）；
+   改为干净的白底 + 主色细实线描边 + 轻投影，聚焦时描边加深，与全局主色一致 */
+.sheet.editing .sheet-in{background:#fff;border:1.5px solid rgba(0,156,255,.55);box-shadow:0 1px 4px rgba(0,60,120,.10)}
+.sheet.editing .sheet-in:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,156,255,.15)}
+.sheet.editing .tproj .p.ed,.sheet.editing .concl .opt.ed{background:#f2f9ff;border:1.5px solid rgba(0,156,255,.45);border-radius:8px}
+.sheet.editing .vr-add,.sheet.editing .vr-del{box-shadow:0 0 0 1.5px rgba(0,156,255,.55);border-radius:8px}
 /* ★ 2026-10-10 #57：扫描到的打印机列表（只显示打印机名，点击添加） */
 .printer-list{flex:1;display:flex;flex-direction:column;gap:8px}
 .printer-item{display:flex;align-items:center;padding:12px 18px;background:var(--card);border-radius:10px;cursor:pointer;font-size:22px}

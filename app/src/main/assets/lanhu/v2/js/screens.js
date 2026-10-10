@@ -763,7 +763,8 @@
           + '<td>' + (r[5] || '--') + '</td><td>' + (r[6] || '--') + '</td><td>' + (r[7] || '--') + '</td></tr>';
       });
       t += '</table>';
-      return PAGE(P.topbar('care'), head + t, P.bottombar(CARE_BAR, 'rec'));
+      /* ★ 2026-10-10 #65：详情页左上角返回箭头 → 护疗记录列表 */
+      return PAGE(P.topbar('care', 'care-record'), head + t, P.bottombar(CARE_BAR, 'rec'));
     }
   };
 
@@ -868,8 +869,10 @@
         { id: 'pr', label: '打印', key: 'print', icon: 'print', go: 'printing' },
         { id: 'ex', label: '导出', key: 'exportReport', icon: 'export', go: 'sending' },
       ], '');
-      /* ★ 2026-10-10 #62：顶栏高亮跟随来源页 —— 从回顾打开的停留在「回顾」，从护疗打开的在「护疗」 */
-      return PAGE(P.topbar(D.sheetFrom === 'review' ? 'review' : 'care'),
+      /* ★ 2026-10-10 #62：顶栏高亮跟随来源页 —— 从回顾打开的停留在「回顾」，从护疗打开的在「护疗」；
+         ★ 2026-10-10 #65：左上角加返回箭头，点返回回到来源页（回顾→review，其余→护疗列表）。
+            打印由原生 printReportViaSystem 按病例数据生成，H5 返回箭头不会进入打印内容。 */
+      return PAGE(P.topbar(D.sheetFrom === 'review' ? 'review' : 'care', D.sheetFrom === 'review' ? 'review' : 'care'),
         /* ★ 2026-10-10 #54：编辑态整单加 .editing，CSS 高亮所有可编辑区域 */
         '<div class="sheet' + (ed ? ' editing' : '') + '">'
         + '<div class="sheet-head"><div class="lg">' + (s.logoUri ? '<img src="' + s.logoUri + '" alt="LOGO">' : 'LOGO') + '</div><div class="hname">' + D.hospital + '</div>'
