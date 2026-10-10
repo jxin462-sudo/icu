@@ -525,6 +525,10 @@ input.inp::placeholder{color:var(--ink3)}
 .qform .qctl.wide{flex:0 0 880px}
 .qform .qinp{width:341px;flex:0 0 auto;height:62px;background:var(--card);border-radius:8px;
   display:flex;align-items:center;padding:0 20px;font-size:24px;color:var(--ink);min-width:0}
+/* ★ 2026-10-10 #58：查询弹窗输入框与新建样本一致 —— 平铺不凸显（去掉 index.html 默认白底+边框） */
+.qmodal .qinp input.icu-input{flex:1;width:100%;height:100%;min-width:0;box-sizing:border-box;border:none;background:transparent;box-shadow:none;outline:none;font:inherit;color:var(--ink);padding:0}
+.qmodal .qinp input.icu-input:focus{border:none;background:transparent}
+.qmodal .qinp input.icu-input::placeholder{color:#9aa6b6}
 .qform .qinp svg{width:26px;height:26px;margin-right:14px;flex:0 0 auto;color:var(--ink2)}
 .qform .qinp span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .qform .tilde{width:198px;flex:0 0 auto;text-align:center;font-size:26px;color:var(--ink2)}
