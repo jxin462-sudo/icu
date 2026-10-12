@@ -454,6 +454,15 @@
     var id = careEffSelId();
     return (S.cases || []).filter(function (c) { return c && c.caseId === id; })[0] || null;
   }
+  /* ★ 2026-10-11 中危修复③：发送页两种发送方式也带上目标样本住院号，供原生按号定位，
+     避免 patient_select 被监护拦截后 H5 与原生选中不一致导致发错样本的报告 */
+  function sendSelCaseNo() {
+    var c = (sheetPreviewCase && sheetPreviewCase.caseId) ? sheetPreviewCase : null;
+    if (!c && D.selCaseId) {
+      c = (S.cases || []).filter(function (x) { return x && x.caseId === D.selCaseId; })[0] || null;
+    }
+    return (c && (c.caseNo || c.recordNo)) || '';
+  }
   /* 治疗已结束 = 已开始过 + 结束时间为具体时刻（非「进行中」） */
   function careEndedOK(c) { return !!(c && c.treatmentStarted && c.treatmentEndTime && c.treatmentEndTime !== '进行中'); }
 
@@ -712,12 +721,10 @@
       //   直接用它的值会把上次录入的数据带进「新建样本」弹窗
       var val = draftNewMode ? '' : (p[key] || '');
       if (key === 'caseNo') {
-        if (draftNewMode) {
-          // 草稿态：住院号由原生生成，UI 显示"自动生成"占位、不可编辑
-          holder.outerHTML = '<div class="inp flex"><input class="icu-input" data-field="caseNo" value="" placeholder="' + TT('autoGen', '自动生成') + '" readonly style="background:#eef3fb;color:#8b95a6"></div>';
-          return;
-        }
-        val = p.caseNo || p.recordNo || '';
+        /* ★ 2026-10-11：住院号自动生成（A=左舱 / B=右舱前缀区分舱位），新建与编辑均只读，不允许手工修改 */
+        var cnVal = draftNewMode ? '' : (p.caseNo || p.recordNo || '');
+        holder.outerHTML = '<div class="inp flex"><input class="icu-input" data-field="caseNo" value="' + cnVal + '" placeholder="' + TT('autoGen', '自动生成') + '" readonly style="background:#eef3fb;color:#8b95a6"></div>';
+        return;
       }
       if (key === 'age') {
         // ★ 2026-10-09 年龄单位改自定义下拉（弃用原生 <select>：真机 WebView 上宽度不受控，用户反馈收窄无效）
@@ -1077,11 +1084,11 @@
           sendingCard = 'file';
           applySendingCard();
           renderShareQr(true);      // 任务28：先显示"生成中…"，再请原生托管报告并回推下载 URL
-          act('export_qr');
+          act('export_qr', sendSelCaseNo());
         } else if (kind === 'ble') {
           sendingCard = 'ble';
           applySendingCard();
-          act('bluetooth_send_report'); // 任务9：蓝牙传输走 S4 既有蓝牙发送（报告 PDF + 系统蓝牙分享）
+          act('bluetooth_send_report', sendSelCaseNo()); // 任务9：蓝牙传输走 S4 既有蓝牙发送（报告 PDF + 系统蓝牙分享）
         }
         return;
       }

@@ -1033,6 +1033,29 @@ public class IcuDashboardView extends View {
         return false;
     }
 
+    /** ★ 2026-10-11 高危修复：监护仪数据无舱位概念，监护有数据时禁止切舱（含按号定位的隐式切舱）。 */
+    private boolean blockZoneSwitchIfMonitoring() {
+        if (am4100Manager.isConnected() && am4100Manager.hasVitals()) {
+            Toast.makeText(activity, "实时监护已有数据，不能切换舱区", Toast.LENGTH_SHORT).show();
+            return true;
+        }
+        return false;
+    }
+
+    /** ★ 2026-10-11 中危修复④：该舱是否还有护疗进行中（舱级治疗计时器归属此样本）的样本。 */
+    private boolean hasRunningTreatmentInZone(String zone) {
+        PatientZoneState state = patientStateForZone(zone);
+        if (state == null || state.cases == null) {
+            return false;
+        }
+        for (PatientCase c : state.cases) {
+            if (c != null && c.currentTreatment && c.treatmentStarted) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     String buildFirstPhaseStateJson() {
         try {
             captureTreatmentSampleIfNeeded(false);
@@ -1189,6 +1212,26 @@ public class IcuDashboardView extends View {
                 ? state.cases.get(fallbackIndex) : null;
     }
 
+    /* ★ 2026-10-11 低危修复②：编辑历史病例的兜底查找跨左右舱（cases 只是当前舱列表，
+       H5 payload 的 zone 缺失时病例可能在另一舱，此前会被静默丢弃） */
+    private PatientCase findCaseByIdAnyZone(String caseId) {
+        if (TextUtils.isEmpty(caseId)) {
+            return null;
+        }
+        for (String z : new String[]{"left", "right"}) {
+            PatientZoneState state = patientStateForZone(z);
+            if (state == null || state.cases == null) {
+                continue;
+            }
+            for (PatientCase c : state.cases) {
+                if (c != null && caseId.equals(c.caseId)) {
+                    return c;
+                }
+            }
+        }
+        return null;
+    }
+
     void syncTempPatientFromWeb(String payload) {
         if (TextUtils.isEmpty(payload)) {
             return;
@@ -1206,15 +1249,8 @@ public class IcuDashboardView extends View {
             if (patient == null) {
                 // ★ 2026-10-10 #53：回顾页编辑「病症」时病例是历史记录，不在当前舱列表，
                 //   退到全量 cases 里按 caseId 找（与 updateRecordFromText 一致），否则同步被静默丢弃
-                String cid = json.optString("caseId", "");
-                if (!TextUtils.isEmpty(cid)) {
-                    for (PatientCase c : cases) {
-                        if (c != null && cid.equals(c.caseId)) {
-                            patient = c;
-                            break;
-                        }
-                    }
-                }
+                // ★ 2026-10-11 低危修复②：兜底改为跨左右舱查找（cases 仅为当前舱）
+                patient = findCaseByIdAnyZone(json.optString("caseId", ""));
                 if (patient == null) {
                     return;
                 }
@@ -1226,18 +1262,23 @@ public class IcuDashboardView extends View {
             patient.ownerName = optNonEmpty(json, "ownerName", patient.ownerName);
             patient.ownerPhone = optNonEmpty(json, "ownerPhone", patient.ownerPhone);
             patient.doctor = optNonEmpty(json, "doctor", patient.doctor);
-            String incomingCaseNo = optNonEmpty(json, "caseNo", patient.caseNo);
-            String incomingRecordNo = optNonEmpty(json, "recordNo", patient.recordNo);
-            String finalRecordNo = !TextUtils.isEmpty(incomingRecordNo) ? incomingRecordNo : incomingCaseNo;
-            if (caseNoUsedByOther(zone, finalRecordNo, patient)) {
-                Toast.makeText(activity, "病历编号已存在，请输入其他编号", Toast.LENGTH_SHORT).show();
-                return;
-            }
-            patient.caseNo = finalRecordNo;
-            patient.recordNo = finalRecordNo;
+            /* ★ 2026-10-11：住院号自动生成（A=左舱 / B=右舱前缀区分舱位），不允许手工修改——
+               H5 传回的 caseNo/recordNo 一律忽略；仅 pendingInitialEntry 初次落号时按原生生成的编号固化。 */
             if (patient.pendingInitialEntry) {
-                patient.monitorNo = finalRecordNo;
-                updateCaseNoCursorFromText(zone, finalRecordNo);
+                String initNo = optNonEmpty(json, "recordNo", optNonEmpty(json, "caseNo", patient.recordNo));
+                if (TextUtils.isEmpty(initNo)) {
+                    initNo = patient.recordNo;
+                }
+                if (!TextUtils.isEmpty(initNo)) {
+                    if (caseNoUsedByOther(zone, initNo, patient)) {
+                        Toast.makeText(activity, "病历编号已存在，请输入其他编号", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    patient.caseNo = initNo;
+                    patient.recordNo = initNo;
+                    patient.monitorNo = initNo;
+                    updateCaseNoCursorFromText(zone, initNo);
+                }
                 patient.pendingInitialEntry = false;
             }
             patient.visitDate = optNonEmpty(json, "visitDate", patient.visitDate);
@@ -1278,12 +1319,8 @@ public class IcuDashboardView extends View {
             PatientCase patient = findPatientCase(zone, json.optString("caseId", ""), -1);
             if (patient == null) {
                 // 预览历史病例时 caseId 不在当前舱列表，退到全量 cases 里找
-                for (PatientCase c : cases) {
-                    if (c != null && c.caseId != null && c.caseId.equals(json.optString("caseId", ""))) {
-                        patient = c;
-                        break;
-                    }
-                }
+                // ★ 2026-10-11 低危修复②：兜底改为跨左右舱查找（cases 仅为当前舱）
+                patient = findCaseByIdAnyZone(json.optString("caseId", ""));
             }
             if (patient == null) {
                 return "保存失败：未找到对应样本";
@@ -1426,9 +1463,11 @@ public class IcuDashboardView extends View {
                     /* ★ 2026-10-10 #85：治疗时长每个样本独立（左右舱各自独立）——
                        仅当切换的是「当前舱」的样本、且目标不是正在护疗中的那条时，清零本舱治疗计时，
                        避免把上一个样本的时长带到当前样本；切换另一舱的样本不影响本舱计时 */
+                    /* ★ 2026-10-11 中危修复④：但本舱仍有其他样本护疗中时不能清零——
+                       舱级计时器属于那条进行中样本，点选历史样本查看不应丢掉它的累计时长 */
                     PatientCase switched = state.cases.get(index);
                     boolean keepTimer = switched != null && switched.currentTreatment && switched.treatmentStarted;
-                    if (!keepTimer && zone.equals(bleManager.getCurrentZone())) {
+                    if (!keepTimer && zone.equals(bleManager.getCurrentZone()) && !hasRunningTreatmentInZone(zone)) {
                         bleManager.resetTreatmentTimer();
                     }
                     lastGeneratedPdf = null;
@@ -1742,6 +1781,11 @@ public class IcuDashboardView extends View {
         if ("tablet_zone_left".equals(action) || "tablet_zone_right".equals(action)) {
             if (!canSwitchZone()) {
                 Toast.makeText(activity, "无权限：仅工程师可切换左/右舱", Toast.LENGTH_SHORT).show();
+                return true;
+            }
+            // ★ 2026-10-11 高危修复：监护仪(AM4100)无舱位概念，实时体征/波形会写入"当前舱选中样本"。
+            //   监护有数据时不允许切舱，否则后续实时数据会落入另一舱样本（跨舱串扰）。
+            if (blockZoneSwitchIfMonitoring()) {
                 return true;
             }
             switchPatientZone("tablet_zone_left".equals(action) ? "left" : "right");
@@ -5155,6 +5199,9 @@ public class IcuDashboardView extends View {
         bleManager.setCurrentZone(zone);
         selectedCaseIndex = clampIndex(activePatientState().selectedCaseIndex, cases.size());
         searchKeyword = "";
+        /* ★ 2026-10-11 低危修复①：回顾页筛选条件是全局一份，切舱后应清除，
+           避免在另一舱沿用旧舱的筛选条件 */
+        reviewQueryFilter = null;
         // 抓拍选中项是「舱内下标」，切舱后必须重置，否则会指向另一舱的截图。
         selectedCameraSnapshotIndex = activeCameraSnapshotCount() <= 0 ? -1 : 0;
         lastGeneratedPdf = null;
@@ -5334,6 +5381,10 @@ public class IcuDashboardView extends View {
         }
         String zone = zoneOfPatient(patient);
         if (!zone.equals(currentZoneNormalized()) && canSwitchZone()) {
+            // ★ 2026-10-11 高危修复：监护有数据时，按号定位也不允许静默切舱（避免实时数据落入另一舱）
+            if (blockZoneSwitchIfMonitoring()) {
+                return false;
+            }
             switchPatientZone(zone);
         }
         PatientZoneState state = patientStateForZone(zone);
@@ -5342,6 +5393,12 @@ public class IcuDashboardView extends View {
             state.selectedCaseIndex = index;
             if (zone.equals(currentZoneNormalized())) {
                 selectedCaseIndex = index;
+            }
+            /* ★ 2026-10-11 低危修复③：与 patient_select_ 的计时行为对齐——
+               目标不是护疗中样本且本舱无进行中治疗时清零舱级计时（有进行中治疗则保留） */
+            boolean keepTimer = patient.currentTreatment && patient.treatmentStarted;
+            if (!keepTimer && zone.equals(currentZoneNormalized()) && !hasRunningTreatmentInZone(zone)) {
+                bleManager.resetTreatmentTimer();
             }
             lastGeneratedPdf = null;
         }
@@ -5848,6 +5905,9 @@ public class IcuDashboardView extends View {
         // final EditText followUpDate = addInput(form, "复诊时间", patient.followUpDate, InputType.TYPE_CLASS_TEXT);
         final EditText recordNo = addInput(form, "病历号", patient.recordNo, InputType.TYPE_CLASS_TEXT);
         recordNo.setFilters(new InputFilter[]{new InputFilter.LengthFilter(12)});
+        /* ★ 2026-10-11：住院号自动生成（前缀 A=左舱 / B=右舱区分舱位），不允许手工修改 */
+        recordNo.setEnabled(false);
+        recordNo.setFocusable(false);
         final EditText visitDate = addInput(form, "就诊日期", patient.visitDate, InputType.TYPE_CLASS_TEXT);
         configureVisitDateInput(visitDate);
         final EditText note = addInput(form, "医嘱备注", patient.note, InputType.TYPE_CLASS_TEXT);
@@ -6713,21 +6773,23 @@ public class IcuDashboardView extends View {
         drawPdfTemplatePatientInfo(canvas, pdfPaint, patient);
         drawPdfTemplateTreatment(canvas, pdfPaint, patient);
         drawPdfTemplateVitalsTable(canvas, pdfPaint, patient, createdAt);
-        // 波形与数值：实时优先，断开时回退病例快照，避免打印时波形/数值全空
+        // ★ 2026-10-11 高危修复：实时监护数据无舱位/样本标识，仅当被打印样本就是当前监护样本时才用实时值，
+        //   否则一律用该样本自身快照——避免给已结束样本打印时嵌入正在监护的其他患者的波形/数值。
+        boolean pdfLive = pdfUseLiveMonitor(patient);
         drawPdfTemplateWave(canvas, pdfPaint, "\u3010\u5fc3\u7535\u56fe\u3011", 333, Color.rgb(55, 220, 92), 0,
-                pdfWaveSamples(am4100Manager.getEcgWaveSamples(), am4100Manager.getHeartRateHistory(),
+                pdfWaveSamples(pdfLive ? am4100Manager.getEcgWaveSamples() : null, pdfLive ? am4100Manager.getHeartRateHistory() : null,
                         patient.monitorSnapshot.ecgWaveSamples, patient.monitorSnapshot.heartRateHistory),
-                pdfFirstNonZero(am4100Manager.getHeartRateValue(),
+                pdfFirstNonZero(pdfLive ? am4100Manager.getHeartRateValue() : 0,
                         pdfVitalsNumber(patient.monitorSnapshot.heartRate)));
         drawPdfTemplateWave(canvas, pdfPaint, "\u3010\u8109\u640f\u6ce2\u5f62\u56fe\u3011", 387, Color.rgb(245, 74, 72), 1,
-                pdfWaveSamples(am4100Manager.getSpo2WaveSamples(), am4100Manager.getSpo2History(),
+                pdfWaveSamples(pdfLive ? am4100Manager.getSpo2WaveSamples() : null, pdfLive ? am4100Manager.getSpo2History() : null,
                         patient.monitorSnapshot.spo2WaveSamples, patient.monitorSnapshot.spo2History),
-                pdfFirstNonZero(am4100Manager.getSpo2Value(),
+                pdfFirstNonZero(pdfLive ? am4100Manager.getSpo2Value() : 0,
                         pdfVitalsNumber(patient.monitorSnapshot.spo2)));
         drawPdfTemplateWave(canvas, pdfPaint, "\u3010\u547c\u5438\u7387\u56fe\u3011", 441, Color.rgb(53, 176, 232), 2,
-                pdfWaveSamples(am4100Manager.getRespWaveSamples(), am4100Manager.getRespHistory(),
+                pdfWaveSamples(pdfLive ? am4100Manager.getRespWaveSamples() : null, pdfLive ? am4100Manager.getRespHistory() : null,
                         patient.monitorSnapshot.respWaveSamples, patient.monitorSnapshot.respHistory),
-                pdfFirstNonZero(am4100Manager.getRespValue(),
+                pdfFirstNonZero(pdfLive ? am4100Manager.getRespValue() : 0,
                         pdfVitalsNumber(patient.monitorSnapshot.resp)));
         drawPdfTemplateEnvironment(canvas, pdfPaint);
         drawPdfTemplateImageAlarm(canvas, pdfPaint, patient);
@@ -6871,21 +6933,24 @@ public class IcuDashboardView extends View {
 
         // 3 列：30 / 245 / 440。第三列原本把值区开到 625，超出 568 被裁；
         // 现在统一传 maxRight，并把它自己的 detailOffset 收到 62。
+        /* ★ 2026-10-11 中危修复⑤：bleManager 的开关/数值/定时是当前舱实时设备状态，
+           仅当被打印样本就是当前样本时才允许作回退；历史样本一律用其自身 treatmentEntries。 */
+        boolean liveTreat = patient != null && patient == currentCase();
         drawPdfTreatmentCheck(canvas, pdfPaint, 30, 141, "\u6052\u6e29\u6cbb\u7597", pdfEntryEnabled(temp),
-                "\u76ee\u6807\u6e29\u5ea6", pdfFirstValue(pdfEntryValue(temp), bleManager.getControlValue(0), bleManager.getCabinTempText()), 68,
+                "\u76ee\u6807\u6e29\u5ea6", pdfFirstValue(pdfEntryValue(temp), liveTreat ? bleManager.getControlValue(0) : null, liveTreat ? bleManager.getCabinTempText() : null), 68,
                 PDF_INFO_RIGHT);
-        drawPdfTreatmentCheck(canvas, pdfPaint, 245, 141, "\u96fe\u5316\u6cbb\u7597", pdfTreatmentOn(10, nebulizer),
-                "\u65f6\u957f", pdfControlDurationText(10), 66, PDF_INFO_RIGHT);
-        drawPdfTreatmentCheck(canvas, pdfPaint, 440, 141, "\u7ea2\u5149\u6cbb\u7597", pdfTreatmentOn(6, redLight),
-                "", pdfControlDurationText(6), 62, PDF_INFO_RIGHT);
+        drawPdfTreatmentCheck(canvas, pdfPaint, 245, 141, "\u96fe\u5316\u6cbb\u7597", pdfTreatmentOn(liveTreat, 10, nebulizer),
+                "\u65f6\u957f", pdfControlDurationText(liveTreat, 10, nebulizer), 66, PDF_INFO_RIGHT);
+        drawPdfTreatmentCheck(canvas, pdfPaint, 440, 141, "\u7ea2\u5149\u6cbb\u7597", pdfTreatmentOn(liveTreat, 6, redLight),
+                "", pdfControlDurationText(liveTreat, 6, redLight), 62, PDF_INFO_RIGHT);
 
-        drawPdfTreatmentCheck(canvas, pdfPaint, 30, 162, "\u6c27\u6c14\u6cbb\u7597", pdfTreatmentOn(13, oxygen),
-                "\u6c27\u6d53\u5ea6", pdfFirstValue(pdfEntryValue(oxygen), bleManager.getControlValue(1), bleManager.getOxygenText()), 68,
+        drawPdfTreatmentCheck(canvas, pdfPaint, 30, 162, "\u6c27\u6c14\u6cbb\u7597", pdfTreatmentOn(liveTreat, 13, oxygen),
+                "\u6c27\u6d53\u5ea6", pdfFirstValue(pdfEntryValue(oxygen), liveTreat ? bleManager.getControlValue(1) : null, liveTreat ? bleManager.getOxygenText() : null), 68,
                 PDF_INFO_RIGHT);
-        drawPdfTreatmentCheck(canvas, pdfPaint, 245, 162, "\u84dd\u5149\u6cbb\u7597", pdfTreatmentOn(7, blueLight),
-                "", pdfControlDurationText(7), 76, 437f);
-        drawPdfTreatmentCheck(canvas, pdfPaint, 440, 162, "\u8d1f\u79bb\u5b50\u6cbb\u7597", pdfTreatmentOn(11, anion),
-                "", pdfControlDurationText(11), 62, PDF_INFO_RIGHT);
+        drawPdfTreatmentCheck(canvas, pdfPaint, 245, 162, "\u84dd\u5149\u6cbb\u7597", pdfTreatmentOn(liveTreat, 7, blueLight),
+                "", pdfControlDurationText(liveTreat, 7, blueLight), 76, 437f);
+        drawPdfTreatmentCheck(canvas, pdfPaint, 440, 162, "\u8d1f\u79bb\u5b50\u6cbb\u7597", pdfTreatmentOn(liveTreat, 11, anion),
+                "", pdfControlDurationText(liveTreat, 11, anion), 62, PDF_INFO_RIGHT);
     }
 
     private void drawPdfTemplateVitalsTable(Canvas canvas, Paint pdfPaint, PatientCase patient, String createdAt) {
@@ -6894,14 +6959,15 @@ public class IcuDashboardView extends View {
         float top = 209;
         float[] widths = {150, 105, 105, 135, 45};
         String[] headers = {"\u65f6\u95f4", "\u5fc3\u7387", "\u8840\u6c27", "\u8840\u538b", "\u4f53\u6e29"};
-        // 实时值优先，断开时回退病例快照
-        String heart = pdfVitalsText(am4100Manager.getHeartRateText(),
+        // ★ 2026-10-11 高危修复：同 drawTemplatePdf，仅当前监护样本允许实时值，其余用样本自身快照
+        boolean pdfLiveVitals = pdfUseLiveMonitor(patient);
+        String heart = pdfVitalsText(pdfLiveVitals ? am4100Manager.getHeartRateText() : null,
                 patient == null ? "" : patient.monitorSnapshot.heartRate);
-        String spo2 = pdfVitalsText(am4100Manager.getSpo2Text(),
+        String spo2 = pdfVitalsText(pdfLiveVitals ? am4100Manager.getSpo2Text() : null,
                 patient == null ? "" : patient.monitorSnapshot.spo2);
-        String bloodPressure = pdfVitalsText(am4100Manager.getBloodPressureText(),
+        String bloodPressure = pdfVitalsText(pdfLiveVitals ? am4100Manager.getBloodPressureText() : null,
                 patient == null ? "" : patient.monitorSnapshot.bloodPressure);
-        String bodyTemp = pdfVitalsText(am4100Manager.getBodyTempText(),
+        String bodyTemp = pdfVitalsText(pdfLiveVitals ? am4100Manager.getBodyTempText() : null,
                 patient == null ? "" : patient.monitorSnapshot.bodyTemp);
         boolean hasVitals = !pdfIsBlankValue(heart) || !pdfIsBlankValue(spo2) || !pdfIsBlankValue(bloodPressure) || !pdfIsBlankValue(bodyTemp);
         String[][] rows = new String[4][5];
@@ -7358,6 +7424,12 @@ public class IcuDashboardView extends View {
         return primary > 0 ? primary : fallback;
     }
 
+    /** ★ 2026-10-11 高危修复：仅被打印样本就是当前监护样本（且监护在线有数据）时才允许报告使用实时数据。 */
+    private boolean pdfUseLiveMonitor(PatientCase patient) {
+        return patient != null && patient == currentCase()
+                && am4100Manager.isConnected() && am4100Manager.hasVitals();
+    }
+
     /** 波形采样优先实时，其次病例快照。 */
     private List<Integer> pdfWaveSamples(List<Integer> livePrimary, List<Integer> liveFallback,
                                          List<Integer> storedPrimary, List<Integer> storedFallback) {
@@ -7391,8 +7463,9 @@ public class IcuDashboardView extends View {
         return entry != null && entry.enabled;
     }
 
-    private boolean pdfTreatmentOn(int controlIndex, TreatmentEntry entry) {
-        return bleManager.isControlOn(controlIndex) || pdfEntryEnabled(entry);
+    private boolean pdfTreatmentOn(boolean live, int controlIndex, TreatmentEntry entry) {
+        // ★ 2026-10-11 中危修复⑤：实时开关状态仅在打印当前样本时参与勾选
+        return (live && bleManager.isControlOn(controlIndex)) || pdfEntryEnabled(entry);
     }
 
     private String pdfEntryValue(TreatmentEntry entry) {
@@ -7403,16 +7476,38 @@ public class IcuDashboardView extends View {
                 entry.sampleCount > 0 ? entry.lastValue : "", treatmentAverageText(entry));
     }
 
-    private String pdfControlDurationText(int controlIndex) {
-        Integer minutes = bleManager.getControlTimeValue(controlIndex);
-        if (minutes != null) {
-            return minutes + "\u5206\u949f";
+    private String pdfControlDurationText(boolean live, int controlIndex, TreatmentEntry entry) {
+        // ★ 2026-10-11 中危修复⑤：实时设备定时仅当前样本可用；历史样本按其条目起止时间折算
+        if (live) {
+            Integer minutes = bleManager.getControlTimeValue(controlIndex);
+            if (minutes != null) {
+                return minutes + "\u5206\u949f";
+            }
+            String value = pdfCleanValue(bleManager.getControlValue(controlIndex));
+            if ("\u5f00".equals(value) || "\u5173".equals(value)) {
+                return "--";
+            }
+            return value;
         }
-        String value = pdfCleanValue(bleManager.getControlValue(controlIndex));
-        if ("\u5f00".equals(value) || "\u5173".equals(value)) {
+        return pdfEntryDurationText(entry);
+    }
+
+    /** 历史样本的治疗时长：由条目 startTime/endTime（yyyy-MM-dd HH:mm:ss）折算分钟。 */
+    private String pdfEntryDurationText(TreatmentEntry entry) {
+        if (entry == null || TextUtils.isEmpty(entry.startTime) || TextUtils.isEmpty(entry.endTime)) {
             return "--";
         }
-        return value;
+        try {
+            SimpleDateFormat fmt = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault());
+            Date t0 = fmt.parse(entry.startTime.trim());
+            Date t1 = fmt.parse(entry.endTime.trim());
+            if (t0 == null || t1 == null || t1.before(t0)) {
+                return "--";
+            }
+            return ((t1.getTime() - t0.getTime()) / 60000L) + "\u5206\u949f";
+        } catch (Exception ignored) {
+            return "--";
+        }
     }
 
     private String pdfFooterValue(String value) {

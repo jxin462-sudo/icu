@@ -1906,10 +1906,12 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
                     }
                     dashboardView.setCurrentLanhuPath(path);
                     /* ★ 2026-10-10 V15 ①⑤⑥：开始/结束护疗、打印、导出先按 H5 传来的住院号定位样本，
-                       避免动作落在原生当前选中的另一条样本上（同一样本按住院号识别）。 */
+                       避免动作落在原生当前选中的另一条样本上（同一样本按住院号识别）。
+                       ★ 2026-10-11 中危修复③：二维码导出/蓝牙发送也纳入按号定位（H5 侧已带住院号）。 */
                     if (text != null && !text.trim().isEmpty()
                             && ("patient_start_treatment".equals(action) || "treatment_finish".equals(action)
-                            || "print_report".equals(action) || "export_report".equals(action))) {
+                            || "print_report".equals(action) || "export_report".equals(action)
+                            || "export_qr".equals(action) || "bluetooth_send_report".equals(action))) {
                         dashboardView.selectCaseByNo(text.trim());
                     }
                     if (!dashboardView.performNativeAction(action)) {
