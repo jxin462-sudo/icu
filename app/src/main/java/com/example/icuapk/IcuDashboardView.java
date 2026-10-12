@@ -3964,6 +3964,10 @@ public class IcuDashboardView extends View {
         item.put("weight", safeJsonText(patient.weight));
         item.put("department", safeJsonText(patient.department));
         item.put("followUpDate", safeJsonText(patient.followUpDate));
+        /* ★ 2026-10-12 修复：按舱存储漏写 ageUnit/disease（加载端 patientCaseFromStorageJson 会读），
+           导致护疗页填写的病症落盘即丢，回顾页样本看不到病症、需二次输入 */
+        item.put("ageUnit", patient.ageUnit);
+        item.put("disease", patient.disease);
         item.put("currentTreatment", patient.currentTreatment);
         item.put("treatmentStarted", patient.treatmentStarted);
         item.put("treatmentStartTime", patient.treatmentStartTime);
