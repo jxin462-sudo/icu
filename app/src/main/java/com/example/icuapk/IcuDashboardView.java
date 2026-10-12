@@ -1843,6 +1843,14 @@ public class IcuDashboardView extends View {
     }
 
     private boolean performHostControlAction(String action) {
+        /* ★ 2026-10-12 V22：未连接主机蓝牙时，环境开关/设置与补偿项一律禁用
+           （湿度读取与 V20 一致放行；治疗时长说明为本地信息也放行） */
+        if (!bleManager.isConnected() && action != null
+                && (action.startsWith("control_temp") || action.startsWith("control_oxygen")
+                    || action.startsWith("control_co2") || action.startsWith("compensation_edit_"))) {
+            Toast.makeText(activity, "主机蓝牙未连接，无法操作主机功能", Toast.LENGTH_SHORT).show();
+            return true;
+        }
         /* ★ 2026-10-10 V15 ⑦：主控页 舱内温度/氧浓度/湿度/CO2 的「开关」与「设置」分离 ——
            开关 = 开/关该功能并主动读取主机蓝牙数据回显；设置 = 弹数值框，确定后下发主机（原有路径）。 */
         if ("control_temp_switch".equals(action)) {
@@ -2706,13 +2714,46 @@ public class IcuDashboardView extends View {
         target.addAll(source);
     }
 
+    /* ★ 2026-10-12 V22：主机功能「显示态」统一入口 ——
+       未连接主机蓝牙时一律视为关闭（界面空值/开关不亮）；
+       舱内温度(0)/氧浓度(1) 的开关态 isControlOn 没有对应分支，需读 enabledValue。 */
+    boolean hostControlOn(int index) {
+        if (!bleManager.isConnected()) {
+            return false;
+        }
+        if (index == 0) {
+            return Boolean.TRUE.equals(bleManager.getTemperatureEnabledValue());
+        }
+        if (index == 1) {
+            return Boolean.TRUE.equals(bleManager.getOxygenEnabledValue());
+        }
+        return bleManager.isControlOn(index);
+    }
+
+    /* 定时控件（红外/蓝光/雾化/负离子/紫外）数值区：
+       未连接→"--"；关闭→"关"（不再显示遗留时长）；不限时→"24h常开"；否则显示设定时长 */
+    String hostControlValueText(int index) {
+        if (!bleManager.isConnected()) {
+            return "--";
+        }
+        if (TimedControlProtocol.isTimedControlIndex(index)) {
+            if (!bleManager.isControlOn(index)) {
+                return "关";
+            }
+            if (bleManager.isTimedControlUnlimited(index)) {
+                return "24h常开";
+            }
+        }
+        return bleManager.getControlValue(index);
+    }
+
     private void putDashboardControl(JSONObject controls, String key, int index) throws JSONException {
         if (index == 2) {
             controls.put(key, safeText(currentMonitorLevelLabel()));
         } else {
-            controls.put(key, safeText(bleManager.getControlValue(index)));
+            controls.put(key, safeText(hostControlValueText(index)));
         }
-        controls.put(key + "On", bleManager.isControlOn(index));
+        controls.put(key + "On", hostControlOn(index));
     }
 
     private void putDashboardCountdown(JSONObject controls, String key, int index) throws JSONException {
@@ -8221,15 +8262,17 @@ public class IcuDashboardView extends View {
         float cardH = Math.min(dp(142), (shell.height() - dp(230)) / 3f);
         String monitorLevelColor = currentMonitorLevelColor();
         String monitorLevelText = monitorLevelLabel(monitorLevelColor);
+        // ★ 2026-10-12 V22：主机蓝牙未连接时状态页主机数据全部空值
+        boolean hostBleUp = bleManager.isConnected();
         String[][] data = {
                 // ★ 修复 #14:主机控制页大表盘数字显示用户设置值
-                {"舱内温度  ℃", compactDashboardValue(bleManager.getLastSetCabinTempText()), "♨", "#444444"},
-                {"氧浓度  %", compactDashboardValue(bleManager.getLastSetOxygenText()), "O₂", "#444444"},
-                {"湿度  %", compactDashboardValue(bleManager.getHumidityText()), "♢", "#444444"},
+                {"舱内温度  ℃", hostBleUp ? compactDashboardValue(bleManager.getLastSetCabinTempText()) : "--", "♨", "#444444"},
+                {"氧浓度  %", hostBleUp ? compactDashboardValue(bleManager.getLastSetOxygenText()) : "--", "O₂", "#444444"},
+                {"湿度  %", hostBleUp ? compactDashboardValue(bleManager.getHumidityText()) : "--", "♢", "#444444"},
                 // ★ 2026-10-12：热图在线时显示热图最高温，离线回退主机 BLE 红外体温
                 {"红外体温  ℃", compactDashboardValue(statusInfraredTempText()), "♨", "#444444"},
                 {"监护等级", monitorLevelText, "▣", "#F0545C"},
-                {"二氧化碳浓度  PPM", compactDashboardValue(bleManager.getCo2Text()), "CO₂", "#444444"},
+                {"二氧化碳浓度  PPM", hostBleUp ? compactDashboardValue(bleManager.getCo2Text()) : "--", "CO₂", "#444444"},
                 {"治疗时长  h", compactDashboardValue(bleManager.getTreatmentTimeText()), "◷", "#444444"},
                 // ★ 2026-10-12：定时控件设为 24h 常开（不限时）时状态页同步显示，与主控页一致
                 {"红外理疗  m", compactDashboardValue(statusTimedControlText(6)), "∿", "#444444"},
@@ -8276,7 +8319,7 @@ public class IcuDashboardView extends View {
             RectF mini = rect(left + i * dp(168), miniTop, left + i * dp(168) + dp(132), miniTop + dp(110));
             final int controlIndex = miniControlIndices[i];
             final String controlName = names[i];
-            boolean controlOn = bleManager.isControlOn(controlIndex);
+            boolean controlOn = hostControlOn(controlIndex);
             rounded(canvas, mini, Color.WHITE, Color.TRANSPARENT, dp(8));
             drawTextCenter(canvas, names[i], rect(mini.left, mini.top + dp(18), mini.right, mini.top + dp(42)), 16, text, true);
             drawText(canvas, controlOn ? "开" : "关", mini.left + dp(34), mini.top + dp(72), 13, text, false);
@@ -8312,13 +8355,15 @@ public class IcuDashboardView extends View {
         fill(canvas, x, y, x + w, y + h, Color.WHITE);
         RectF shell = rect(x + dp(28), y, x + w - dp(18), y + h - dp(18));
         rounded(canvas, shell, page, Color.TRANSPARENT, dp(8));
+        // ★ 2026-10-12 V22：未连接主机蓝牙时主控页全部空值；定时控件关态显示「关」而非遗留时长
+        boolean hostBleUp = bleManager.isConnected();
         String[][] items = {
                 // ★ 修复 #14:主机控制页右下方仪表盘的舱内温度和氧浓度也显示用户设置值
-                {"舱内温度", compactDashboardValue(bleManager.getLastSetCabinTempText()), "设置"}, {"氧浓度", compactDashboardValue(bleManager.getLastSetOxygenText()), "设置"}, {"监护等级", bleManager.getControlValue(2), ""}, {"CO2浓度", compactDashboardValue(bleManager.getControlValue(3)), "读取"},
-                {"冷光照明", compactDashboardValue(bleManager.getControlValue(4)), ""}, {"暖光照明", compactDashboardValue(bleManager.getControlValue(5)), ""}, {"红外理疗", compactDashboardValue(bleManager.getControlValue(6)), "定时"}, {"蓝光理疗", compactDashboardValue(bleManager.getControlValue(7)), "定时"},
-                {"外循环", compactDashboardValue(bleManager.getControlValue(8)), ""}, {"内循环", compactDashboardValue(bleManager.getControlValue(9)), ""}, {"雾化器", compactDashboardValue(bleManager.getControlValue(10)), "定时"}, {"负离子", compactDashboardValue(bleManager.getControlValue(11)), "定时"},
-                {"紫外消毒", compactDashboardValue(bleManager.getControlValue(12)), "定时"}, {"雾化器", compactDashboardValue(bleManager.getControlValue(10)), ""}, {"负离子", compactDashboardValue(bleManager.getControlValue(11)), ""}, {"冷光照明", compactDashboardValue(bleManager.getControlValue(4)), ""},
-                {"暖光照明", compactDashboardValue(bleManager.getControlValue(5)), ""}, {"外循环", compactDashboardValue(bleManager.getControlValue(8)), ""}, {"内循环", compactDashboardValue(bleManager.getControlValue(9)), ""}, {"治疗时长", compactDashboardValue(bleManager.getControlValue(15)), "设置"}
+                {"舱内温度", hostBleUp ? compactDashboardValue(bleManager.getLastSetCabinTempText()) : "--", "设置"}, {"氧浓度", hostBleUp ? compactDashboardValue(bleManager.getLastSetOxygenText()) : "--", "设置"}, {"监护等级", bleManager.getControlValue(2), ""}, {"CO2浓度", compactDashboardValue(hostControlValueText(3)), "读取"},
+                {"冷光照明", compactDashboardValue(hostControlValueText(4)), ""}, {"暖光照明", compactDashboardValue(hostControlValueText(5)), ""}, {"红外理疗", compactDashboardValue(hostControlValueText(6)), "定时"}, {"蓝光理疗", compactDashboardValue(hostControlValueText(7)), "定时"},
+                {"外循环", compactDashboardValue(hostControlValueText(8)), ""}, {"内循环", compactDashboardValue(hostControlValueText(9)), ""}, {"雾化器", compactDashboardValue(hostControlValueText(10)), "定时"}, {"负离子", compactDashboardValue(hostControlValueText(11)), "定时"},
+                {"紫外消毒", compactDashboardValue(hostControlValueText(12)), "定时"}, {"雾化器", compactDashboardValue(hostControlValueText(10)), ""}, {"负离子", compactDashboardValue(hostControlValueText(11)), ""}, {"冷光照明", compactDashboardValue(hostControlValueText(4)), ""},
+                {"暖光照明", compactDashboardValue(hostControlValueText(5)), ""}, {"外循环", compactDashboardValue(hostControlValueText(8)), ""}, {"内循环", compactDashboardValue(hostControlValueText(9)), ""}, {"治疗时长", compactDashboardValue(bleManager.getControlValue(15)), "设置"}
         };
         float gap = dp(24);
         float cardW = (shell.width() - gap * 6) / 5f;
@@ -8359,7 +8404,7 @@ public class IcuDashboardView extends View {
                 drawText(canvas, items[i][2], r.left + dp(22), r.bottom - dp(24), 15, activeBlue, false);
                 clickZones.add(new ClickZone(rect(r.left, r.bottom - dp(48), r.left + dp(82), r.bottom), buttonAction));
             } else {
-                drawToggle(canvas, r.left + dp(22), r.bottom - dp(38), bleManager.isControlOn(commandIndex));
+                drawToggle(canvas, r.left + dp(22), r.bottom - dp(38), hostControlOn(commandIndex));
                 clickZones.add(new ClickZone(new RectF(r), cardAction));
             }
         }
@@ -8417,6 +8462,11 @@ public class IcuDashboardView extends View {
     }
 
     private void handleControlButtonTap(int index, String title) {
+        // ★ 2026-10-12 V22：未连接主机蓝牙时禁止设置类操作（湿度读取14/治疗时长说明15放行）
+        if (!bleManager.isConnected() && index != 14 && index != 15) {
+            Toast.makeText(activity, "主机蓝牙未连接，无法操作主机功能", Toast.LENGTH_SHORT).show();
+            return;
+        }
         if (index == 0) {
             // ★ 修复 P1-3:用 lastSet 值而非设备实测值
             showNumberDialog(index, "设置舱内温度", "℃", bleManager.getLastSetCabinTempValue(), false);
@@ -11086,12 +11136,9 @@ public class IcuDashboardView extends View {
         }
     }
 
-    /** 状态页定时控件（红外理疗/蓝光理疗等）数值：不限时常开显示「24h常开」，与主控页一致 */
+    /** 状态页定时控件（红外理疗/蓝光理疗等）数值：未连接→"--"，关闭→"关"，不限时→「24h常开」，与主控页一致 */
     private String statusTimedControlText(int index) {
-        if (bleManager.isTimedControlUnlimited(index)) {
-            return "24h常开";
-        }
-        return bleManager.getControlValue(index);
+        return hostControlValueText(index);
     }
 
     /** 状态页「红外体温」卡数值：热图在线时显示热图最高温，否则回退主机 BLE 红外体温 */
@@ -11100,6 +11147,10 @@ public class IcuDashboardView extends View {
                 && System.currentTimeMillis() - thermalFrameAtMs < 5000L;
         if (fresh) {
             return String.format(java.util.Locale.US, "%.1f", thermalMaxCenti / 100f);
+        }
+        // ★ V22：主机蓝牙未连接时红外体温也显示空值
+        if (!bleManager.isConnected()) {
+            return "--";
         }
         return bleManager.getInfraredTempText();
     }

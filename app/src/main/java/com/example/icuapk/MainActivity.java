@@ -1601,18 +1601,20 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         putControl(controls, "o2Enabled", 13);
         putControl(controls, "humidity", 14);
         putControl(controls, "treatmentTime", 15);
-        controls.put("redTherapyRemainingMs", bleManager.getCountdownRemainingMs(6));
-        controls.put("blueTherapyRemainingMs", bleManager.getCountdownRemainingMs(7));
-        controls.put("nebulizerRemainingMs", bleManager.getCountdownRemainingMs(10));
-        controls.put("anionRemainingMs", bleManager.getCountdownRemainingMs(11));
-        controls.put("uvRemainingMs", bleManager.getCountdownRemainingMs(12));
+        // ★ V22：未连接时倒计时/不限时标记一律清零，前端全部显示关闭态
+        boolean hostBleUp = bleManager.isConnected();
+        controls.put("redTherapyRemainingMs", hostBleUp ? bleManager.getCountdownRemainingMs(6) : 0);
+        controls.put("blueTherapyRemainingMs", hostBleUp ? bleManager.getCountdownRemainingMs(7) : 0);
+        controls.put("nebulizerRemainingMs", hostBleUp ? bleManager.getCountdownRemainingMs(10) : 0);
+        controls.put("anionRemainingMs", hostBleUp ? bleManager.getCountdownRemainingMs(11) : 0);
+        controls.put("uvRemainingMs", hostBleUp ? bleManager.getCountdownRemainingMs(12) : 0);
         // ★ 不限时(红外/蓝光 65536)没有倒计时终点，前端据此显示“常开”，
         //   不能再靠分钟数猜测（65536 会被误判成 24h）。
-        controls.put("redTherapyUnlimited", bleManager.isTimedControlUnlimited(6));
-        controls.put("blueTherapyUnlimited", bleManager.isTimedControlUnlimited(7));
-        controls.put("nebulizerUnlimited", bleManager.isTimedControlUnlimited(10));
-        controls.put("anionUnlimited", bleManager.isTimedControlUnlimited(11));
-        controls.put("uvUnlimited", bleManager.isTimedControlUnlimited(12));
+        controls.put("redTherapyUnlimited", hostBleUp && bleManager.isTimedControlUnlimited(6));
+        controls.put("blueTherapyUnlimited", hostBleUp && bleManager.isTimedControlUnlimited(7));
+        controls.put("nebulizerUnlimited", hostBleUp && bleManager.isTimedControlUnlimited(10));
+        controls.put("anionUnlimited", hostBleUp && bleManager.isTimedControlUnlimited(11));
+        controls.put("uvUnlimited", hostBleUp && bleManager.isTimedControlUnlimited(12));
         host.put("controls", controls);
         return host;
     }
@@ -1631,9 +1633,11 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         if (index == 2) {
             controls.put(key, safeJsonText(dashboardView.getResolvedMonitorLevelLabel()));
         } else {
-            controls.put(key, safeJsonText(bleManager.getControlValue(index)));
+            // ★ 2026-10-12 V22：与主控页同一套显示态（未连接→"--"，定时控件关态→"关"，不限时→"24h常开"）
+            controls.put(key, safeJsonText(dashboardView.hostControlValueText(index)));
         }
-        controls.put(key + "On", bleManager.isControlOn(index));
+        // ★ V22：温度/氧浓度开关态 isControlOn 无分支，统一走 view 层的 hostControlOn（未连接一律 false）
+        controls.put(key + "On", dashboardView.hostControlOn(index));
     }
 
     private JSONArray buildHostDevicesJson() throws JSONException {

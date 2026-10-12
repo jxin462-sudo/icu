@@ -280,10 +280,12 @@
       D.levelText = text(h.monitorLevel, '一级');
       D.levelIdx = ({ '一级': 0, '二级': 1, '三级': 2 })[D.levelText];
       if (typeof D.levelIdx !== 'number') D.levelIdx = 0;
+      /* ★ V22：主机蓝牙未连接时状态页/主控页主机数据全部空值+关闭态 */
+      var hostUp = !!((S.host && S.host.connected) || (S.ble && S.ble.host && S.ble.host.connected));
       D.status = {
-        temp: num(h.temp, '--'), o2: num(h.oxygen, '--'), hum: num(h.humidity, '--'),
-        co2: num(h.co2, '--'), irTemp: num(h.infraredTemp, '--'), dur: text(h.treatmentTime, '--'),
-        red: text(c.redTherapy, '--'), blue: text(c.blueTherapy, '--')
+        temp: hostUp ? num(h.temp, '--') : '--', o2: hostUp ? num(h.oxygen, '--') : '--', hum: hostUp ? num(h.humidity, '--') : '--',
+        co2: hostUp ? num(h.co2, '--') : '--', irTemp: hostUp ? num(h.infraredTemp, '--') : '--', dur: text(h.treatmentTime, '--'),
+        red: hostUp ? text(c.redTherapy, '--') : '--', blue: hostUp ? text(c.blueTherapy, '--') : '--'
       };
       /* ★ 任务33：AM4100 监护宝实时体征接入。S.monitor.connected 且有数据时填真实值；
          未连接时保持全 '--'（不造假数据），波形走本地演示滚动动画
@@ -359,26 +361,35 @@
          注：ctrlRow1 是环境传感器实时读数（温/氧/湿/CO2），非样本设定项，故保留不清空。 */
       var curPat = S.patient || {};
       var treatOK = (curPat.treatmentEndTime === '进行中');
-      /* ★ V15 ⑦：row1 环境卡带开关态（temp/氧气/CO2 的 enable 由主机回包驱动；湿度只读，值存在即视为开） */
+      /* ★ V15 ⑦：row1 环境卡带开关态（temp/氧气/CO2 的 enable 由主机回包驱动；湿度只读，值存在即视为开）
+         ★ V22：未连接主机蓝牙时全部空值+关闭态 */
       D.ctrlRow1 = [
-        { tKey: 'ctrlTemp', t: '舱内温度 ℃', v: num(h.temp, '--'), p: 60, set: 1, on: !!c.tempOn, ico: 'thermo' },
-        { tKey: 'ctrlO2', t: '氧浓度 %', v: num(h.oxygen, '--'), p: 43, set: 1, on: !!c.oxygenOn, ico: 'o2' },
-        { tKey: 'ctrlHum', t: '湿度 %', v: num(h.humidity, '--'), p: 35, set: 1, on: num(h.humidity, '') !== '', ico: 'drop' },
-        { tKey: 'ctrlCo2', t: '二氧化碳浓度 PPM', v: num(h.co2, '--'), p: 66, set: 1, on: !!c.co2On, ico: 'co2' },
+        { tKey: 'ctrlTemp', t: '舱内温度 ℃', v: hostUp ? num(h.temp, '--') : '--', p: 60, set: 1, on: hostUp ? !!c.tempOn : false, ico: 'thermo' },
+        { tKey: 'ctrlO2', t: '氧浓度 %', v: hostUp ? num(h.oxygen, '--') : '--', p: 43, set: 1, on: hostUp ? !!c.oxygenOn : false, ico: 'o2' },
+        { tKey: 'ctrlHum', t: '湿度 %', v: hostUp ? num(h.humidity, '--') : '--', p: 35, set: 1, on: hostUp ? (num(h.humidity, '') !== '') : false, ico: 'drop' },
+        { tKey: 'ctrlCo2', t: '二氧化碳浓度 PPM', v: hostUp ? num(h.co2, '--') : '--', p: 66, set: 1, on: hostUp ? !!c.co2On : false, ico: 'co2' },
         { tKey: 'ctrlLevel', t: '监护等级', v: '', level: 1 }
       ];
+      /* ★ V22：定时控件显示态 —— 未连接/无样本→'--'；关闭→'关'（不再显示遗留时长）；
+         红外/蓝光直接开→'24h常开'；设时/雾化/负离子→倒计时 */
+      var row2ok = hostUp && treatOK;
+      function timedV(val, unlimited, remainingMs, on) {
+        if (!row2ok) return '--';
+        if (!on) return TT('off', '关');
+        return durText(val, unlimited, remainingMs);
+      }
       D.ctrlRow2 = [
-        { tKey: 'ctrlRed', t: '红外理疗', v: treatOK ? durText(c.redTherapy, c.redTherapyUnlimited, c.redTherapyRemainingMs) : '--', on: treatOK ? !!c.redTherapyOn : false, ico: 'rays' },
-        { tKey: 'ctrlBlue', t: '蓝光理疗', v: treatOK ? durText(c.blueTherapy, c.blueTherapyUnlimited, c.blueTherapyRemainingMs) : '--', on: treatOK ? !!c.blueTherapyOn : false, ico: 'blueLight' },
-        { tKey: 'ctrlUv', t: '紫外消毒', v: treatOK ? (c.uvUnlimited ? TT('uv24h', '24h常开') : (c.uvOn ? TT('on', '开') : TT('off', '关'))) : TT('off', '关'), on: treatOK ? !!c.uvOn : false, ico: 'uv24' },
-        { tKey: 'ctrlNeb', t: '雾化器', v: treatOK ? durText(c.nebulizer, c.nebulizerUnlimited, c.nebulizerRemainingMs) : '--', on: treatOK ? !!c.nebulizerOn : false, ico: 'neb' },
-        { tKey: 'ctrlAnion', t: '负离子', v: treatOK ? durText(c.anion, c.anionUnlimited, c.anionRemainingMs) : '--', on: treatOK ? !!c.anionOn : false, ico: 'neg' }
+        { tKey: 'ctrlRed', t: '红外理疗', v: timedV(c.redTherapy, c.redTherapyUnlimited, c.redTherapyRemainingMs, !!c.redTherapyOn), on: row2ok ? !!c.redTherapyOn : false, ico: 'rays' },
+        { tKey: 'ctrlBlue', t: '蓝光理疗', v: timedV(c.blueTherapy, c.blueTherapyUnlimited, c.blueTherapyRemainingMs, !!c.blueTherapyOn), on: row2ok ? !!c.blueTherapyOn : false, ico: 'blueLight' },
+        { tKey: 'ctrlUv', t: '紫外消毒', v: row2ok ? (c.uvOn ? (c.uvUnlimited ? TT('uv24h', '24h常开') : TT('on', '开')) : TT('off', '关')) : '--', on: row2ok ? !!c.uvOn : false, ico: 'uv24' },
+        { tKey: 'ctrlNeb', t: '雾化器', v: timedV(c.nebulizer, c.nebulizerUnlimited, c.nebulizerRemainingMs, !!c.nebulizerOn), on: row2ok ? !!c.nebulizerOn : false, ico: 'neb' },
+        { tKey: 'ctrlAnion', t: '负离子', v: timedV(c.anion, c.anionUnlimited, c.anionRemainingMs, !!c.anionOn), on: row2ok ? !!c.anionOn : false, ico: 'neg' }
       ];
       D.ctrlRow3 = [
-        { tKey: 'ctrlCold', t: '冷光照明', v: '', on: treatOK ? !!c.coldLightOn : false, ico: 'cold' },
-        { tKey: 'ctrlWarm', t: '暖光照明', v: '', on: treatOK ? !!c.warmLightOn : false, ico: 'sun' },
-        { tKey: 'ctrlOuter', t: '外循环', v: '', on: treatOK ? !!c.outerCycleOn : false, ico: 'loopOut' },
-        { tKey: 'ctrlInner', t: '内循环', v: '', on: treatOK ? !!c.innerCycleOn : false, ico: 'loopIn' },
+        { tKey: 'ctrlCold', t: '冷光照明', v: '', on: row2ok ? !!c.coldLightOn : false, ico: 'cold' },
+        { tKey: 'ctrlWarm', t: '暖光照明', v: '', on: row2ok ? !!c.warmLightOn : false, ico: 'sun' },
+        { tKey: 'ctrlOuter', t: '外循环', v: '', on: row2ok ? !!c.outerCycleOn : false, ico: 'loopOut' },
+        { tKey: 'ctrlInner', t: '内循环', v: '', on: row2ok ? !!c.innerCycleOn : false, ico: 'loopIn' },
         { tKey: 'ctrlTime', t: '治疗时长', v: treatOK ? text(h.treatmentTime, '--') : '--', on: treatOK ? !!(h.treatmentTime && h.treatmentTime !== '--') : false, ico: 'spin', big: 1 }
       ];
 

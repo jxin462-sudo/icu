@@ -187,6 +187,13 @@ public final class ThermalBleManager {
             if (!started || gatt != null || result.getDevice() == null) {
                 return;
             }
+            /* ★ 2026-10-12：改为不过滤扫描 + 软件匹配服务 UUID。
+               部分平板蓝牙栈把带 serviceUuid 的 ScanFilter 交给固件过滤，
+               而 Windows GATT 桥把 128 位服务 UUID 放在扫描响应里，固件过滤会漏掉，
+               表现为"永远搜不到红外测温桥"。软件匹配能同时看到广播包+扫描响应。 */
+            if (!hasThermalService(result)) {
+                return;
+            }
             BluetoothDevice device = result.getDevice();
             updateDevice(device.getAddress(), device.getName(), result.getRssi());
         }
@@ -198,6 +205,18 @@ public final class ThermalBleManager {
             scheduleRescan();
         }
     };
+
+    private static boolean hasThermalService(ScanResult result) {
+        if (result.getScanRecord() == null || result.getScanRecord().getServiceUuids() == null) {
+            return false;
+        }
+        for (ParcelUuid id : result.getScanRecord().getServiceUuids()) {
+            if (SERVICE_UUID.equals(id.getUuid())) {
+                return true;
+            }
+        }
+        return false;
+    }
 
     private final BluetoothGattCallback gattCallback = new BluetoothGattCallback() {
         @Override
@@ -385,14 +404,21 @@ public final class ThermalBleManager {
             emitConnection("当前设备不支持 BLE 扫描");
             return;
         }
+        /* ★ 2026-10-12：不再用 setServiceUuid 硬件过滤（原因见 scanCallback），
+           改为全量扫描 + hasThermalService 软件匹配 */
         ArrayList<ScanFilter> filters = new ArrayList<>();
-        filters.add(new ScanFilter.Builder().setServiceUuid(new ParcelUuid(SERVICE_UUID)).build());
         ScanSettings settings = new ScanSettings.Builder()
                 .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
                 .build();
         scanning = true;
         emitConnection("正在搜索红外测温桥...");
-        scanner.startScan(filters, settings, scanCallback);
+        try {
+            scanner.startScan(filters, settings, scanCallback);
+        } catch (Exception error) {
+            scanning = false;
+            emitConnection("红外测温扫描启动失败: " + error.getMessage());
+            scheduleRescan();
+        }
     }
 
     private void stopScan() {
