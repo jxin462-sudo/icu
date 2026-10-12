@@ -2122,6 +2122,8 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
 
     private void connectThermalBridge() {
         if (thermalBleManager == null) {
+            // ★ V23：原来静默 return，点击无反馈时无法定位
+            Toast.makeText(this, "红外测温模块未初始化", Toast.LENGTH_SHORT).show();
             return;
         }
         Toast.makeText(this, "正在手动连接红外测温桥", Toast.LENGTH_SHORT).show();

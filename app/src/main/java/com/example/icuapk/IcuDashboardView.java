@@ -11084,6 +11084,8 @@ public class IcuDashboardView extends View {
     }
 
     private void handleThermalAreaTap() {
+        /* ★ 2026-10-12 V23：入口即弹提示——此前点击无任何反馈时无法区分
+           「点击区未命中」与「BLE 扫描层静默失败」，现在点击必有一次 Toast */
         boolean fresh = thermalBitmap != null
                 && System.currentTimeMillis() - thermalFrameAtMs < 5000L;
         if (fresh || "红外热图已连接".equals(thermalConnState)) {
@@ -11102,6 +11104,7 @@ public class IcuDashboardView extends View {
             showThermalDevicePicker(devices);
             return;
         }
+        Toast.makeText(activity, "红外测温区已点击：开始搜索测温桥…", Toast.LENGTH_SHORT).show();
         /* ★ 2026-10-12：先发起扫描，搜到设备后由 updateThermalDevices 自动弹出选择框，
            不再需要用户"稍候再次点击" */
         thermalScanRequestedAtMs = System.currentTimeMillis();
