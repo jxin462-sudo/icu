@@ -986,6 +986,19 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
 
     @Override
     public void onThermalFrame(short[] centiDegrees, int width, int height, long timestampMs) {
+        // ★ 2026-10-12：同步推给状态页原生热图区（与 WebView 推送互不影响）
+        if (dashboardView != null && centiDegrees != null && centiDegrees.length == width * height) {
+            final short[] frameCopy = centiDegrees;
+            final int fw = width, fh = height;
+            dashboardView.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (dashboardView != null) {
+                        dashboardView.updateThermalFrame(frameCopy, fw, fh);
+                    }
+                }
+            });
+        }
         if (lanhuWebView == null || centiDegrees == null || centiDegrees.length != width * height) {
             return;
         }
@@ -1018,6 +1031,17 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
     @Override
     public void onThermalConnectionChanged(final String state) {
         thermalConnectionState = state == null ? "等待红外测温桥" : state;
+        // ★ 2026-10-12：同步给状态页原生热图区显示连接状态
+        if (dashboardView != null) {
+            dashboardView.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (dashboardView != null) {
+                        dashboardView.updateThermalConnection(thermalConnectionState);
+                    }
+                }
+            });
+        }
         if (lanhuWebView == null) {
             return;
         }
@@ -1036,7 +1060,18 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
     }
 
     @Override
-    public void onThermalDevicesChanged(ArrayList<ThermalBleManager.DeviceItem> devices) {
+    public void onThermalDevicesChanged(final ArrayList<ThermalBleManager.DeviceItem> devices) {
+        /* ★ 2026-10-12：同步给状态页热图区，用户点击搜索后自动弹出设备选择框 */
+        if (dashboardView != null) {
+            dashboardView.post(new Runnable() {
+                @Override
+                public void run() {
+                    if (dashboardView != null) {
+                        dashboardView.updateThermalDevices(devices);
+                    }
+                }
+            });
+        }
         if (lanhuWebView != null) {
             lanhuWebView.post(new Runnable() {
                 @Override
@@ -2111,6 +2146,28 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         thermalConnectRequested = false;
         pendingThermalDeviceId = "";
         thermalBleManager.connect(deviceId);
+    }
+
+    /* ★ 2026-10-12：供 IcuDashboardView 状态页热图区调用的原生入口（同包可见） */
+    void thermalStartScanNative() {
+        connectThermalBridge();
+    }
+
+    void thermalConnectNative(String address) {
+        connectThermalDevice(address);
+    }
+
+    void thermalDisconnectNative() {
+        if (thermalBleManager != null) {
+            thermalBleManager.stop();
+            onThermalConnectionChanged("红外测温已手动断开");
+        }
+    }
+
+    ArrayList<ThermalBleManager.DeviceItem> thermalDevicesNative() {
+        return thermalBleManager == null
+                ? new ArrayList<ThermalBleManager.DeviceItem>()
+                : thermalBleManager.getDevices();
     }
 
     private String buildThermalDevicesJson() {

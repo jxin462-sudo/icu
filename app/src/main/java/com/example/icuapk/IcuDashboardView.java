@@ -792,6 +792,21 @@ public class IcuDashboardView extends View {
     private float touchDownY;
     private float lastTouchY;
     private boolean draggingAm4100DeviceList;
+    /* ★ 2026-10-12 红外热图（LSM164X 串口→BLE 桥，ThermalBleManager）：
+       状态页摄像头下方原黄色空白区改为热图显示区，点击连接/断开红外测温桥 */
+    private short[] thermalPixels;
+    private int thermalPixelW;
+    private int thermalPixelH;
+    private long thermalFrameAtMs;
+    private android.graphics.Bitmap thermalBitmap;
+    private int thermalMaxCenti;
+    private String thermalConnState = "";
+    /* 扫描到的红外测温桥列表（MainActivity 推送），点击热图区后用于弹窗选择 */
+    private java.util.ArrayList<ThermalBleManager.DeviceItem> thermalDevices = new java.util.ArrayList<>();
+    private long thermalScanRequestedAtMs;
+    /* ★ 2026-10-12：所有可点区域（开关/按钮/卡片）按下时的高亮反馈 */
+    private RectF pressedZoneRect;
+    private long pressedZoneAtMs;
     private boolean touchMoved;
     private boolean monitorRefreshPending;
     private String searchKeyword = "";
@@ -2134,6 +2149,11 @@ public class IcuDashboardView extends View {
         }
         int next = (clickedIndex >= 0) ? clickedIndex : selectedHostModeIndex;
         int modeIndex = clampIndex(next, hostModeNames().length);
+        /* ★ 2026-10-12：未连接主机蓝牙时禁止开启护理模式（关闭已开模式仍允许，仅为本地状态复位） */
+        if (!bleManager.isConnected()) {
+            Toast.makeText(activity, "主机蓝牙未连接，无法开启护理模式", Toast.LENGTH_SHORT).show();
+            return;
+        }
         // ★ 0904 自测：开启模式不再弹参数框，直接按该模式已保存参数下发；
         //   想改参数点图标下方的“设置”按钮（host_mode_*_settings）。
         //   未保存过参数的模式按主机当前值直接开启（config 为空时只下发 set_care_mode）。
@@ -2825,7 +2845,31 @@ public class IcuDashboardView extends View {
                 vitals = new JSONArray();
             }
         }
+        /* ★ 2026-10-12：无手工录入的体征行时，自动用「治疗结束前时间段」窗口趋势生成
+           （与 PDF 记录单同一逻辑/同一数据），H5 预览与打印一致；波形也一并发尾部窗口数据。 */
+        if (vitals.length() == 0) {
+            String[][] windowRows = sheetWindowVitalsRows(
+                    patient.monitorSnapshot.heartRateHistory,
+                    patient.monitorSnapshot.spo2History,
+                    patient.monitorSnapshot.temperatureHistory,
+                    patient.monitorSnapshot.bloodPressure,
+                    sheetWindowEndMs(patient));
+            if (windowRows != null) {
+                for (String[] row : windowRows) {
+                    JSONArray r = new JSONArray();
+                    for (String cell : row) {
+                        r.put(cell == null ? "" : cell);
+                    }
+                    vitals.put(r);
+                }
+            }
+        }
         json.put("vitals", vitals);
+        JSONObject sheetWaves = new JSONObject();
+        sheetWaves.put("ecg", intListToJsonArray(patient.monitorSnapshot.ecgWaveSamples));
+        sheetWaves.put("pleth", intListToJsonArray(patient.monitorSnapshot.spo2WaveSamples));
+        sheetWaves.put("resp", intListToJsonArray(patient.monitorSnapshot.respWaveSamples));
+        json.put("sheetWaves", sheetWaves);
         return json;
     }
 
@@ -2914,6 +2958,7 @@ public class IcuDashboardView extends View {
         if (showingSettings) {
             updateCameraPreviewOverlay(null, false);
             drawSettings(canvas, leftW, topH + patientH, w - leftW, h - topH - patientH);
+            drawPressedOverlay(canvas);
             return;
         }
 
@@ -2938,6 +2983,23 @@ public class IcuDashboardView extends View {
         } else {
             drawTutorialPage(canvas, leftW, contentY, w - leftW, contentH);
         }
+        drawPressedOverlay(canvas);
+    }
+
+    /* ★ 2026-10-12：按下高亮反馈 —— 命中的点击区画一层半透明白色高亮，约 250ms 后自动消失。
+       所有开关/按钮/卡片走同一套 ClickZone，因此一处实现全局生效。 */
+    private void drawPressedOverlay(Canvas canvas) {
+        if (pressedZoneRect == null) {
+            return;
+        }
+        long age = System.currentTimeMillis() - pressedZoneAtMs;
+        if (age > 250L) {
+            pressedZoneRect = null;
+            return;
+        }
+        int alpha = (int) (90 * (1.0 - age / 250.0));
+        rounded(canvas, pressedZoneRect, Color.argb(alpha, 55, 148, 242), Color.TRANSPARENT, dp(8));
+        postInvalidateDelayed(260L - age);
     }
 
     @Override
@@ -2947,6 +3009,17 @@ public class IcuDashboardView extends View {
             lastTouchY = touchDownY;
             touchMoved = false;
             draggingAm4100DeviceList = !showingSettings && activeTab == 2 && am4100DeviceListBounds.contains(event.getX(), event.getY());
+            /* ★ 2026-10-12：按下高亮 —— 记录当前命中的最上层点击区，onDraw 里画半透明高亮层 */
+            pressedZoneRect = null;
+            for (int i = clickZones.size() - 1; i >= 0; i--) {
+                RectF zr = clickZones.get(i).rect;
+                if (zr.contains(event.getX(), event.getY())) {
+                    pressedZoneRect = new RectF(zr);
+                    break;
+                }
+            }
+            pressedZoneAtMs = System.currentTimeMillis();
+            invalidate();
             return true;
         }
         if (event.getAction() == MotionEvent.ACTION_MOVE) {
@@ -2963,6 +3036,8 @@ public class IcuDashboardView extends View {
         }
         if (event.getAction() == MotionEvent.ACTION_CANCEL) {
             draggingAm4100DeviceList = false;
+            pressedZoneRect = null;
+            invalidate();
             return true;
         }
         if (event.getAction() != MotionEvent.ACTION_UP) {
@@ -2970,12 +3045,14 @@ public class IcuDashboardView extends View {
         }
         if (draggingAm4100DeviceList && touchMoved) {
             draggingAm4100DeviceList = false;
+            pressedZoneRect = null;
             invalidate();
             return true;
         }
         draggingAm4100DeviceList = false;
         float x = event.getX();
         float y = event.getY();
+        /* 抬手不清 pressedZoneRect：让高亮保留约 250ms 形成点击闪示，过期由 drawPressedOverlay 自行清除 */
         for (int i = clickZones.size() - 1; i >= 0; i--) {
             ClickZone zone = clickZones.get(i);
             if (zone.rect.contains(x, y)) {
@@ -5730,13 +5807,26 @@ public class IcuDashboardView extends View {
         for (TreatmentEntry entry : patient.treatmentEntries) {
             resetTreatmentEntryTiming(entry, now);
         }
-        /* ★ 2026-10-10 #69：开始新一轮治疗前关闭设备上遗留的治疗功能（红外/蓝光/雾化/负离子/紫外），
-           保证每个样本的治疗数据独立，不把上一样本开启的功能带进新样本 */
-        int[] sessionControls = {6, 7, 10, 11, 12};
+        /* ★ 2026-10-10 #69：开始新一轮治疗前关闭设备上遗留的治疗功能，
+           保证每个样本的治疗数据独立，不把上一样本开启的功能带进新样本。
+           ★ 2026-10-12 补全：护理模式还会开 CO2(3)/冷光(4)/暖光(5)/外循环(8)/内循环(9)，
+           原先只关 {6,7,10,11,12} 导致这些功能漏带进新样本；此处按护理模式可控的全部开关统一关闭。 */
+        int[] sessionControls = {3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};
+        boolean anyLeftoverOffFailed = false;
         for (int ci : sessionControls) {
-            if (bleManager.isControlOn(ci)) {
-                bleManager.setControlEnabled(ci, false);
+            if (bleManager.isControlOn(ci) && !bleManager.setControlEnabled(ci, false)) {
+                anyLeftoverOffFailed = true;
             }
+        }
+        if (anyLeftoverOffFailed) {
+            Toast.makeText(activity, "主机蓝牙未连接，上一样本遗留的主机功能未能关闭，请连接主机后手动关闭", Toast.LENGTH_LONG).show();
+        }
+        /* ★ 2026-10-12：护理模式「已开启」是全局 UI 状态，必须随新样本复位，
+           否则新样本的模式卡片仍显示上一样本开启的模式 */
+        if (hostModeActive) {
+            hostModeActive = false;
+            lastHostModeIndex = selectedHostModeIndex;
+            saveUiSettings();
         }
         /* ★ 2026-10-10 #80：治疗时长按样本独立 —— 新样本开始护疗时清零本舱治疗计时 */
         bleManager.resetTreatmentTimer();
@@ -6916,8 +7006,9 @@ public class IcuDashboardView extends View {
         // 体重 / 科室 来自病例录入弹窗，不再写死 "--"
         drawPdfInfoField(canvas, pdfPaint, "\u4f53\u91cd", patient.weight,
                 pdfInfoColumnX(1), y2, 32, colW - 32);
-        drawPdfInfoField(canvas, pdfPaint, "\u79d1\u5ba4", patient.department,
-                pdfInfoColumnX(2), y2, 32, colW - 32);
+        // \u2605 2026-10-12\uff1a\u79d1\u5ba4\u680f\u5148\u6ce8\u91ca\u6389\u4e0d\u663e\u793a\uff08\u6570\u636e\u5b57\u6bb5\u4fdd\u7559\uff0c\u6062\u590d\u65f6\u53d6\u6d88\u6ce8\u91ca\u5373\u53ef\uff09
+        // drawPdfInfoField(canvas, pdfPaint, "\u79d1\u5ba4", patient.department,
+        //         pdfInfoColumnX(2), y2, 32, colW - 32);
         drawPdfInfoField(canvas, pdfPaint, "\u6cbb\u7597\u65f6\u957f",
                 pdfFirstValue(bleManager.getTreatmentTimeText(), patient.treatmentEndTime),
                 pdfInfoColumnX(3), y2, 52, colW - 52);
@@ -6982,7 +7073,19 @@ public class IcuDashboardView extends View {
             rows[i][3] = "";
             rows[i][4] = "";
         }
-        if (hasVitals) {
+        /* ★ 2026-10-12：生命体征记录改为「治疗结束前时间段」的趋势采样（最多4行，等距取值，
+           时间列按治疗结束时间倒推）；下方三条波形图本就用各波形缓冲尾部 = 同一时间段的数据。
+           无趋势历史时保持原单行当前值行为。 */
+        List<Integer> hrHist = pdfLiveVitals ? am4100Manager.getHeartRateHistory()
+                : (patient == null ? null : patient.monitorSnapshot.heartRateHistory);
+        List<Integer> spo2Hist = pdfLiveVitals ? am4100Manager.getSpo2History()
+                : (patient == null ? null : patient.monitorSnapshot.spo2History);
+        List<Integer> tempHist = pdfLiveVitals ? am4100Manager.getTemperatureHistory()
+                : (patient == null ? null : patient.monitorSnapshot.temperatureHistory);
+        String[][] windowRows = sheetWindowVitalsRows(hrHist, spo2Hist, tempHist, bloodPressure, sheetWindowEndMs(patient));
+        if (windowRows != null) {
+            rows = windowRows;
+        } else if (hasVitals) {
             rows[0][0] = createdAt;
             rows[0][1] = heart;
             rows[0][2] = spo2;
@@ -6999,6 +7102,82 @@ public class IcuDashboardView extends View {
         for (int i = 0; i < rows.length; i++) {
             drawPdfTableRow(canvas, pdfPaint, rows[i], left, top + 20 + i * 20, widths, 20, false, i);
         }
+    }
+
+    /* ★ 2026-10-12：记录单「治疗结束前时间段」窗口 —— 趋势历史尾部最多 300 个采样（约 1Hz，≈结束前最后 5 分钟）。 */
+    private static final int SHEET_VITALS_WINDOW = 300;
+    private static final int SHEET_VITALS_ROWS = 4;
+
+    /** 治疗结束时间（毫秒）；结束时间为空/「进行中」时取当前时间。解析失败同样回退当前时间。 */
+    private long sheetWindowEndMs(PatientCase patient) {
+        String end = patient == null ? "" : patient.treatmentEndTime;
+        if (!TextUtils.isEmpty(end) && !"进行中".equals(end)) {
+            try {
+                Date parsed = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).parse(end.trim());
+                if (parsed != null) {
+                    return parsed.getTime();
+                }
+            } catch (Exception ignored) {
+            }
+        }
+        return System.currentTimeMillis();
+    }
+
+    /** 窗口内按 fraction(0..1) 等距取趋势值；空历史返回 ""。 */
+    private String sheetWindowValue(List<Integer> history, int window, double fraction) {
+        if (history == null || history.isEmpty()) {
+            return "";
+        }
+        int idx = history.size() - window + (int) Math.round(fraction * (window - 1));
+        if (idx < 0) {
+            idx = 0;
+        }
+        if (idx >= history.size()) {
+            idx = history.size() - 1;
+        }
+        return String.valueOf(history.get(idx));
+    }
+
+    /** 由趋势历史尾部窗口生成记录单体征行 [时间,心率,血氧,血压,体温]；无任何历史返回 null。 */
+    private String[][] sheetWindowVitalsRows(List<Integer> hrHist, List<Integer> spo2Hist, List<Integer> tempHist,
+                                             String bpText, long endMs) {
+        int maxLen = 0;
+        if (hrHist != null) {
+            maxLen = Math.max(maxLen, hrHist.size());
+        }
+        if (spo2Hist != null) {
+            maxLen = Math.max(maxLen, spo2Hist.size());
+        }
+        if (tempHist != null) {
+            maxLen = Math.max(maxLen, tempHist.size());
+        }
+        if (maxLen <= 0) {
+            return null;
+        }
+        int window = Math.min(SHEET_VITALS_WINDOW, maxLen);
+        SimpleDateFormat timeFmt = new SimpleDateFormat("HH:mm:ss", Locale.getDefault());
+        String[][] rows = new String[SHEET_VITALS_ROWS][5];
+        for (int i = 0; i < SHEET_VITALS_ROWS; i++) {
+            double fraction = (double) i / (SHEET_VITALS_ROWS - 1);
+            long rowMs = endMs - Math.round((window - 1) * (1.0 - fraction) * 1000.0);
+            rows[i][0] = timeFmt.format(new Date(rowMs));
+            rows[i][1] = sheetWindowValue(hrHist, window, fraction);
+            rows[i][2] = sheetWindowValue(spo2Hist, window, fraction);
+            /* 血压为点测，趋势里只有收缩压，记录行统一用最近一次有效血压 */
+            rows[i][3] = pdfIsBlankValue(bpText) ? "" : bpText;
+            /* 体温趋势按 0.1℃ 整数存储，显示还原成一位小数 */
+            String tempRaw = sheetWindowValue(tempHist, window, fraction);
+            if (tempRaw.isEmpty()) {
+                rows[i][4] = "";
+            } else {
+                try {
+                    rows[i][4] = String.format(Locale.getDefault(), "%.1f", Integer.parseInt(tempRaw) / 10.0);
+                } catch (NumberFormatException ignored) {
+                    rows[i][4] = tempRaw;
+                }
+            }
+        }
+        return rows;
     }
 
     private void drawPdfTemplateWave(Canvas canvas, Paint pdfPaint, String label, float top, int color, int type,
@@ -8047,12 +8226,14 @@ public class IcuDashboardView extends View {
                 {"舱内温度  ℃", compactDashboardValue(bleManager.getLastSetCabinTempText()), "♨", "#444444"},
                 {"氧浓度  %", compactDashboardValue(bleManager.getLastSetOxygenText()), "O₂", "#444444"},
                 {"湿度  %", compactDashboardValue(bleManager.getHumidityText()), "♢", "#444444"},
-                {"红外体温  ℃", compactDashboardValue(bleManager.getInfraredTempText()), "♨", "#444444"},
+                // ★ 2026-10-12：热图在线时显示热图最高温，离线回退主机 BLE 红外体温
+                {"红外体温  ℃", compactDashboardValue(statusInfraredTempText()), "♨", "#444444"},
                 {"监护等级", monitorLevelText, "▣", "#F0545C"},
                 {"二氧化碳浓度  PPM", compactDashboardValue(bleManager.getCo2Text()), "CO₂", "#444444"},
                 {"治疗时长  h", compactDashboardValue(bleManager.getTreatmentTimeText()), "◷", "#444444"},
-                {"红外理疗  m", compactDashboardValue(bleManager.getControlValue(6)), "∿", "#444444"},
-                {"蓝光理疗  m", compactDashboardValue(bleManager.getControlValue(7)), "☂", "#444444"}
+                // ★ 2026-10-12：定时控件设为 24h 常开（不限时）时状态页同步显示，与主控页一致
+                {"红外理疗  m", compactDashboardValue(statusTimedControlText(6)), "∿", "#444444"},
+                {"蓝光理疗  m", compactDashboardValue(statusTimedControlText(7)), "☂", "#444444"}
         };
         for (int i = 0; i < data.length; i++) {
             int col = i % 3;
@@ -8108,7 +8289,8 @@ public class IcuDashboardView extends View {
             }));
         }
         RectF thermal = rect(left + dp(504), miniTop, left + dp(760), miniTop + dp(110));
-        drawLightPreview(canvas, thermal);
+        // ★ 2026-10-12：原黄色空白区改为红外热图区（点击连接红外测温桥）
+        drawThermalArea(canvas, thermal);
 
         RectF summary = rect(left, shell.bottom - dp(130), shell.right - dp(22), shell.bottom - dp(28));
         rounded(canvas, summary, panel, Color.TRANSPARENT, dp(8));
@@ -8184,6 +8366,13 @@ public class IcuDashboardView extends View {
     }
 
     private void handleControlCardTap(int index, String title) {
+        /* ★ 2026-10-12：主机蓝牙未连接时禁止一切主机功能操作
+           （红外/蓝光/紫外/雾化/负离子/照明/循环/温氧设置/监护等级等），
+           仅湿度读取(14，只读缓存)与治疗时长说明(15，纯本地)放行 */
+        if (!bleManager.isConnected() && index != 14 && index != 15) {
+            Toast.makeText(activity, "主机蓝牙未连接，无法操作主机功能", Toast.LENGTH_SHORT).show();
+            return;
+        }
         if (index == 0 || index == 1) {
             handleControlButtonTap(index, title);
             return;
@@ -10806,6 +10995,161 @@ public class IcuDashboardView extends View {
         paint.setShader(new LinearGradient(inner.left, inner.top, inner.right, inner.bottom, Color.rgb(68, 48, 16), Color.rgb(246, 216, 34), Shader.TileMode.CLAMP));
         canvas.drawRect(inner, paint);
         paint.setShader(null);
+    }
+
+    /* ★ 2026-10-12 红外热图区：已连接且有新帧（5s 内）显示热图 + 最高温；
+       否则保留黄色渐变底 + 连接状态文字，点击发起扫描/连接，已连接时点击可断开 */
+    private void drawThermalArea(Canvas canvas, RectF r) {
+        rounded(canvas, r, Color.WHITE, Color.TRANSPARENT, dp(8));
+        RectF inner = inset(r, dp(4), dp(4));
+        boolean fresh = thermalBitmap != null
+                && System.currentTimeMillis() - thermalFrameAtMs < 5000L;
+        if (fresh) {
+            canvas.save();
+            canvas.clipRect(inner);
+            canvas.drawBitmap(thermalBitmap, null, inner, null);
+            canvas.restore();
+            String maxText = String.format(java.util.Locale.US, "%.1f℃", thermalMaxCenti / 100f);
+            RectF badge = rect(inner.right - dp(64), inner.top + dp(4), inner.right - dp(4), inner.top + dp(22));
+            rounded(canvas, badge, Color.argb(160, 0, 0, 0), Color.TRANSPARENT, dp(9));
+            drawTextCenter(canvas, maxText, badge, 12, Color.WHITE, true);
+        } else {
+            drawLightPreview(canvas, r);
+            String label;
+            if (!TextUtils.isEmpty(thermalConnState) && !"点击连接红外测温".equals(thermalConnState)) {
+                label = thermalConnState;
+            } else if (System.currentTimeMillis() - thermalScanRequestedAtMs < 10000L) {
+                label = "正在搜索红外测温桥…";
+            } else {
+                label = "点击连接红外测温";
+            }
+            drawTextCenter(canvas, label, inset(r, dp(8), dp(8)), 12, Color.rgb(60, 42, 8), true);
+        }
+        clickZones.add(new ClickZone(new RectF(r), new ClickAction() {
+            @Override
+            public void run() {
+                handleThermalAreaTap();
+            }
+        }));
+    }
+
+    private void handleThermalAreaTap() {
+        boolean fresh = thermalBitmap != null
+                && System.currentTimeMillis() - thermalFrameAtMs < 5000L;
+        if (fresh || "红外热图已连接".equals(thermalConnState)) {
+            new AlertDialog.Builder(activity)
+                    .setTitle("红外测温")
+                    .setMessage("当前已连接红外测温桥，是否断开？")
+                    .setNegativeButton("取消", null)
+                    .setPositiveButton("断开", (dialog, which) -> {
+                        activity.thermalDisconnectNative();
+                    })
+                    .show();
+            return;
+        }
+        java.util.ArrayList<ThermalBleManager.DeviceItem> devices = activity.thermalDevicesNative();
+        if (!devices.isEmpty()) {
+            showThermalDevicePicker(devices);
+            return;
+        }
+        /* ★ 2026-10-12：先发起扫描，搜到设备后由 updateThermalDevices 自动弹出选择框，
+           不再需要用户"稍候再次点击" */
+        thermalScanRequestedAtMs = System.currentTimeMillis();
+        activity.thermalStartScanNative();
+        invalidate();
+    }
+
+    private void showThermalDevicePicker(final java.util.ArrayList<ThermalBleManager.DeviceItem> devices) {
+        String[] names = new String[devices.size()];
+        for (int i = 0; i < devices.size(); i++) {
+            names[i] = devices.get(i).name + "  RSSI " + devices.get(i).rssi;
+        }
+        new AlertDialog.Builder(activity)
+                .setTitle("选择红外测温桥")
+                .setItems(names, (dialog, which) -> activity.thermalConnectNative(devices.get(which).address))
+                .setNegativeButton("重新搜索", (dialog, which) -> {
+                    thermalScanRequestedAtMs = System.currentTimeMillis();
+                    activity.thermalStartScanNative();
+                    invalidate();
+                })
+                .show();
+    }
+
+    /** MainActivity 搜到红外测温桥时调用（主线程）：若刚由用户点击触发扫描，自动弹出选择框 */
+    void updateThermalDevices(java.util.ArrayList<ThermalBleManager.DeviceItem> devices) {
+        thermalDevices = devices == null ? new java.util.ArrayList<ThermalBleManager.DeviceItem>() : devices;
+        invalidate();
+        if (!thermalDevices.isEmpty()
+                && System.currentTimeMillis() - thermalScanRequestedAtMs < 15000L) {
+            thermalScanRequestedAtMs = 0;
+            showThermalDevicePicker(thermalDevices);
+        }
+    }
+
+    /** 状态页定时控件（红外理疗/蓝光理疗等）数值：不限时常开显示「24h常开」，与主控页一致 */
+    private String statusTimedControlText(int index) {
+        if (bleManager.isTimedControlUnlimited(index)) {
+            return "24h常开";
+        }
+        return bleManager.getControlValue(index);
+    }
+
+    /** 状态页「红外体温」卡数值：热图在线时显示热图最高温，否则回退主机 BLE 红外体温 */
+    private String statusInfraredTempText() {
+        boolean fresh = thermalBitmap != null
+                && System.currentTimeMillis() - thermalFrameAtMs < 5000L;
+        if (fresh) {
+            return String.format(java.util.Locale.US, "%.1f", thermalMaxCenti / 100f);
+        }
+        return bleManager.getInfraredTempText();
+    }
+
+    /** MainActivity 收到热图帧时调用（主线程） */
+    void updateThermalFrame(short[] centiDegrees, int width, int height) {
+        if (centiDegrees == null || centiDegrees.length != width * height || width < 1 || height < 1) {
+            return;
+        }
+        int min = Integer.MAX_VALUE;
+        int max = Integer.MIN_VALUE;
+        for (short v : centiDegrees) {
+            if (v < min) min = v;
+            if (v > max) max = v;
+        }
+        if (max <= min) {
+            max = min + 1;
+        }
+        int[] colors = new int[centiDegrees.length];
+        float range = max - min;
+        for (int i = 0; i < centiDegrees.length; i++) {
+            colors[i] = thermalColor((centiDegrees[i] - min) / range);
+        }
+        if (thermalBitmap == null || thermalBitmap.getWidth() != width || thermalBitmap.getHeight() != height) {
+            thermalBitmap = android.graphics.Bitmap.createBitmap(width, height, android.graphics.Bitmap.Config.ARGB_8888);
+        }
+        thermalBitmap.setPixels(colors, 0, width, 0, 0, width, height);
+        thermalPixels = centiDegrees;
+        thermalPixelW = width;
+        thermalPixelH = height;
+        thermalMaxCenti = max;
+        thermalFrameAtMs = System.currentTimeMillis();
+        invalidate();
+    }
+
+    /** MainActivity 连接状态变化时调用（主线程） */
+    void updateThermalConnection(String state) {
+        thermalConnState = state == null ? "" : state;
+        invalidate();
+    }
+
+    /** 蓝→青→绿→黄→红 热图色带 */
+    private static int thermalColor(float t) {
+        t = Math.max(0f, Math.min(1f, t));
+        float r, g, b;
+        if (t < 0.25f) { r = 0; g = t / 0.25f; b = 1; }
+        else if (t < 0.5f) { r = 0; g = 1; b = 1 - (t - 0.25f) / 0.25f; }
+        else if (t < 0.75f) { r = (t - 0.5f) / 0.25f; g = 1; b = 0; }
+        else { r = 1; g = 1 - (t - 0.75f) / 0.25f; b = 0; }
+        return Color.rgb(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255));
     }
 
     private void drawWave(Canvas canvas, float left, float baseline, float right, float amp, int color, int type) {

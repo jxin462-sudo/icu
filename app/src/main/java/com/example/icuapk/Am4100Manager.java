@@ -803,6 +803,17 @@ public class Am4100Manager {
             nextHr = status == 0 ? (data[5] << 8) | data[1] : -1;
             nextResp = status == 0 ? data[2] : -1;
         }
+        /* ★ 2026-10-12：心率/呼吸合理性钳制 —— 解析与贝瑞官方 demo (am4100_demo) 完全一致，
+           但实测偶发收到高字节异常的 6 字节帧，心率会显示 500+ bpm。
+           猫狗等宠物 HR 不可能超过 400，超范围一律视为无效显示 "--"，并记录原始帧便于排查。 */
+        if (nextHr > 400) {
+            addLog("丢弃异常心率帧: hr=" + nextHr + " data=" + java.util.Arrays.toString(data));
+            nextHr = -1;
+        }
+        if (nextResp > 200) {
+            addLog("丢弃异常呼吸帧: resp=" + nextResp + " data=" + java.util.Arrays.toString(data));
+            nextResp = -1;
+        }
         heartRate = nextHr;
         resp = nextResp;
         recordTrendSample(heartRateHistory, heartRate);
@@ -865,6 +876,11 @@ public class Am4100Manager {
             if (nextPr == 0xFF00) {
                 nextPr = -1;
             }
+        }
+        if (nextPr > 400) {
+            /* ★ 2026-10-12：脉率同理钳制，防高字节异常显示 500+ */
+            addLog("丢弃异常脉率帧: pr=" + nextPr + " data=" + java.util.Arrays.toString(data));
+            nextPr = -1;
         }
         spo2 = nextSpo2;
         pulseRate = nextPr;
@@ -957,7 +973,8 @@ public class Am4100Manager {
             return;
         }
         if (TextUtils.isEmpty(name)) {
-            name = "未知设备 " + addressSuffix(address);
+            /* ★ 2026-10-12：扫描列表全部只显示蓝牙名称，不再拼 MAC 地址后缀 */
+            name = "未知设备";
         }
         DeviceItem item = new DeviceItem(address, name, result.getRssi());
         synchronized (devices) {

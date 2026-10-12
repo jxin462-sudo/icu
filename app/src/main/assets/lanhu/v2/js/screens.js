@@ -800,7 +800,8 @@
         + '<div><b>' + T('sheetAnimal', '动物名称') + '：</b>' + s.animal + '</div><div><b>' + T('fieldCaseNo', '住院号') + '：</b>' + s.no + '</div>'
         + '<div><b>' + T('sheetOwner', '主人') + '：</b>' + seTxt('owner', s.owner) + '</div><div><b>' + T('sheetTreatDate', '治疗日期') + '：</b>' + s.date + '</div><div><b>' + T('sheetCage', '舱位') + '：</b>' + s.cage + '</div>'
         + '<div><b>' + T('sheetSpecies', '动物种类') + '：</b>' + spTxt(s.sp) + '</div><div><b>' + T('sheetWeight', '体重') + '：</b>' + seTxt('weight', s.weight) + '</div>'
-        + '<div><b>' + T('sheetDept', '科室') + '：</b>' + seTxt('dept', s.dept) + '</div><div><b>' + T('sheetDur', '治疗时长') + '：</b>' + s.dur + '</div><div><b>' + T('sheetDoctor', '操作医师') + '：</b>' + seTxt('doc', s.doc) + '</div>'
+        /* ★ 2026-10-12：科室栏先注释掉不显示（保留数据字段，后续要恢复把下面这行加回即可） */
+        + /* '<div><b>' + T('sheetDept', '科室') + '：</b>' + seTxt('dept', s.dept) + '</div>' */ '<div><b>' + T('sheetDur', '治疗时长') + '：</b>' + s.dur + '</div><div><b>' + T('sheetDoctor', '操作医师') + '：</b>' + seTxt('doc', s.doc) + '</div>'
         + '</div>';
       const proj = '<div class="tproj">' + s.proj.map(function (p, i) {
         if (ed) {
@@ -833,10 +834,12 @@
         if (!vr.length) { for (let i = 0; i < 4; i++) vs += '<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>'; }
         vs += '</table>';
       }
-      /* 三条波形（对齐设计图：心电图 / 脉搏波形图 / 呼吸率图） */
-      const ws = P.waveStrip('ecg', '#3dff6b', T('waveEcg', '【心电图】'))
-        + P.waveStrip('pleth', '#ff6b6b', T('wavePleth', '【脉搏波形图】'))
-        + P.waveStrip('resp', '#4aa3ff', T('waveResp', '【呼吸率图】'));
+      /* 三条波形（对齐设计图：心电图 / 脉搏波形图 / 呼吸率图）
+         ★ 2026-10-12：优先用样本监护快照尾部窗口真实数据（与上方生命体征记录同一时间段），无数据回退演示波形 */
+      const sheetWaves = D.sheet.waves || {};
+      const ws = P.waveStrip('ecg', '#3dff6b', T('waveEcg', '【心电图】'), sheetWaves.ecg)
+        + P.waveStrip('pleth', '#ff6b6b', T('wavePleth', '【脉搏波形图】'), sheetWaves.pleth)
+        + P.waveStrip('resp', '#4aa3ff', T('waveResp', '【呼吸率图】'), sheetWaves.resp);
       /* 【环境参数】舱内温度 / 湿度 / CO₂浓度 / 氧浓度 */
       const env = '<div class="sheet-env">' + s.env.map(function (e, i) {
         if (ed) {

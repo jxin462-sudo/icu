@@ -422,9 +422,25 @@
     }
     window.__waveAnimKick = function () { if (!running) { running = true; last = 0; requestAnimationFrame(tick); } };
   })();
-  function waveStrip(kind, color, cap) {
+  /* ★ 2026-10-12：waveStrip 支持真实采样数据（data 数组）——记录单三条波形用
+     治疗结束前同一时间段的监护数据绘制；无数据时回退本地演示波形 */
+  function waveDataPath(data, w, h) {
+    if (!data || data.length < 2) return '';
+    var min = Infinity, max = -Infinity;
+    for (var i = 0; i < data.length; i++) { var v = data[i]; if (v < min) min = v; if (v > max) max = v; }
+    if (max - min < 1) { max = min + 1; }
+    var pad = 6, pts = [];
+    for (var j = 0; j < data.length; j++) {
+      var x = (j / (data.length - 1)) * w;
+      var y = h - pad - ((data[j] - min) / (max - min)) * (h - pad * 2);
+      pts.push(x.toFixed(1) + ',' + y.toFixed(1));
+    }
+    return pts.join(' ');
+  }
+  function waveStrip(kind, color, cap, data) {
+    var points = (data && data.length >= 2) ? waveDataPath(data, 900, 120) : wavePath(kind, 900, 120);
     return '<div class="wave-strip"><div class="cap">' + cap + '</div><div class="wp"><svg viewBox="0 0 900 120" preserveAspectRatio="none">'
-      + '<polyline points="' + wavePath(kind, 900, 120) + '" fill="none" stroke="' + color + '" stroke-width="3"/></svg></div></div>';
+      + '<polyline points="' + points + '" fill="none" stroke="' + color + '" stroke-width="3"/></svg></div></div>';
   }
 
   function fisheye(ts) {

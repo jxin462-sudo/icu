@@ -414,6 +414,12 @@
       D.sheet.vitalsRows = (p.vitals || []).map(function (r) {
         return [r[0] || '', r[1] || '', r[2] || '', r[3] || '', r[4] || ''];
       });
+      /* ★ 2026-10-12：记录单三条波形用样本监护快照的尾部窗口数据（与生命体征记录同一时间段），
+         无数据时 H5 端回退演示波形 */
+      var sw = p.sheetWaves || {};
+      D.sheet.waves = {
+        ecg: arrNums(sw.ecg), pleth: arrNums(sw.pleth), resp: arrNums(sw.resp)
+      };
       if (D.sheet.concl) {
         D.sheet.concl.selIdx = p.conclIdx || 0;
         D.sheet.concl.advice = p.advice || '';
