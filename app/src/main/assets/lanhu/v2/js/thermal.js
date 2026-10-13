@@ -207,12 +207,18 @@
     if (!p) return;
     var list = p.querySelector('[data-th-list]');
     if (list) {
-      list.innerHTML = st.devices.map(function (d, i) {
+      var html = st.devices.map(function (d, i) {
         return '<div class="th-row-dev" data-th-dev="' + i + '">'
           + '<span>' + esc(d.name || '未知设备') + '</span>'
           + '<i>RSSI ' + (d.rssi === undefined ? '--' : d.rssi) + '</i></div>';
       }).join('') || '<div class="th-row-dev disabled">未搜索到设备</div>';
+      /* ★ V27：扫描结果流式推送时只在列表内容真正变化时才重建，根治弹窗闪烁 */
+      if (list.getAttribute('data-th-html') !== html) {
+        list.innerHTML = html;
+        list.setAttribute('data-th-html', html);
+      }
     }
+    if (!p.hidden) { st.pickerOpen = true; return; }  // 已开着就别重复触发显示
     p.hidden = false;
     st.pickerOpen = true;
   }
@@ -351,6 +357,8 @@
     });
     draw();
     paintStatus();
+    /* ★ V27：状态页整体重渲染会把 picker 一起重建，之前开着就在新 DOM 上恢复，避免一闪一闪 */
+    if (st.pickerOpen && st.devices.length) openPicker();
     return true;
   }
 
