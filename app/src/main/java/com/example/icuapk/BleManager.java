@@ -754,6 +754,16 @@ public class BleManager {
         return String.format(Locale.US, "%02d:%02d:%02d", hours, minutes, seconds);
     }
 
+    /* ★ 2026-10-13 V25：状态页「治疗时长（h）」按小数小时显示（如 18.5），与主控 HH:MM:SS 分开 */
+    public String getTreatmentTimeHoursText() {
+        long totalMs = getCurrentTreatmentElapsedMs();
+        if (totalMs <= 0L) {
+            return "--";
+        }
+        double hours = totalMs / 3600000.0;
+        return String.format(Locale.US, "%.1f", hours);
+    }
+
     public Integer getTreatmentMinutesValue() {
         return treatmentMinutes;
     }

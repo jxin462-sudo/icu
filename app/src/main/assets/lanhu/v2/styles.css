@@ -185,12 +185,14 @@ input.inp::placeholder{color:var(--ink3)}
 .metric .pbar{height:10px;border-radius:6px;background:#d7e3f5;overflow:hidden;margin-top:10px}
 .metric .pbar i{display:block;height:100%;background:var(--accent);border-radius:6px}
 .metric .level{display:flex;align-items:center;justify-content:space-between;flex:1}
-.metric .level .lvl{color:#fff;border-radius:26px;padding:10px 30px;font-size:26px}
-.metric .level .mi-shield{width:54px;height:54px}
+/* ★ V25：药丸拉宽占满剩余空间、文字居中，与 6.png 一致 */
+.metric .level .lvl{flex:1;margin-right:20px;text-align:center;color:#fff;border-radius:30px;padding:12px 0;font-size:26px}
+.metric .level .mi-shield{width:54px;height:54px;flex:none}
 .metric .level .mi-shield svg{width:52px;height:52px}
-.metric .dots{display:flex;gap:28px;margin-bottom:22px}
-.metric .dots i{width:36px;height:36px;border-radius:50%;cursor:pointer}
-.metric .dots i.on{box-shadow:0 0 0 3px #fff,0 0 0 5px var(--c,#999)}
+/* ★ V25：三色圆点整行均分撑满卡宽；未选中带灰细环，选中带蓝色外环（同 6.png） */
+.metric .dots{display:flex;justify-content:space-between;width:100%;margin-bottom:14px;padding:0 6px}
+.metric .dots i{width:40px;height:40px;border-radius:50%;cursor:pointer;box-shadow:0 0 0 2px var(--card),0 0 0 3.5px #b9c2cf}
+.metric .dots i.on{box-shadow:0 0 0 3px var(--card),0 0 0 6px var(--accent)}
 .status-actions{position:absolute;left:58px;top:898px;width:1090px;display:grid;grid-template-columns:repeat(3,330px);column-gap:50px}
 .wbtn{height:92px;border-radius:10px;background:var(--card-2);color:var(--ink2);display:flex;align-items:center;justify-content:center;gap:14px;font-size:26px}
 .wbtn svg{width:42px;height:42px}

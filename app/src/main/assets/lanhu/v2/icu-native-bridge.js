@@ -284,7 +284,7 @@
       var hostUp = !!((S.host && S.host.connected) || (S.ble && S.ble.host && S.ble.host.connected));
       D.status = {
         temp: hostUp ? num(h.temp, '--') : '--', o2: hostUp ? num(h.oxygen, '--') : '--', hum: hostUp ? num(h.humidity, '--') : '--',
-        co2: hostUp ? num(h.co2, '--') : '--', irTemp: hostUp ? num(h.infraredTemp, '--') : '--', dur: text(h.treatmentTime, '--'),
+        co2: hostUp ? num(h.co2, '--') : '--', irTemp: hostUp ? num(h.infraredTemp, '--') : '--', dur: text(h.treatmentHours, '--'),
         red: hostUp ? text(c.redTherapy, '--') : '--', blue: hostUp ? text(c.blueTherapy, '--') : '--'
       };
       /* ★ 任务33：AM4100 监护宝实时体征接入。S.monitor.connected 且有数据时填真实值；

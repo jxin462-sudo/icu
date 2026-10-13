@@ -2743,6 +2743,11 @@ public class IcuDashboardView extends View {
             if (bleManager.isTimedControlUnlimited(index)) {
                 return "24h常开";
             }
+            // ★ V25：已开但未设时长（null/0）时显示「关」，不再显示「0分钟」
+            Integer minutes = bleManager.getControlTimeValue(index);
+            if (minutes == null || minutes <= 0) {
+                return "关";
+            }
         }
         return bleManager.getControlValue(index);
     }

@@ -1575,7 +1575,9 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         host.put("pendingStatusLightColor", safeJsonText(bleManager.getPendingStatusLightColor()));
         host.put("pendingControls", safeJsonText(bleManager.getPendingControlNames()));
         host.put("infraredTemp", safeJsonText(bleManager.getInfraredTempText()));
-        host.put("treatmentTime", safeJsonText(bleManager.getTreatmentTimeText()));
+        // ★ V25：主控页治疗时长按 HH:MM:SS 时钟格式；状态页另用 treatmentHours（小数小时）
+        host.put("treatmentTime", safeJsonText(bleManager.getTreatmentTimeClockText()));
+        host.put("treatmentHours", safeJsonText(bleManager.getTreatmentTimeHoursText()));
         host.put("treatmentMinutes", bleManager.getTreatmentMinutesValue() == null
                 ? 0 : bleManager.getTreatmentMinutesValue());
         host.put("treatmentRemainingMs", bleManager.getCountdownRemainingMs(15));
