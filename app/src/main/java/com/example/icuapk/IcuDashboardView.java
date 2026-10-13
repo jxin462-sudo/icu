@@ -7098,24 +7098,41 @@ public class IcuDashboardView extends View {
         drawPdfTemplateEnvironment(canvas, pdfPaint);
         drawPdfTemplateImageAlarm(canvas, pdfPaint, patient);
         drawPdfTemplateConclusion(canvas, pdfPaint, patient, org, createdAt);
-        drawPdfTemplateFooter(canvas, pdfPaint, declaration, footerLogoUri);
+        drawPdfTemplateFooter(canvas, pdfPaint, patient, org, createdAt, declaration, footerLogoUri);
     }
 
-    private void drawPdfTemplateFooter(Canvas canvas, Paint pdfPaint, String declaration, String footerLogoUri) {
-        if (!pdfIsBlankValue(declaration)) {
-            pdfTextFit(canvas, pdfPaint, declaration, 28, 800, 539, 9, Color.rgb(96, 101, 108), false);
-        }
-        if (!pdfIsBlankValue(footerLogoUri)) {
+    // ★ 2026-10-13 V36：页脚按官方报告复刻为「蓝色横线 + 三列」——
+    //   左列：医院电话/医院地址/※声明；中列：检验医师/检验时间/页码 1/1；右侧 LOGO 垂直居中。
+    private void drawPdfTemplateFooter(Canvas canvas, Paint pdfPaint, PatientCase patient, Organization org,
+                                       String createdAt, String declaration, String footerLogoUri) {
+        int gray = Color.rgb(96, 101, 108);
+        // 页脚上方的蓝色分隔横线
+        pdfLine(canvas, pdfPaint, 28, 802, 568, 802, Color.rgb(0, 158, 218), 1.2f);
+
+        String decl = pdfIsBlankValue(declaration) ? "※本检测结果仅对该样本负责" : declaration;
+        pdfText(canvas, pdfPaint, "医院电话: " + pdfCleanValue(org == null ? "" : org.phone), 28, 816, 8.4f, gray, false);
+        pdfTextFit(canvas, pdfPaint, "医院地址: " + pdfCleanValue(org == null ? "" : org.address), 28, 828, 240, 8.4f, gray, false);
+        pdfTextFit(canvas, pdfPaint, decl.startsWith("※") ? decl : "※" + decl, 28, 840, 240, 8.4f, gray, false);
+
+        String labDoc = patient == null ? "" : pdfFirstValue(patient.labDoctor, patient.doctor, accountStore.getCurrentAccount());
+        pdfText(canvas, pdfPaint, "检验医师: " + pdfFooterValue(labDoc), 300, 816, 8.4f, gray, false);
+        pdfText(canvas, pdfPaint, "检验时间: " + pdfFooterValue(createdAt), 300, 828, 8.4f, gray, false);
+        pdfText(canvas, pdfPaint, "页码 1/1", 300, 840, 8.4f, gray, false);
+
+        // 右侧 LOGO：优先页脚 LOGO，医院 LOGO 兜底，垂直居中
+        String logoUri = pdfIsBlankValue(footerLogoUri) ? (org == null ? null : org.logoUri) : footerLogoUri;
+        if (!pdfIsBlankValue(logoUri)) {
             try {
-                Bitmap bmp = BitmapFactory.decodeFile(footerLogoUri);
+                Bitmap bmp = BitmapFactory.decodeFile(logoUri);
                 if (bmp != null) {
-                    float maxH = 28f;
+                    float maxH = 30f;
                     float h = maxH;
                     float w = h * bmp.getWidth() / bmp.getHeight();
                     if (w > 120f) { w = 120f; h = w * bmp.getHeight() / bmp.getWidth(); }
+                    float top = 802 + (40 - h) / 2f + 2;
                     pdfPaint.setShader(null);
                     pdfPaint.setStyle(Paint.Style.FILL);
-                    canvas.drawBitmap(bmp, null, new RectF(595 - 28 - w, 806, 595 - 28, 806 + h), pdfPaint);
+                    canvas.drawBitmap(bmp, null, new RectF(567 - w, top, 567, top + h), pdfPaint);
                     bmp.recycle();
                 }
             } catch (Exception ignored) {
@@ -7485,30 +7502,23 @@ public class IcuDashboardView extends View {
         drawPdfSectionTitle(canvas, pdfPaint, "\u3010\u6cbb\u7597\u7ed3\u8bba\u3011", 28, 704, 92, 568);
         pdfText(canvas, pdfPaint, "\u6cbb\u7597\u6548\u679c:", 28, 728, 9.5f, Color.rgb(96, 101, 108), false);
         // 方框按各自右侧文字的实际墨迹中心放置（getTextBounds），与文字视觉齐平
-        drawPdfCheckboxForBaseline(canvas, pdfPaint, 82, 728, 9.5f, false, "\u826f\u597d");
-        pdfText(canvas, pdfPaint, "\u826f\u597d", 96, 728, 9.5f, Color.rgb(96, 101, 108), false);
-        drawPdfCheckboxForBaseline(canvas, pdfPaint, 128, 728, 9.5f, false, "\u4e00\u822c");
-        pdfText(canvas, pdfPaint, "\u4e00\u822c", 142, 728, 9.5f, Color.rgb(96, 101, 108), false);
-        drawPdfCheckboxForBaseline(canvas, pdfPaint, 176, 728, 9.5f, false, "\u5dee");
-        pdfText(canvas, pdfPaint, "\u5dee", 190, 728, 9.5f, Color.rgb(96, 101, 108), false);
+        // \u2605 2026-10-13 V36\uff1a\u52fe\u9009\u6309 sheetConclusionIdx\uff08\u6b64\u524d\u6052\u4e0d\u52fe\uff09
+        int ci = patient == null ? 0 : patient.sheetConclusionIdx;
+        String[] opts = { "\u826f\u597d", "\u4e00\u822c", "\u5dee" };
+        float[] xs = { 82, 128, 176 };
+        for (int i = 0; i < 3; i++) {
+            drawPdfCheckboxForBaseline(canvas, pdfPaint, xs[i], 728, 9.5f, i == ci, opts[i]);
+            pdfText(canvas, pdfPaint, opts[i], xs[i] + 14, 728, 9.5f, Color.rgb(96, 101, 108), false);
+        }
 
-        pdfText(canvas, pdfPaint, "\u51fa\u9662\u5efa\u8bae:", 28, 751, 9.5f, Color.rgb(96, 101, 108), false);
-        RectF advice = new RectF(78, 738, 568, 771);
+        pdfText(canvas, pdfPaint, "\u51fa\u9662\u5efa\u8bae:", 28, 762, 9.5f, Color.rgb(96, 101, 108), false);
+        RectF advice = new RectF(78, 744, 568, 794);
         pdfRoundRect(canvas, pdfPaint, advice.left, advice.top, advice.right, advice.bottom, 2,
                 Color.rgb(229, 239, 251), Color.TRANSPARENT, 0);
-        pdfDrawWrappedText(canvas, pdfPaint, patient.note, advice.left + 8, advice.top + 15, advice.width() - 16,
-                9.4f, Color.rgb(96, 101, 108), false, 2, 13);
-        // 复诊时间来自病例录入弹窗；未填写时仍显示 "--"
-        pdfText(canvas, pdfPaint, "\u590d\u8bca\u65f6\u95f4: " + pdfFirstValue(patient.followUpDate), 28, 793, 9.5f, Color.rgb(96, 101, 108), false);
-
-        pdfText(canvas, pdfPaint, "\u64cd\u4f5c\u533b\u5e08: " + pdfFooterValue(pdfFirstValue(patient.doctor, accountStore.getCurrentAccount())), 28, 821, 9.0f, Color.rgb(96, 101, 108), false);
-        pdfText(canvas, pdfPaint, "\u4e3b\u7ba1\u62a4\u58eb: ________", 150, 821, 9.0f, Color.rgb(96, 101, 108), false);
-        pdfText(canvas, pdfPaint, "\u52a8\u7269\u4e3b\u4eba: " + pdfFooterValue(patient.ownerName), 280, 821, 9.0f, Color.rgb(96, 101, 108), false);
-        pdfText(canvas, pdfPaint, "\u6253\u5370\u65f6\u95f4: " + createdAt, 430, 821, 9.0f, Color.rgb(96, 101, 108), false);
-
-        pdfText(canvas, pdfPaint, "\u533b\u9662\u7535\u8bdd: " + pdfCleanValue(org == null ? "" : org.phone), 28, 838, 8.4f, Color.rgb(96, 101, 108), false);
-        pdfTextFit(canvas, pdfPaint, "\u533b\u9662\u5730\u5740: " + pdfCleanValue(org == null ? "" : org.address), 170, 838, 250, 8.4f, Color.rgb(96, 101, 108), false);
-        pdfText(canvas, pdfPaint, "\u203b \u672c\u68c0\u6d4b\u7ed3\u679c\u4ec5\u5bf9\u8be5\u6837\u672c\u8d1f\u8d23", 430, 838, 8.4f, Color.rgb(96, 101, 108), false);
+        // ★ V36：出院建议内容用 sheetAdvice（此前误用恒空的 patient.note），框加高为 3 行
+        String adviceText = patient == null ? "" : pdfFirstValue(patient.sheetAdvice, patient.note);
+        pdfDrawWrappedText(canvas, pdfPaint, adviceText, advice.left + 8, advice.top + 17, advice.width() - 16,
+                9.4f, Color.rgb(96, 101, 108), false, 3, 14);
     }
 
     private void drawPdfSectionTitle(Canvas canvas, Paint pdfPaint, String title, float x, float y, float lineStart, float lineEnd) {
