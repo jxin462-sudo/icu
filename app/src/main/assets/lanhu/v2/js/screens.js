@@ -207,7 +207,7 @@
         sheetImgPh: '图片', sheetBefore: '治疗前', sheetAfter: '治疗后', sheetQrBox: '二维码', sheetQrView: '扫码查看原图',
         sheetEffect: '治疗效果：', sheetAdvice: '出院建议：',
         conclGood: '良好', conclFair: '一般', conclPoor: '差',
-        sheetLabDoc: '检验医师：', sheetLabTime: '检验时间：',
+        sheetLabDoc: '检验医师：', sheetLabTime: '检验时间：', sheetPage: '页码',
         recordSave: '保存', recordPrev: '上一样本', recordNext: '下一样本',
         recordNoSwitch: '暂无可切换的样本', recordFirstSample: '已经是第一个样本', recordLastSample: '已经是最后一个样本',
         sheetTitle: 'ICU动物舱治疗记录单',
@@ -264,7 +264,7 @@
         sheetImgPh: 'Photo', sheetBefore: 'Before', sheetAfter: 'After', sheetQrBox: 'QR Code', sheetQrView: 'Scan to view',
         sheetEffect: 'Outcome: ', sheetAdvice: 'Discharge Advice: ',
         conclGood: 'Good', conclFair: 'Fair', conclPoor: 'Poor',
-        sheetLabDoc: 'Lab Doctor: ', sheetLabTime: 'Lab Time: ',
+        sheetLabDoc: 'Lab Doctor: ', sheetLabTime: 'Lab Time: ', sheetPage: 'Page',
         recordSave: 'Save', recordPrev: 'Prev Sample', recordNext: 'Next Sample',
         recordNoSwitch: 'No other sample to switch to', recordFirstSample: 'Already the first sample', recordLastSample: 'Already the last sample',
         sheetTitle: 'ICU Animal Cabin Treatment Record',
@@ -873,14 +873,16 @@
           : '<div class="advice">' + s.concl.advice + '</div>')
         + '</div></div>';
       /* 页脚：医院信息 / 检验信息 / 品牌 */
-      /* ★ 2026-10-13 V33：报告声明（s.foot.note）独立成行并下移，不再紧贴上面的医院电话/地址 */
+      /* ★ 2026-10-13 V35：页脚 1:1 复刻官方报告排版 ——
+         左列「医院电话/医院地址/※声明」三行，中列「检验医师/检验时间/页码」三行，右侧 LOGO 垂直居中。
+         （V33 曾把声明拆成独立整行，现按官方样式放回左列行内） */
       const labDoc = ed
         ? '<div><span>' + T('sheetLabDoc', '检验医师：') + '</span><input class="sheet-in foot-in" data-se="foot-doc" maxlength="20" value="' + (s.foot.doc || '') + '"></div>'
         : '<div>' + T('sheetLabDoc', '检验医师：') + s.foot.doc + '</div>';
       const foot = '<div class="sheet-foot">'
-        + '<div class="fcol"><div>' + T('hospitalPhone', '医院电话') + '：' + s.foot.tel + '</div><div>' + T('hospitalAddr', '医院地址') + '：' + s.foot.addr + '</div></div>'
-        + '<div class="fcol">' + labDoc + '<div>' + T('sheetLabTime', '检验时间：') + fmtDT(s.foot.time) + '</div><div>' + s.foot.page + '</div></div>'
-        + '<div class="fnote">' + (s.foot.note || '') + '</div>'
+        + '<div class="fcol"><div>' + T('hospitalPhone', '医院电话') + '：' + s.foot.tel + '</div><div>' + T('hospitalAddr', '医院地址') + '：' + s.foot.addr + '</div>'
+        + '<div class="fnote">' + (s.foot.note || '') + '</div></div>'
+        + '<div class="fcol">' + labDoc + '<div>' + T('sheetLabTime', '检验时间：') + fmtDT(s.foot.time) + '</div><div>' + T('sheetPage', '页码') + '&nbsp;&nbsp;' + (s.foot.page || '1/1') + '</div></div>'
         /* ★ 2026-10-13 修复：页脚 LOGO 与医院 LOGO 是两套独立字段，记录单页脚原只认 footerLogoUri。
            若用户只在「医院LOGO」入口上传、没传「页脚LOGO」，页脚就会空（显示优利特占位）。
            改为页脚 LOGO 优先、医院 LOGO 兜底，传任意一个都能在页脚显示。 */

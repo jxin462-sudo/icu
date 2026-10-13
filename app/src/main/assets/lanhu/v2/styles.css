@@ -524,18 +524,17 @@ input.inp::placeholder{color:var(--ink3)}
 .vr-add{display:inline-block;padding:6px 20px;border:1px dashed #3d9be9;border-radius:8px;color:#1b7fd4;font-size:18px;cursor:pointer;background:#f4f9ff}
 
 /* 页脚 */
-.sheet-foot{display:flex;gap:44px;margin-top:6px;padding-top:5px;border-top:1px solid var(--line);font-size:14.5px;line-height:1.2;color:var(--ink2)}
+.sheet-foot{display:flex;gap:44px;margin-top:6px;padding-top:5px;border-top:1px solid var(--line);font-size:14.5px;line-height:1.2;color:var(--ink2);align-items:flex-start}
 .sheet-foot .fcol{flex:1}
-.sheet-foot .fcol > div{margin-bottom:2px}
-.sheet-foot .fbrand{display:flex;flex-direction:row;align-items:center;gap:8px;justify-content:center;color:var(--sheet);flex:0 0 auto;padding-left:20px}
+/* ★ 2026-10-13 V35：1:1 复刻官方报告页脚 —— 行距放宽，声明(※)在左列第三行 */
+.sheet-foot .fcol > div{margin-bottom:7px}
+.sheet-foot .fbrand{display:flex;flex-direction:row;align-items:center;gap:8px;justify-content:center;color:var(--sheet);flex:0 0 auto;padding-left:20px;align-self:center}
 .sheet-foot .fbrand svg{width:34px;height:34px;flex:0 0 auto;fill:currentColor}
 .sheet-foot .fbrand .bt{display:flex;flex-direction:column;align-items:flex-start;line-height:1.15}
 .sheet-foot .fbrand b{font-size:22px;font-weight:600;letter-spacing:2px}
 .sheet-foot .fbrand span{font-size:13px;color:var(--sheet);letter-spacing:1px}
-/* ★ 2026-10-13 V33：报告声明独立一行、与上面的医院电话/地址拉开间距 */
-.sheet-foot{flex-wrap:wrap}
-.sheet-foot .fnote{flex:0 0 100%;margin-top:14px;padding-top:8px;border-top:1px dashed var(--line);
-  font-size:14.5px;line-height:1.45;color:var(--ink2)}
+/* 报告声明：官方样式为左列行内第三行（※本检测结果仅对该样本负责），非独占整行 */
+.sheet-foot .fnote{font-size:14.5px;line-height:1.45;color:var(--ink2)}
 /* 检验医师编辑态输入框（沿用 .sheet-in 卡片底、不凸显） */
 .sheet-foot .foot-in{width:150px;height:26px;font-size:14.5px;padding:0 6px;vertical-align:middle}
 
