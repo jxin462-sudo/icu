@@ -428,15 +428,22 @@
       /* ★ 2026-10-12：记录单三条波形用样本监护快照的尾部窗口数据（与生命体征记录同一时间段），
          无数据时 H5 端回退演示波形 */
       var sw = p.sheetWaves || {};
+      /* ★ 2026-10-13 V30：波形值允许是图片 URI 字符串（替换图片场景），数组仍走采样点 */
+      var waveVal = function (v) { return (typeof v === 'string') ? v : arrNums(v); };
       D.sheet.waves = {
-        ecg: arrNums(sw.ecg), pleth: arrNums(sw.pleth), resp: arrNums(sw.resp)
+        ecg: waveVal(sw.ecg), pleth: waveVal(sw.pleth), resp: waveVal(sw.resp)
       };
       if (D.sheet.concl) {
         D.sheet.concl.selIdx = p.conclIdx || 0;
         D.sheet.concl.advice = p.advice || '';
       }
       var tr = sheetPreviewCase ? (sheetPreviewCase.treatments || []) : (S.treatments || []);
-      D.sheet.proj = tr.slice(0, 6).map(function (t) { return { on: t.enabled ? 1 : 0, lab: t.itemName || '', val: t.lastValue || '' }; });
+      /* ★ 2026-10-13 V30：项目有数据（lastValue 非空）即使 enabled 被复位也自动勾选 */
+      D.sheet.proj = tr.slice(0, 6).map(function (t) {
+        var v = t.lastValue || '';
+        var hasVal = v !== '' && v !== '--';
+        return { on: (t.enabled || hasVal) ? 1 : 0, lab: t.itemName || '', val: v };
+      });
       D.recordRows = tr.map(function (t, i) {
         // ★ 任务13：第4列「是否录入报告」读原生 TreatmentEntry.includeInReport（此前硬编码 ✗）
         return [pad(i + 1), t.itemName || '', t.enabled ? '✓' : '✗',

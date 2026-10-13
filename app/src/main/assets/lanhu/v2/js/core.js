@@ -440,6 +440,11 @@
     return pts.join(' ');
   }
   function waveStrip(kind, color, cap, data) {
+    /* ★ 2026-10-13 V30：data 为字符串时按图片渲染（后续「波形替换为图片」入口直接给 URI 即可） */
+    if (typeof data === 'string' && data) {
+      return '<div class="wave-strip"><div class="cap">' + cap + '</div><div class="wp">'
+        + '<img src="' + data + '" style="width:100%;height:100%;object-fit:fill;display:block"/></div></div>';
+    }
     var points = (data && data.length >= 2) ? waveDataPath(data, 900, 120) : wavePath(kind, 900, 120);
     return '<div class="wave-strip"><div class="cap">' + cap + '</div><div class="wp"><svg viewBox="0 0 900 120" preserveAspectRatio="none">'
       + '<polyline points="' + points + '" fill="none" stroke="' + color + '" stroke-width="3"/></svg></div></div>';

@@ -516,6 +516,9 @@ public class IcuDashboardView extends View {
         String sheetAdvice = "";
         int sheetConclusionIdx = 0;
         String sheetVitals = "";
+        // ★ 2026-10-13 V30：结束护疗时把三波形采样冻结成 JSON 文本随病例持久化
+        //   （monitorSnapshot 原始历史不落盘，重启即丢，导致记录单波形/体征行变空）。
+        String sheetWaves = "";
         final ArrayList<TreatmentEntry> treatmentEntries = new ArrayList<>();
         final MonitorSnapshot monitorSnapshot = new MonitorSnapshot();
 
@@ -2911,10 +2914,14 @@ public class IcuDashboardView extends View {
             }
         }
         json.put("vitals", vitals);
-        JSONObject sheetWaves = new JSONObject();
-        sheetWaves.put("ecg", intListToJsonArray(patient.monitorSnapshot.ecgWaveSamples));
-        sheetWaves.put("pleth", intListToJsonArray(patient.monitorSnapshot.spo2WaveSamples));
-        sheetWaves.put("resp", intListToJsonArray(patient.monitorSnapshot.respWaveSamples));
+        /* ★ 2026-10-13 V30：优先用结束护疗时冻结的波形（重启后仍有数据），无冻结再回落实时缓冲 */
+        JSONObject sheetWaves = parseSheetWavesJson(patient.sheetWaves);
+        if (sheetWaves == null) {
+            sheetWaves = new JSONObject();
+            sheetWaves.put("ecg", intListToJsonArray(patient.monitorSnapshot.ecgWaveSamples));
+            sheetWaves.put("pleth", intListToJsonArray(patient.monitorSnapshot.spo2WaveSamples));
+            sheetWaves.put("resp", intListToJsonArray(patient.monitorSnapshot.respWaveSamples));
+        }
         json.put("sheetWaves", sheetWaves);
         return json;
     }
@@ -4066,7 +4073,84 @@ public class IcuDashboardView extends View {
            使状态页与主控页不再显示该样本的残留治疗时长 */
         bleManager.resetTreatmentTimer();
         lastGeneratedPdf = null;
+        /* ★ 2026-10-13 V30：结束护疗时冻结记录单体征行+三波形，
+           否则 monitorSnapshot 历史不落盘，重启后记录单生命体征/波形全空 */
+        freezeSheetMonitorData(patient);
         saveTreatmentRecordsToStorage();
+    }
+
+    /** 结束护疗时把记录单所需的体征窗口行与三波形采样写进病例字段（随病例持久化）。 */
+    private void freezeSheetMonitorData(PatientCase patient) {
+        if (patient == null) {
+            return;
+        }
+        MonitorSnapshot snap = patient.monitorSnapshot;
+        if (snap == null) {
+            return;
+        }
+        if (TextUtils.isEmpty(patient.sheetVitals)) {
+            String[][] rows = sheetWindowVitalsRows(snap.heartRateHistory, snap.spo2History,
+                    snap.temperatureHistory, snap.bloodPressure, sheetWindowEndMs(patient));
+            if (rows != null) {
+                JSONArray arr = new JSONArray();
+                for (String[] row : rows) {
+                    JSONArray r = new JSONArray();
+                    for (String cell : row) {
+                        r.put(cell == null ? "" : cell);
+                    }
+                    arr.put(r);
+                }
+                patient.sheetVitals = arr.toString();
+            }
+        }
+        if (TextUtils.isEmpty(patient.sheetWaves)
+                && (!snap.ecgWaveSamples.isEmpty() || !snap.spo2WaveSamples.isEmpty() || !snap.respWaveSamples.isEmpty())) {
+            try {
+                JSONObject waves = new JSONObject();
+                waves.put("ecg", intListToJsonArray(snap.ecgWaveSamples));
+                waves.put("pleth", intListToJsonArray(snap.spo2WaveSamples));
+                waves.put("resp", intListToJsonArray(snap.respWaveSamples));
+                patient.sheetWaves = waves.toString();
+            } catch (JSONException ignored) {
+            }
+        }
+    }
+
+    /** 解析冻结的 sheetWaves JSON；为空/解析失败返回 null。 */
+    private JSONObject parseSheetWavesJson(String raw) {
+        if (TextUtils.isEmpty(raw)) {
+            return null;
+        }
+        try {
+            return new JSONObject(raw);
+        } catch (JSONException ignored) {
+            return null;
+        }
+    }
+
+    /** 记录单/PDF 取波形采样：优先冻结数据，其次实时快照。 */
+    private List<Integer> sheetWaveSamples(PatientCase patient, String key) {
+        if (patient == null) {
+            return null;
+        }
+        JSONObject frozen = parseSheetWavesJson(patient.sheetWaves);
+        if (frozen != null) {
+            JSONArray arr = frozen.optJSONArray(key);
+            if (arr != null && arr.length() > 1) {
+                ArrayList<Integer> out = new ArrayList<>(arr.length());
+                for (int i = 0; i < arr.length(); i++) {
+                    out.add(arr.optInt(i));
+                }
+                return out;
+            }
+        }
+        if ("ecg".equals(key)) {
+            return patient.monitorSnapshot.ecgWaveSamples;
+        }
+        if ("pleth".equals(key)) {
+            return patient.monitorSnapshot.spo2WaveSamples;
+        }
+        return patient.monitorSnapshot.respWaveSamples;
     }
 
     private JSONObject patientCaseToStorageJson(PatientCase patient) throws JSONException {
@@ -4100,6 +4184,7 @@ public class IcuDashboardView extends View {
         item.put("sheetAdvice", safeJsonText(patient.sheetAdvice));
         item.put("sheetConclusionIdx", patient.sheetConclusionIdx);
         item.put("sheetVitals", safeJsonText(patient.sheetVitals));
+        item.put("sheetWaves", safeJsonText(patient.sheetWaves));
         JSONArray entries = new JSONArray();
         for (TreatmentEntry entry : patient.treatmentEntries) {
             JSONObject entryJson = new JSONObject();
@@ -4179,6 +4264,7 @@ public class IcuDashboardView extends View {
                 item.put("sheetAdvice", safeJsonText(patient.sheetAdvice));
                 item.put("sheetConclusionIdx", patient.sheetConclusionIdx);
                 item.put("sheetVitals", safeJsonText(patient.sheetVitals));
+        item.put("sheetWaves", safeJsonText(patient.sheetWaves));
                 JSONArray entries = new JSONArray();
                 for (TreatmentEntry entry : patient.treatmentEntries) {
                     JSONObject entryJson = new JSONObject();
@@ -4457,6 +4543,7 @@ public class IcuDashboardView extends View {
         patient.sheetAdvice = item.optString("sheetAdvice", "");
         patient.sheetConclusionIdx = item.optInt("sheetConclusionIdx", 0);
         patient.sheetVitals = item.optString("sheetVitals", "");
+        patient.sheetWaves = item.optString("sheetWaves", "");
         loadTreatmentEntriesFromStorage(patient, item.optJSONArray("entries"));
         ensureTreatmentEntrySet(patient);
         // ★ 游标按舱推进：读左舱病例不能把右舱的编号起点抬上去。
@@ -4554,6 +4641,7 @@ public class IcuDashboardView extends View {
                 patient.sheetAdvice = item.optString("sheetAdvice", "");
                 patient.sheetConclusionIdx = item.optInt("sheetConclusionIdx", 0);
                 patient.sheetVitals = item.optString("sheetVitals", "");
+                patient.sheetWaves = item.optString("sheetWaves", "");
                 JSONArray entries = item.optJSONArray("entries");
                 if (entries != null && entries.length() > 0) {
                     patient.treatmentEntries.clear();
@@ -6918,17 +7006,17 @@ public class IcuDashboardView extends View {
         boolean pdfLive = pdfUseLiveMonitor(patient);
         drawPdfTemplateWave(canvas, pdfPaint, "\u3010\u5fc3\u7535\u56fe\u3011", 333, Color.rgb(55, 220, 92), 0,
                 pdfWaveSamples(pdfLive ? am4100Manager.getEcgWaveSamples() : null, pdfLive ? am4100Manager.getHeartRateHistory() : null,
-                        patient.monitorSnapshot.ecgWaveSamples, patient.monitorSnapshot.heartRateHistory),
+                        sheetWaveSamples(patient, "ecg"), patient.monitorSnapshot.heartRateHistory),
                 pdfFirstNonZero(pdfLive ? am4100Manager.getHeartRateValue() : 0,
                         pdfVitalsNumber(patient.monitorSnapshot.heartRate)));
         drawPdfTemplateWave(canvas, pdfPaint, "\u3010\u8109\u640f\u6ce2\u5f62\u56fe\u3011", 387, Color.rgb(245, 74, 72), 1,
                 pdfWaveSamples(pdfLive ? am4100Manager.getSpo2WaveSamples() : null, pdfLive ? am4100Manager.getSpo2History() : null,
-                        patient.monitorSnapshot.spo2WaveSamples, patient.monitorSnapshot.spo2History),
+                        sheetWaveSamples(patient, "pleth"), patient.monitorSnapshot.spo2History),
                 pdfFirstNonZero(pdfLive ? am4100Manager.getSpo2Value() : 0,
                         pdfVitalsNumber(patient.monitorSnapshot.spo2)));
         drawPdfTemplateWave(canvas, pdfPaint, "\u3010\u547c\u5438\u7387\u56fe\u3011", 441, Color.rgb(53, 176, 232), 2,
                 pdfWaveSamples(pdfLive ? am4100Manager.getRespWaveSamples() : null, pdfLive ? am4100Manager.getRespHistory() : null,
-                        patient.monitorSnapshot.respWaveSamples, patient.monitorSnapshot.respHistory),
+                        sheetWaveSamples(patient, "resp"), patient.monitorSnapshot.respHistory),
                 pdfFirstNonZero(pdfLive ? am4100Manager.getRespValue() : 0,
                         pdfVitalsNumber(patient.monitorSnapshot.resp)));
         drawPdfTemplateEnvironment(canvas, pdfPaint);
@@ -7131,6 +7219,21 @@ public class IcuDashboardView extends View {
         String[][] windowRows = sheetWindowVitalsRows(hrHist, spo2Hist, tempHist, bloodPressure, sheetWindowEndMs(patient));
         if (windowRows != null) {
             rows = windowRows;
+        } else if (patient != null && !TextUtils.isEmpty(patient.sheetVitals)) {
+            /* ★ 2026-10-13 V30：重启后趋势历史已丢，用结束护疗时冻结的体征行 */
+            try {
+                JSONArray frozen = new JSONArray(patient.sheetVitals);
+                for (int i = 0; i < frozen.length() && i < rows.length; i++) {
+                    JSONArray r = frozen.optJSONArray(i);
+                    if (r == null) {
+                        continue;
+                    }
+                    for (int c = 0; c < 5; c++) {
+                        rows[i][c] = r.optString(c, "");
+                    }
+                }
+            } catch (JSONException ignored) {
+            }
         } else if (hasVitals) {
             rows[0][0] = createdAt;
             rows[0][1] = heart;
@@ -7689,7 +7792,14 @@ public class IcuDashboardView extends View {
     }
 
     private boolean pdfEntryEnabled(TreatmentEntry entry) {
-        return entry != null && entry.enabled;
+        /* ★ 2026-10-13 V30：条目有录入/采样数据即视为做过该项，自动勾选（与 H5 记录单一致） */
+        if (entry == null) {
+            return false;
+        }
+        if (entry.enabled) {
+            return true;
+        }
+        return !TextUtils.isEmpty(entry.lastValue) && !"--".equals(entry.lastValue);
     }
 
     private boolean pdfTreatmentOn(boolean live, int controlIndex, TreatmentEntry entry) {
