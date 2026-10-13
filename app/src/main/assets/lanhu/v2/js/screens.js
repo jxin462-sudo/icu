@@ -559,13 +559,14 @@
         + '<div class="setbtn tr">' + T('ctrlSetting', '设置') + '</div></div>';
     }
     if (c.v) {
-      return '<div class="ctrl v' + (row === 1 ? ' r1v r2c' : '') + (c.on ? ' on' : '') + '" data-tkey="' + tk + '">'
+      /* ★ 2026-10-13 V31：ro=只读卡（湿度按协议无开关/无设置），不渲染药丸开关与「设置」，整卡点击=重新读取 */
+      return '<div class="ctrl v' + (row === 1 ? ' r1v r2c' : '') + (c.on ? ' on' : '') + (c.ro ? ' ro' : '') + '" data-tkey="' + tk + '">'
         + '<div class="ct">' + T(tk, c.t) + '</div>'
         + '<div class="cv' + (/^[0-9:.]+$/.test(c.v || '') ? '' : ' vs') + '">' + c.v + '</div>'
         + (c.p ? '<div class="cbar"><i style="width:' + c.p + '%"></i></div>' : '')
-        + '<div class="setbtn">' + T('ctrlSetting', '设置') + '</div>'
+        + (c.ro ? '' : '<div class="setbtn">' + T('ctrlSetting', '设置') + '</div>')
         + icoSpan(c.ico)
-        + pill(c.on) + '</div>';
+        + (c.ro ? '' : pill(c.on)) + '</div>';
     }
     /* 开关卡（照明 / 循环）：仅 标题 + 设备图标（右侧）+ 药丸开关（左下），无「设置」 */
     return '<div class="ctrl s' + (c.on ? ' on' : '') + '" data-tkey="' + tk + '">'

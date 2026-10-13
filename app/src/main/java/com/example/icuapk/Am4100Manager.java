@@ -809,6 +809,10 @@ public class Am4100Manager {
         if (nextHr > 400) {
             addLog("丢弃异常心率帧: hr=" + nextHr + " data=" + java.util.Arrays.toString(data));
             nextHr = -1;
+        } else if (nextHr > 250) {
+            /* ★ 2026-10-13 V31：250~400 区间不丢弃（兔子/小宠可达 300+，可能是真实生理值），
+               但记录原始帧便于与监护仪屏幕读数对照，排查"心率 300 多是否正常" */
+            addLog("心率偏高帧(供对照设备屏): hr=" + nextHr + " data=" + java.util.Arrays.toString(data));
         }
         if (nextResp > 200) {
             addLog("丢弃异常呼吸帧: resp=" + nextResp + " data=" + java.util.Arrays.toString(data));

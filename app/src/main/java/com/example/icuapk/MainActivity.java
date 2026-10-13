@@ -1848,6 +1848,13 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
             return dashboardView.buildPatientStateJson();
         }
 
+        /* ★ 2026-10-13 V31：按需取单病例记录单完整数据（含冻结波形/体征），
+           列表 JSON 轻量化后由 H5 打开记录单预览时调用 */
+        @JavascriptInterface
+        public String caseSheetData(final String caseId) {
+            return dashboardView.buildCaseSheetJson(caseId);
+        }
+
         @JavascriptInterface
         public void syncTempPatient(final String payload) {
             runOnUiThread(new Runnable() {

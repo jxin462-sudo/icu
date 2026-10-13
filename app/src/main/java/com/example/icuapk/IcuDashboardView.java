@@ -1074,6 +1074,9 @@ public class IcuDashboardView extends View {
         return false;
     }
 
+    // ★ 2026-10-13 V31：最近一次成功构建的全量状态快照，构建异常时回退使用（防页面闪断连态）
+    private volatile String lastFirstPhaseStateJson = "";
+
     String buildFirstPhaseStateJson() {
         try {
             captureTreatmentSampleIfNeeded(false);
@@ -1167,11 +1170,17 @@ public class IcuDashboardView extends View {
             root.put("errorLogs", logToJson(errorLog));
             root.put("stackLogs", logToJson(stackLog));
             root.put("commLogs", logToJson(commLog));
-            return root.toString();
-        } catch (JSONException exception) {
-            /* ★ 2026-10-08 日志页·错误记录：状态构建异常落库，避免静默失败 */
+            String built = root.toString();
+            lastFirstPhaseStateJson = built;
+            return built;
+        } catch (Exception exception) {
+            /* ★ 2026-10-08 日志页·错误记录：状态构建异常落库，避免静默失败
+               ★ 2026-10-13 V31：catch 从 JSONException 放宽到 Exception（并发改 List 抛的是 RuntimeException/CME，
+                  此前逃逸后 H5 pullState 拿到空态 → 监护页在"已连接/未连接"间反复闪、双弹窗重叠）；
+                  并回退最近一次成功构建的快照，单帧失败不再让页面闪断连态。 */
             appendErrorLog("状态构建", String.valueOf(exception));
-            return "{}";
+            String cached = lastFirstPhaseStateJson;
+            return (cached == null || cached.isEmpty()) ? "{}" : cached;
         }
     }
 
@@ -1212,6 +1221,23 @@ public class IcuDashboardView extends View {
             PatientCase patient = currentCase();
             return patient == null ? "{}" : patientToJson(patient).toString();
         } catch (JSONException exception) {
+            return "{}";
+        }
+    }
+
+    /* ★ 2026-10-13 V31：按 caseId 按需取某病例的记录单完整数据（含冻结波形/体征+治疗项），
+       供 H5 打开历史病例记录单预览时调用——列表 JSON 已轻量化，不再随每帧状态携带波形。 */
+    String buildCaseSheetJson(String caseId) {
+        try {
+            PatientCase patient = findCaseByIdAnyZone(caseId);
+            if (patient == null) {
+                return "{}";
+            }
+            JSONObject json = patientToJson(patient);
+            json.put("treatments", treatmentsToJson(patient));
+            return json.toString();
+        } catch (Exception exception) {
+            appendErrorLog("记录单数据", String.valueOf(exception));
             return "{}";
         }
     }
@@ -2626,24 +2652,29 @@ public class IcuDashboardView extends View {
         if (snapshot == null) {
             return;
         }
-        snapshot.heartRate = safeText(am4100Manager.getHeartRateText());
-        snapshot.bloodPressure = safeText(am4100Manager.getBloodPressureText());
-        snapshot.map = safeText(am4100Manager.getMapText());
-        snapshot.spo2 = safeText(am4100Manager.getSpo2Text());
-        snapshot.pulse = safeText(am4100Manager.getPulseRateText());
-        snapshot.pulseRate = safeText(am4100Manager.getPulseRateText());
-        snapshot.bodyTemp = safeText(am4100Manager.getBodyTempText());
-        snapshot.resp = safeText(am4100Manager.getRespText());
-        snapshot.summary = safeText(am4100Manager.getLastFrameSummary());
-        replaceIntegerList(snapshot.ecgWaveSamples, am4100Manager.getEcgWaveSamples());
-        replaceIntegerList(snapshot.spo2WaveSamples, am4100Manager.getSpo2WaveSamples());
-        replaceIntegerList(snapshot.respWaveSamples, am4100Manager.getRespWaveSamples());
-        replaceIntegerList(snapshot.heartRateHistory, am4100Manager.getHeartRateHistory());
-        replaceIntegerList(snapshot.bloodPressureHistory, am4100Manager.getBloodPressureHistory());
-        replaceIntegerList(snapshot.spo2History, am4100Manager.getSpo2History());
-        replaceIntegerList(snapshot.pulseRateHistory, am4100Manager.getPulseRateHistory());
-        replaceIntegerList(snapshot.temperatureHistory, am4100Manager.getTemperatureHistory());
-        replaceIntegerList(snapshot.respHistory, am4100Manager.getRespHistory());
+        /* ★ 2026-10-13 V31：整体加锁 —— 本方法在主线程被 AM4100 回调高频调用（clear+addAll），
+           而 patientToJson/fillMonitorJsonFromSnapshot 在 JavaBridge 线程迭代同一批 List，
+           此前并发抛 ConcurrentModificationException 导致整帧状态构建失败、监护页闪断连态。 */
+        synchronized (snapshot) {
+            snapshot.heartRate = safeText(am4100Manager.getHeartRateText());
+            snapshot.bloodPressure = safeText(am4100Manager.getBloodPressureText());
+            snapshot.map = safeText(am4100Manager.getMapText());
+            snapshot.spo2 = safeText(am4100Manager.getSpo2Text());
+            snapshot.pulse = safeText(am4100Manager.getPulseRateText());
+            snapshot.pulseRate = safeText(am4100Manager.getPulseRateText());
+            snapshot.bodyTemp = safeText(am4100Manager.getBodyTempText());
+            snapshot.resp = safeText(am4100Manager.getRespText());
+            snapshot.summary = safeText(am4100Manager.getLastFrameSummary());
+            replaceIntegerList(snapshot.ecgWaveSamples, am4100Manager.getEcgWaveSamples());
+            replaceIntegerList(snapshot.spo2WaveSamples, am4100Manager.getSpo2WaveSamples());
+            replaceIntegerList(snapshot.respWaveSamples, am4100Manager.getRespWaveSamples());
+            replaceIntegerList(snapshot.heartRateHistory, am4100Manager.getHeartRateHistory());
+            replaceIntegerList(snapshot.bloodPressureHistory, am4100Manager.getBloodPressureHistory());
+            replaceIntegerList(snapshot.spo2History, am4100Manager.getSpo2History());
+            replaceIntegerList(snapshot.pulseRateHistory, am4100Manager.getPulseRateHistory());
+            replaceIntegerList(snapshot.temperatureHistory, am4100Manager.getTemperatureHistory());
+            replaceIntegerList(snapshot.respHistory, am4100Manager.getRespHistory());
+        }
     }
 
     private void fillMonitorJsonFromLiveManager(JSONObject monitor) throws JSONException {
@@ -2668,6 +2699,8 @@ public class IcuDashboardView extends View {
     }
 
     private void fillMonitorJsonFromSnapshot(JSONObject monitor, MonitorSnapshot snapshot) throws JSONException {
+        // ★ 2026-10-13 V31：与 fillMonitorSnapshot 同一把锁，避免迭代到一半被 clear
+        synchronized (snapshot == null ? this : snapshot) {
         if (snapshot == null || !snapshot.hasData()) {
             monitor.put("heartRate", "--");
             monitor.put("bloodPressure", "--/--");
@@ -2707,6 +2740,7 @@ public class IcuDashboardView extends View {
         monitor.put("pulseRateHistory", intListToJsonArray(snapshot.pulseRateHistory));
         monitor.put("temperatureHistory", intListToJsonArray(snapshot.temperatureHistory));
         monitor.put("respHistory", intListToJsonArray(snapshot.respHistory));
+        }
     }
 
     private void replaceIntegerList(ArrayList<Integer> target, List<Integer> source) {
@@ -2846,12 +2880,20 @@ public class IcuDashboardView extends View {
             if (!hasMeaningfulPatientData(patient)) {
                 continue;
             }
-            array.put(patientToJson(patient));
+            // ★ 2026-10-13 V31：列表项走轻量序列化（不含 vitals/sheetWaves），
+            // 状态全量每秒多次下发，3×720 点波形逐条进列表会造成 JSON 风暴、界面卡顿
+            array.put(patientToJson(patient, true));
         }
         return array;
     }
 
     private JSONObject patientToJson(PatientCase patient) throws JSONException {
+        return patientToJson(patient, false);
+    }
+
+    /* ★ 2026-10-13 V31：light=true 时跳过 vitals 窗口计算与 sheetWaves（列表条目用）；
+       完整数据由根 patient / buildCaseSheetJson 按需下发。 */
+    private JSONObject patientToJson(PatientCase patient, boolean light) throws JSONException {
         JSONObject json = new JSONObject();
         if (patient == null) {
             return json;
@@ -2896,33 +2938,43 @@ public class IcuDashboardView extends View {
         }
         /* ★ 2026-10-12：无手工录入的体征行时，自动用「治疗结束前时间段」窗口趋势生成
            （与 PDF 记录单同一逻辑/同一数据），H5 预览与打印一致；波形也一并发尾部窗口数据。 */
-        if (vitals.length() == 0) {
-            String[][] windowRows = sheetWindowVitalsRows(
-                    patient.monitorSnapshot.heartRateHistory,
-                    patient.monitorSnapshot.spo2History,
-                    patient.monitorSnapshot.temperatureHistory,
-                    patient.monitorSnapshot.bloodPressure,
-                    sheetWindowEndMs(patient));
-            if (windowRows != null) {
-                for (String[] row : windowRows) {
-                    JSONArray r = new JSONArray();
-                    for (String cell : row) {
-                        r.put(cell == null ? "" : cell);
+        // ★ 2026-10-13 V31：快照读取加锁（fillMonitorSnapshot 在主线程 clear+addAll，
+        //   此处运行在 JavaBridge 线程，此前并发迭代抛 CME → 状态构建整体失败 → 页面闪断连态）
+        synchronized (patient.monitorSnapshot) {
+            if (vitals.length() == 0 && !light) {
+                String[][] windowRows = sheetWindowVitalsRows(
+                        patient.monitorSnapshot.heartRateHistory,
+                        patient.monitorSnapshot.spo2History,
+                        patient.monitorSnapshot.temperatureHistory,
+                        patient.monitorSnapshot.bloodPressure,
+                        sheetWindowEndMs(patient));
+                if (windowRows != null) {
+                    for (String[] row : windowRows) {
+                        JSONArray r = new JSONArray();
+                        for (String cell : row) {
+                            r.put(cell == null ? "" : cell);
+                        }
+                        vitals.put(r);
                     }
-                    vitals.put(r);
                 }
             }
         }
         json.put("vitals", vitals);
         /* ★ 2026-10-13 V30：优先用结束护疗时冻结的波形（重启后仍有数据），无冻结再回落实时缓冲 */
-        JSONObject sheetWaves = parseSheetWavesJson(patient.sheetWaves);
-        if (sheetWaves == null) {
-            sheetWaves = new JSONObject();
-            sheetWaves.put("ecg", intListToJsonArray(patient.monitorSnapshot.ecgWaveSamples));
-            sheetWaves.put("pleth", intListToJsonArray(patient.monitorSnapshot.spo2WaveSamples));
-            sheetWaves.put("resp", intListToJsonArray(patient.monitorSnapshot.respWaveSamples));
+        if (light) {
+            json.put("sheetWaves", new JSONObject());
+        } else {
+            JSONObject sheetWaves = parseSheetWavesJson(patient.sheetWaves);
+            if (sheetWaves == null) {
+                synchronized (patient.monitorSnapshot) {
+                    sheetWaves = new JSONObject();
+                    sheetWaves.put("ecg", intListToJsonArray(patient.monitorSnapshot.ecgWaveSamples));
+                    sheetWaves.put("pleth", intListToJsonArray(patient.monitorSnapshot.spo2WaveSamples));
+                    sheetWaves.put("resp", intListToJsonArray(patient.monitorSnapshot.respWaveSamples));
+                }
+            }
+            json.put("sheetWaves", sheetWaves);
         }
-        json.put("sheetWaves", sheetWaves);
         return json;
     }
 
@@ -4088,31 +4140,42 @@ public class IcuDashboardView extends View {
         if (snap == null) {
             return;
         }
-        if (TextUtils.isEmpty(patient.sheetVitals)) {
-            String[][] rows = sheetWindowVitalsRows(snap.heartRateHistory, snap.spo2History,
-                    snap.temperatureHistory, snap.bloodPressure, sheetWindowEndMs(patient));
-            if (rows != null) {
-                JSONArray arr = new JSONArray();
-                for (String[] row : rows) {
-                    JSONArray r = new JSONArray();
-                    for (String cell : row) {
-                        r.put(cell == null ? "" : cell);
+        /* ★ 2026-10-13 V31：与 fillMonitorSnapshot 同锁读取；并记录冻结诊断日志，
+           便于真机排查"记录单波形为空"（样本数为 0 说明监护全程未出数/未连 AM4100） */
+        synchronized (snap) {
+            if (TextUtils.isEmpty(patient.sheetVitals)) {
+                String[][] rows = sheetWindowVitalsRows(snap.heartRateHistory, snap.spo2History,
+                        snap.temperatureHistory, snap.bloodPressure, sheetWindowEndMs(patient));
+                if (rows != null) {
+                    JSONArray arr = new JSONArray();
+                    for (String[] row : rows) {
+                        JSONArray r = new JSONArray();
+                        for (String cell : row) {
+                            r.put(cell == null ? "" : cell);
+                        }
+                        arr.put(r);
                     }
-                    arr.put(r);
+                    patient.sheetVitals = arr.toString();
                 }
-                patient.sheetVitals = arr.toString();
             }
-        }
-        if (TextUtils.isEmpty(patient.sheetWaves)
-                && (!snap.ecgWaveSamples.isEmpty() || !snap.spo2WaveSamples.isEmpty() || !snap.respWaveSamples.isEmpty())) {
-            try {
-                JSONObject waves = new JSONObject();
-                waves.put("ecg", intListToJsonArray(snap.ecgWaveSamples));
-                waves.put("pleth", intListToJsonArray(snap.spo2WaveSamples));
-                waves.put("resp", intListToJsonArray(snap.respWaveSamples));
-                patient.sheetWaves = waves.toString();
-            } catch (JSONException ignored) {
+            if (TextUtils.isEmpty(patient.sheetWaves)
+                    && (!snap.ecgWaveSamples.isEmpty() || !snap.spo2WaveSamples.isEmpty() || !snap.respWaveSamples.isEmpty())) {
+                try {
+                    JSONObject waves = new JSONObject();
+                    waves.put("ecg", intListToJsonArray(snap.ecgWaveSamples));
+                    waves.put("pleth", intListToJsonArray(snap.spo2WaveSamples));
+                    waves.put("resp", intListToJsonArray(snap.respWaveSamples));
+                    patient.sheetWaves = waves.toString();
+                } catch (JSONException ignored) {
+                }
             }
+            appendDebugLog("INFO", "记录单冻结", "caseNo=" + safeText(patient.caseNo)
+                    + " ecg=" + snap.ecgWaveSamples.size()
+                    + " pleth=" + snap.spo2WaveSamples.size()
+                    + " resp=" + snap.respWaveSamples.size()
+                    + " hrHistory=" + snap.heartRateHistory.size()
+                    + " sheetWaves=" + (TextUtils.isEmpty(patient.sheetWaves) ? "空" : "已冻结")
+                    + " sheetVitals=" + (TextUtils.isEmpty(patient.sheetVitals) ? "空" : "已冻结"));
         }
     }
 
@@ -5668,7 +5731,7 @@ public class IcuDashboardView extends View {
         JSONArray array = new JSONArray();
         for (PatientCase patient : getCareListCases()) {
             if (hasMeaningfulPatientData(patient)) {
-                array.put(patientToJson(patient));
+                array.put(patientToJson(patient, true));
             }
         }
         return array;
@@ -5706,7 +5769,7 @@ public class IcuDashboardView extends View {
         }
         JSONArray array = new JSONArray();
         for (PatientCase patient : source) {
-            array.put(patientToJson(patient));
+            array.put(patientToJson(patient, true));
         }
         return array;
     }

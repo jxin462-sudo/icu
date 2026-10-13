@@ -45,13 +45,17 @@
   /* ★ 任务21：调试页密码（菜单→调试 进入前校验）。如需修改密码改这一行即可。 */
   var DEBUG_PWD = '123456';
   function syncPatient(payload) { var n = N(); try { if (n && n.syncTempPatient) n.syncTempPatient(JSON.stringify(payload)); } catch (e) {} }
+  /* ★ 2026-10-13 V31：多个 toast 同时出现时纵向堆叠（此前都钉在屏幕正中央，
+     结束治疗瞬间「主机已连接」+「监护已连接」两个弹窗重叠在一起互相遮挡） */
+  var toastLive = 0;
   function toast(msg) {
     if (!msg) return;
     var el = document.createElement('div');
-    el.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.78);color:#fff;padding:18px 36px;border-radius:10px;font-size:24px;z-index:9999;white-space:nowrap';
+    var idx = toastLive++;
+    el.style.cssText = 'position:fixed;left:50%;top:calc(50% + ' + (idx * 64) + 'px);transform:translate(-50%,-50%);background:rgba(0,0,0,.78);color:#fff;padding:18px 36px;border-radius:10px;font-size:24px;z-index:9999;white-space:nowrap';
     el.textContent = msg;
     document.body.appendChild(el);
-    setTimeout(function () { if (el.parentNode) el.parentNode.removeChild(el); }, 2000);
+    setTimeout(function () { toastLive = Math.max(0, toastLive - 1); if (el.parentNode) el.parentNode.removeChild(el); }, 2000);
   }
 
   /* i18n 助手：window.T 未就绪时回退中文 */
@@ -366,7 +370,9 @@
       D.ctrlRow1 = [
         { tKey: 'ctrlTemp', t: '舱内温度 ℃', v: hostUp ? num(h.temp, '--') : '--', p: 60, set: 1, on: hostUp ? !!c.tempOn : false, ico: 'thermo' },
         { tKey: 'ctrlO2', t: '氧浓度 %', v: hostUp ? num(h.oxygen, '--') : '--', p: 43, set: 1, on: hostUp ? !!c.oxygenOn : false, ico: 'o2' },
-        { tKey: 'ctrlHum', t: '湿度 %', v: hostUp ? num(h.humidity, '--') : '--', p: 35, set: 1, on: hostUp ? (num(h.humidity, '') !== '') : false, ico: 'drop' },
+        /* ★ 2026-10-13 V31：湿度按协议只读（无 set_humidity 命令），卡片不再渲染开关/设置，
+           否则开关永远显示「开」且点不关（用户反馈"湿度开关无法正常关闭"）；整卡点击=重新读取 */
+        { tKey: 'ctrlHum', t: '湿度 %', v: hostUp ? num(h.humidity, '--') : '--', p: 35, ro: 1, on: false, ico: 'drop' },
         { tKey: 'ctrlCo2', t: '二氧化碳浓度 PPM', v: hostUp ? num(h.co2, '--') : '--', p: 66, set: 1, on: hostUp ? !!c.co2On : false, ico: 'co2' },
         { tKey: 'ctrlLevel', t: '监护等级', v: '', level: 1 }
       ];
@@ -1029,6 +1035,14 @@
         var tk2 = card2 && card2.dataset.tkey;
         var a2 = tk2 ? CTRL_SET_BY_TKEY[tk2] : '';
         if (a2) { stop(e); act(a2); }
+        return;
+      }
+      /* ★ 2026-10-13 V31：只读环境卡（湿度）整卡点击 = 主动向主机读取最新值并 toast 回显 */
+      var roCard = e.target.closest('.ctrl.ro');
+      if (roCard) {
+        var tkR = roCard.dataset.tkey;
+        var aR = tkR ? CTRL_ACT_BY_TKEY[tkR] : '';
+        if (aR) { stop(e); act(aR); }
         return;
       }
       // 模式卡（母幼/术后/心肺/自定义）
@@ -1743,6 +1757,15 @@
         if (hist[i] && hist[i].caseId === cid) { hc = hist[i]; break; }
       }
       sheetPreviewCase = hc || null;
+      /* ★ 2026-10-13 V31：historyCases 列表项是轻量序列化（不含 sheetWaves/vitals，减重防卡顿），
+         预览记录单时按需向原生取该病例完整数据（含冻结波形） */
+      if (sheetPreviewCase) {
+        try {
+          var nn = N();
+          var full = JSON.parse((nn.caseSheetData && nn.caseSheetData(cid)) || '{}');
+          if (full && full.caseId) sheetPreviewCase = full;
+        } catch (e) { /* 保持列表项兜底 */ }
+      }
     }
     syncD();
     D.selCaseId = cid; // 立即记录选中，不等原生回推（syncD 会从 S.patient 重置，故在其后再赋值）
