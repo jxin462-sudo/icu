@@ -496,8 +496,11 @@
         + '<div class="wbtn" data-act="control_nebulizer">' + I.mist + '<span>' + T('ctrlNeb', '雾化器') + '</span></div>'
         + '<div class="wbtn" data-act="control_warm_light">' + I.sun + '<span>' + T('statusWarm', '暖光灯') + '</span></div>'
         + '<div class="wbtn" data-act="control_inner">' + I.loopIn + '<span>' + T('ctrlInner', '内循环') + '</span></div></div>';
+      /* ★ 2026-10-13：摄像头下方原装饰块（.cam.small，只有一个空 .glow，无数据无原生绑定）
+         改为红外热图区：画面 + 最高/最低温 + 帧率 + 连接/断开，数据由 js/thermal.js 驱动 */
       const cam = '<div class="camcol"><div class="cam big">' + P.fisheye(D.stamp) + '</div>'
-        + '<div class="cam small"><div class="glow"></div></div></div>';
+        + (window.renderThermalArea ? window.renderThermalArea() : '')
+        + '</div>';
       return PAGE(P.topbar('care'), grid + acts + cam, P.sessionBar('status'), false, P.sessionTag());
     }
   };
