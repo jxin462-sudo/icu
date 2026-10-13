@@ -178,7 +178,14 @@
     window.S = S; // ★ 任务13：暴露给 screens.js（设置-连接页读 host/ble/wifi 实时状态）
   }
   function pullSettings() {
-    try { D.settings = window.__icuSettings || {}; } catch (e) { D.settings = {}; }
+    /* ★ 2026-10-13 V37：S5 设置优先读全量状态 S.settings（原生每次下发都带，最新）；
+       __icuSettings 只作兜底（兼容 settings_save 后的即时推送路径）。
+       此前只读 __icuSettings，它仅在 保存/上传LOGO/恢复出厂 时才注入，
+       开机后首次进打印页为空 → 报告标题/声明要等下次保存才显示（"读取慢"的根因）。 */
+    try {
+      if (S && S.settings) { D.settings = S.settings; window.__icuSettings = S.settings; }
+      else { D.settings = window.__icuSettings || {}; }
+    } catch (e) { D.settings = {}; }
     if (!D.settings) D.settings = {};
   }
 
@@ -507,7 +514,6 @@
   }
 
   function refresh() {
-    pullSettings(); // ★ 任务12：先拉取 S5 设置（含 language），再注入 D
     /* ★ 任务38：切屏时关闭蓝牙选择弹窗并停止扫描，避免跨页残留扫描/弹窗 */
     var curScreen = IcuApp.current();
     if (prevScreen !== null && curScreen !== prevScreen && D.blePick) {
@@ -519,7 +525,8 @@
     if (sheetPreviewCase && IcuApp.current() !== 'record-sheet') sheetPreviewCase = null;
     /* 任务26a：离开记录单页未保存的编辑一并丢弃 */
     if (D.sheetEdit && IcuApp.current() !== 'record-sheet') D.sheetEdit = null;
-    pullState(); syncD();
+    /* ★ 任务12/V37：先拉全量状态（S.settings 随每次下发），再同步 S5 设置进 D，最后注入 D */
+    pullState(); pullSettings(); syncD();
     // 新建草稿确认后：原生新病例已生成（pendingInitialEntry）→ 把暂存 payload 写入并跳 care-data
     if (pendingSaveAfterCreate && S.patient && S.patient.pendingInitialEntry) {
       var payload = pendingSaveAfterCreate;
@@ -539,6 +546,11 @@
     if (cur === 'new-sample' || cur === 'query' || cur === 'login') return;
     /* ★ 任务26a：记录单编辑态中不随原生推送重渲染，避免正在输入的内容被冲掉（一致性处理见 #26d） */
     if (cur === 'record-sheet' && D.sheetEdit) return;
+    /* ★ 2026-10-13 V37：设置页有输入框聚焦（正在打字）时跳过重渲染——
+       原生约每秒推一次 icu-native-state，整页 innerHTML 重建会把正在输入的
+       报告标题/医院名称等内容冲掉并重置光标；失焦后下一次推送自然补渲染。 */
+    var ae = document.activeElement;
+    if (ae && (ae.tagName === 'INPUT' || ae.tagName === 'TEXTAREA') && !ae.readOnly) return;
     /* ★ 2026-10-09：监护页且波形已上屏 → 打点刷新波形，整页渲染压到 ≤1次/秒（更新体征数值） */
     if ((cur === 'monitor' || cur === 'monitor-unit') && D.monitorLive && patchLiveWaves()) {
       if (Date.now() - lastFullRenderAt < 1000) return;
@@ -906,7 +918,7 @@
     var pwd = inputs[1] ? inputs[1].value : '';
     if (!name || !pwd) { return; }
     var ok = doLogin(name, pwd);
-    if (ok) { pullState(); syncD(); IcuApp.setScreen('care'); }
+    if (ok) { pullState(); pullSettings(); syncD(); IcuApp.setScreen('care'); }
   }
 
   /* ---------- 主控开关映射 ---------- */
@@ -1831,7 +1843,7 @@
     window.addEventListener('icu-settings-loaded', refresh);
 
     if (hasNative()) {
-      pullState(); syncD();
+      pullState(); pullSettings(); syncD();
       // ★ 2026-10-10 #68：动画本身约 3s 播完（logo 1.6s 延迟 + 1.2s 播放 + 标语 2s 延迟），
       // 原 3.5s 跳转太紧（WebView 加载 CSS/字体还会推迟动画起点），延长到 5.2s 保证播完整；点击 splash 仍可跳过（data-go=login）
       IcuApp.setScreen('splash');

@@ -1173,6 +1173,10 @@ public class IcuDashboardView extends View {
             root.put("errorLogs", logToJson(errorLog));
             root.put("stackLogs", logToJson(stackLog));
             root.put("commLogs", logToJson(commLog));
+            // ★ 2026-10-13 V37：S5 设置（报告标题/声明/页脚LOGO/打印机地址等）随全量状态下发——
+            //   此前只经 pushSettingsToLanhu 在保存/上传LOGO时推送，开机后首次进打印页 __icuSettings 为空，
+            //   报告标题/声明要等下次任意保存动作才显示（用户感知"读取慢"）。
+            root.put("settings", s5SettingsToJson());
             String built = root.toString();
             lastFirstPhaseStateJson = built;
             return built;

@@ -1210,7 +1210,7 @@
       var pf = function (k, val) {
         var mx = ORG_LIMITS[k] ? ' maxlength="' + ORG_LIMITS[k] + '"' : '';
         var tel = k === 'phone' ? ' data-tel="1"' : '';
-        return '<div class="inp flex"><input type="text" class="icu-input" data-org="' + k + '"' + mx + tel + ' value="' + (val || '') + '"></div>';
+        return '<div class="inp flex"><input type="text" class="icu-input" data-org="' + k + '"' + mx + tel + ' value="' + esc(val || '') + '"></div>';
       };
       var setBtn = '<div class="btn sm" data-print="org">' + T('setBtn', '设置') + '</div>';
       var upLogo = '<div class="btn sm" data-print="logo">' + T('uploadLogo', '上传LOGO') + '</div>';
@@ -1242,7 +1242,7 @@
       var body = '<div class="print-fields" style="width:1180px;margin:0 auto">'
         + frow(T('printerAvail', '可用打印机'), plist + '<div class="btn sm" data-print="scan">' + T('scanPrinter', '扫描') + '</div>')
         + frow(T('printerAddr', '打印机地址'), '<div class="inp flex"><input class="icu-input" data-print-addr maxlength="30" data-addr="1" placeholder="' + T('printerAddrPh', '如 192.168.1.10:9100') + '" value="'
-          + ((D.settings && D.settings.printerAddress) || '') + '"></div>'
+          + ((D.settings && D.settings.printerAddress) ? esc(D.settings.printerAddress) : '') + '"></div>'
           + '<div class="btn sm" data-print="addPrinter">' + T('addPrinter', '添加打印机') + '</div><div class="btn sm" data-print="test">' + T('printTest', '打印测试页') + '</div>')
         + frow(T('hospitalName', '医院名称'), pf('name', org.name) + setBtn)
         + frow(T('hospitalPhone', '医院电话'), pf('phone', org.phone) + setBtn)
@@ -1254,9 +1254,9 @@
         + upFooter
         + '</div></div>'
         + frow(T('reportTitle', '报告标题'), '<div class="inp flex"><input type="text" class="icu-input" data-print-title maxlength="30" value="'
-          + (st.reportTitle || '') + '"></div><div class="btn sm" data-print="reportTitle">' + T('setBtn', '设置') + '</div>')
+          + esc(st.reportTitle || '') + '"></div><div class="btn sm" data-print="reportTitle">' + T('setBtn', '设置') + '</div>')
         + frow(T('reportDecl', '报告声明'), '<div class="inp flex"><input type="text" class="icu-input" data-print-decl maxlength="60" value="'
-          + (st.reportDeclaration || '') + '"></div><div class="btn sm" data-print="reportDecl">' + T('setBtn', '设置') + '</div>')
+          + esc(st.reportDeclaration || '') + '"></div><div class="btn sm" data-print="reportDecl">' + T('setBtn', '设置') + '</div>')
         + '</div>';
       return setPage('set-print', body);
     }
