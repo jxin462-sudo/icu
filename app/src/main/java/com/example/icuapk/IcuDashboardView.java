@@ -516,6 +516,9 @@ public class IcuDashboardView extends View {
         String sheetAdvice = "";
         int sheetConclusionIdx = 0;
         String sheetVitals = "";
+        // ★ 2026-10-13 V33：治疗记录单页脚「检验医师」——用户可在记录单编辑态手填，
+        //   随病例持久化（与主治医生 patient.doctor 是两回事）。
+        String labDoctor = "";
         // ★ 2026-10-13 V30：结束护疗时把三波形采样冻结成 JSON 文本随病例持久化
         //   （monitorSnapshot 原始历史不落盘，重启即丢，导致记录单波形/体征行变空）。
         String sheetWaves = "";
@@ -1373,6 +1376,11 @@ public class IcuDashboardView extends View {
             patient.weight = optNonEmpty(json, "weight", patient.weight);
             patient.department = optNonEmpty(json, "dept", patient.department);
             patient.doctor = optNonEmpty(json, "doc", patient.doctor);
+            /* ★ 2026-10-13 V33：页脚「检验医师」单独一个字段（key=footDoc）。
+               用 has 判断而非 optNonEmpty：允许用户清空。 */
+            if (json.has("footDoc")) {
+                patient.labDoctor = json.optString("footDoc", "");
+            }
             if (json.has("advice")) {
                 patient.sheetAdvice = json.optString("advice", "");
             }
@@ -2929,6 +2937,8 @@ public class IcuDashboardView extends View {
         // ★ 任务29：记录单编辑字段回推（出院建议/治疗效果/体征行），H5 据此渲染记录单
         json.put("advice", safeJsonText(patient.sheetAdvice));
         json.put("conclIdx", patient.sheetConclusionIdx);
+        // ★ 2026-10-13 V33：记录单页脚检验医师（H5 编辑态可改，随病例持久化）
+        json.put("labDoctor", safeJsonText(patient.labDoctor));
         JSONArray vitals = new JSONArray();
         if (!TextUtils.isEmpty(patient.sheetVitals)) {
             try {
@@ -4608,6 +4618,7 @@ public class IcuDashboardView extends View {
         patient.sheetConclusionIdx = item.optInt("sheetConclusionIdx", 0);
         patient.sheetVitals = item.optString("sheetVitals", "");
         patient.sheetWaves = item.optString("sheetWaves", "");
+        patient.labDoctor = item.optString("labDoctor", "");
         loadTreatmentEntriesFromStorage(patient, item.optJSONArray("entries"));
         ensureTreatmentEntrySet(patient);
         // ★ 游标按舱推进：读左舱病例不能把右舱的编号起点抬上去。
@@ -4706,6 +4717,7 @@ public class IcuDashboardView extends View {
                 patient.sheetConclusionIdx = item.optInt("sheetConclusionIdx", 0);
                 patient.sheetVitals = item.optString("sheetVitals", "");
                 patient.sheetWaves = item.optString("sheetWaves", "");
+                patient.labDoctor = item.optString("labDoctor", "");
                 JSONArray entries = item.optJSONArray("entries");
                 if (entries != null && entries.length() > 0) {
                     patient.treatmentEntries.clear();

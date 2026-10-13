@@ -873,9 +873,14 @@
           : '<div class="advice">' + s.concl.advice + '</div>')
         + '</div></div>';
       /* 页脚：医院信息 / 检验信息 / 品牌 */
+      /* ★ 2026-10-13 V33：报告声明（s.foot.note）独立成行并下移，不再紧贴上面的医院电话/地址 */
+      const labDoc = ed
+        ? '<div><span>' + T('sheetLabDoc', '检验医师：') + '</span><input class="sheet-in foot-in" data-se="foot-doc" maxlength="20" value="' + (s.foot.doc || '') + '"></div>'
+        : '<div>' + T('sheetLabDoc', '检验医师：') + s.foot.doc + '</div>';
       const foot = '<div class="sheet-foot">'
-        + '<div class="fcol"><div>' + T('hospitalPhone', '医院电话') + '：' + s.foot.tel + '</div><div>' + T('hospitalAddr', '医院地址') + '：' + s.foot.addr + '</div><div>' + s.foot.note + '</div></div>'
-        + '<div class="fcol"><div>' + T('sheetLabDoc', '检验医师：') + s.foot.doc + '</div><div>' + T('sheetLabTime', '检验时间：') + fmtDT(s.foot.time) + '</div><div>' + s.foot.page + '</div></div>'
+        + '<div class="fcol"><div>' + T('hospitalPhone', '医院电话') + '：' + s.foot.tel + '</div><div>' + T('hospitalAddr', '医院地址') + '：' + s.foot.addr + '</div></div>'
+        + '<div class="fcol">' + labDoc + '<div>' + T('sheetLabTime', '检验时间：') + fmtDT(s.foot.time) + '</div><div>' + s.foot.page + '</div></div>'
+        + '<div class="fnote">' + (s.foot.note || '') + '</div>'
         + '<div class="fbrand">' + (s.footerLogoUri ? '<img class="fb-img" src="' + s.footerLogoUri + '" alt="">'
           : (window.NI && window.NI.paw ? NI.paw : I.paw) + '<div class="bt"><b>优利特</b><span>URIT animal</span></div>') + '</div></div>';
       /* ★ 任务26a：编辑态底栏只留 保存/取消，避免编辑中误切样本/打印 */

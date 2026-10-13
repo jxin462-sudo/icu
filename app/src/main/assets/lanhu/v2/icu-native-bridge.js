@@ -407,6 +407,9 @@
       var p = sheetPreviewCase || S.patient || {};
       D.sheet.animal = p.petName || ''; D.sheet.no = p.caseNo || ''; D.sheet.owner = p.ownerName || '';
       D.sheet.sp = p.species || ''; D.sheet.doc = p.doctor || '';
+      /* ★ 2026-10-13 V33：页脚「检验医师」用病例独立字段 labDoctor（与主治医生 doctor 区分），
+         此前 s.foot.doc 从未被赋值 → 记录单检验医师恒为空 */
+      if (D.sheet.foot) D.sheet.foot.doc = p.labDoctor || '';
       D.sheet.date = fmtDT((p.visitDate || '').slice(0, 10));
       D.sheet.cage = (S.zone === 'left') ? TT('cabinA', 'A舱') : (S.zone === 'right' ? TT('cabinB', 'B舱') : '');
       D.sheet.weight = p.weight || '--'; D.sheet.dept = p.department || '--';
@@ -558,6 +561,8 @@
     var s = D.sheet || {};
     D.sheetEdit = {
       owner: s.owner || '', weight: s.weight || '', dept: s.dept || '', doc: s.doc || '',
+      /* ★ 2026-10-13 V33：页脚检验医师（独立字段，随病例持久化） */
+      footDoc: (s.foot && s.foot.doc) || '',
       proj: (s.proj || []).map(function (p) { return { on: p.on ? 1 : 0, val: p.val || '' }; }),
       env: (s.env || []).map(function (e) { return e[1] || ''; }),
       conclIdx: (s.concl && s.concl.selIdx) || 0,
@@ -589,6 +594,8 @@
       else if (k === 'weight') s.weight = v;
       else if (k === 'dept') s.dept = v;
       else if (k === 'doc') s.doc = v;
+      /* ★ 2026-10-13 V33：页脚检验医师写回 s.foot.doc（注意与上面的 doc=主治医生 区分） */
+      else if (k === 'foot-doc') { if (s.foot) s.foot.doc = v; }
       else if (k === 'advice') { if (s.concl) s.concl.advice = v; }
       else if (k.indexOf('proj-val-') === 0) { var i = +k.slice(9); if (s.proj[i]) s.proj[i].val = v; }
       else if (k.indexOf('env-') === 0) { var j = +k.slice(4); if (s.env[j]) s.env[j][1] = v; }
@@ -621,6 +628,7 @@
       caseId: (sheetPreviewCase && sheetPreviewCase.caseId) || (S.patient && S.patient.caseId) || D.selCaseId || '',
       zone: S.zone || '',
       owner: s.owner, weight: s.weight, dept: s.dept, doc: s.doc,
+      footDoc: (s.foot && s.foot.doc) || '',
       advice: (s.concl && s.concl.advice) || '',
       conclIdx: (s.concl && s.concl.selIdx) || 0,
       proj: (s.proj || []).map(function (p, i) { return { i: i, on: p.on ? 1 : 0, val: p.val || '' }; }),
@@ -1770,7 +1778,17 @@
     }
     syncD();
     D.selCaseId = cid; // 立即记录选中，不等原生回推（syncD 会从 S.patient 重置，故在其后再赋值）
+    /* ★ 2026-10-13 V33：检验时间 = 生成本次治疗记录单的本地时间（每次打开重新取，不沿用旧值） */
+    if (D.sheet.foot) D.sheet.foot.time = localNowText();
     IcuApp.go('record-sheet');
+  }
+
+  /* 本地当前时间 → 'yyyy-MM-dd HH:mm'（喂给 fmtDT 显示） */
+  function localNowText() {
+    var d = new Date();
+    function p2(n) { return (n < 10 ? '0' : '') + n; }
+    return d.getFullYear() + '-' + p2(d.getMonth() + 1) + '-' + p2(d.getDate())
+      + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes());
   }
 
   /* ---------- 启动 ---------- */
@@ -1794,44 +1812,6 @@
       D.lang = v;                                  // 即时生效，不等原生回推
       act('settings_save', JSON.stringify({ language: v }));
       IcuApp.render();
-    }, true);
-    /* ★ 2026-10-13：打印页字段失焦即保存（医院名称/电话/地址、报告标题、报告声明）。
-       此前只能靠「设置」按钮保存，按钮点击一旦被拦或页面被裁，输入就丢、记录单也不同步。
-       blur 在真实输入完成后必然触发，比按钮更可靠；change 兜底。 */
-    function autoSavePrintField(t) {
-      if (!t || !t.getAttribute) return;
-      /* 注意：T2 只在点击处理函数内部定义，这里用同款兜底，避免作用域外引用报错 */
-      var T2 = window.T || function (k, fb) { return fb; };
-      var key = t.getAttribute('data-org');
-      if (key) {
-        if (key === 'phone') {
-          var ph = (t.value || '').trim();
-          if (ph && !/^[\d+][\d\-+ ]{4,19}$/.test(ph)) { toast(T2('errHospPhone', '医院电话格式不正确')); return; }
-        }
-        act('organization_save');
-        toast(T2('orgSaved', '医院信息已保存'));
-        return;
-      }
-      var ttl = t.getAttribute('data-print-title');
-      if (ttl !== null) {
-        act('settings_save', JSON.stringify({ reportTitle: (t.value || '').trim() }));
-        toast(T2('titleSaved', '报告标题已保存'));
-        return;
-      }
-      var dcl = t.getAttribute('data-print-decl');
-      if (dcl !== null) {
-        act('settings_save', JSON.stringify({ reportDeclaration: (t.value || '').trim() }));
-        toast(T2('declSaved', '报告声明已保存'));
-      }
-    }
-    document.getElementById('app-root').addEventListener('blur', function (e) {
-      autoSavePrintField(e.target);
-    }, true);
-    document.getElementById('app-root').addEventListener('change', function (e) {
-      if (e.target && e.target.getAttribute &&
-          (e.target.hasAttribute('data-org') || e.target.hasAttribute('data-print-title') || e.target.hasAttribute('data-print-decl'))) {
-        autoSavePrintField(e.target);
-      }
     }, true);
     /* ★ 任务32：输入框字符过滤（委托到 app-root，弹窗/页面重渲染后仍生效）
        data-tel=电话字符（数字/+/-） data-addr=打印机地址（数字/.//:) data-num2=数字+小数点 */

@@ -532,6 +532,12 @@ input.inp::placeholder{color:var(--ink3)}
 .sheet-foot .fbrand .bt{display:flex;flex-direction:column;align-items:flex-start;line-height:1.15}
 .sheet-foot .fbrand b{font-size:22px;font-weight:600;letter-spacing:2px}
 .sheet-foot .fbrand span{font-size:13px;color:var(--sheet);letter-spacing:1px}
+/* ★ 2026-10-13 V33：报告声明独立一行、与上面的医院电话/地址拉开间距 */
+.sheet-foot{flex-wrap:wrap}
+.sheet-foot .fnote{flex:0 0 100%;margin-top:14px;padding-top:8px;border-top:1px dashed var(--line);
+  font-size:14.5px;line-height:1.45;color:var(--ink2)}
+/* 检验医师编辑态输入框（沿用 .sheet-in 卡片底、不凸显） */
+.sheet-foot .foot-in{width:150px;height:26px;font-size:14.5px;padding:0 6px;vertical-align:middle}
 
 /* 发送数据：底栏按钮上方弹出菜单 + 二维码卡片（设计图 15-1 / 15-2） ---------- */
 .send-menu{position:absolute;right:630px;bottom:0;width:206px;background:#fff;border-radius:6px;
