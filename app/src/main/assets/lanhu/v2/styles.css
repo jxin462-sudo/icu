@@ -220,15 +220,15 @@ input.inp::placeholder{color:var(--ink3)}
 .th-btns{display:flex;gap:12px;margin-top:auto;padding-top:6px}
 /* ★ V26 断连态：按钮条收进卡片内（此前内容超高，按钮溢出盖住图像区下沿） */
 .therm:not(.on) .th-btns{margin-bottom:2px}
-/* ★ V27 连接出图：热图真正铺满整个红外测温区（图像占满全卡），
-   搜索连接/断开改为浮在图像右下角的小号半透明按钮，不再占底部一整栏 */
-.therm.on{position:relative;display:block;padding:0;overflow:hidden}
-.therm.on .th-view{position:absolute;inset:0;width:100%;height:100%;border-radius:6px}
+/* ★ V28 连接出图：热图铺满画面上方，搜索连接/断开放在图像下方的紧凑底条
+   （不遮成像画面，也不再是撑满整栏的大按钮） */
+.therm.on{flex-direction:column;gap:0;padding:0;overflow:hidden}
+.therm.on .th-view{width:100%;height:auto;flex:1;min-height:0;border-radius:6px 6px 0 0}
 .therm.on .th-canvas{width:100%;height:100%}
-.therm.on .th-side{position:absolute;right:8px;bottom:8px;flex-direction:row;justify-content:flex-end;align-items:center;padding:0;background:transparent;overflow:visible}
+.therm.on .th-side{flex:none;flex-direction:row;justify-content:flex-end;align-items:center;padding:5px 8px;background:var(--card)}
 .therm.on .th-title,.therm.on .th-row{display:none}
 .therm.on .th-btns{margin:0;padding:0;gap:8px}
-.therm.on .thbtn{flex:none;height:36px;padding:0 14px;font-size:16px;border-radius:6px;opacity:.88;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.therm.on .thbtn{flex:none;height:36px;padding:0 16px;font-size:16px;border-radius:6px}
 .thbtn{flex:1;height:52px;border-radius:8px;background:#fff;border:1px solid var(--line);color:var(--ink2);font-size:20px;white-space:nowrap}
 .thbtn:active{opacity:.72}
 .thbtn.primary{background:var(--accent);color:#fff;border-color:var(--accent)}

@@ -33,6 +33,7 @@
     centi: null,
     devices: [],
     pickerOpen: false,
+    connecting: false,
     logs: []
   };
 
@@ -237,7 +238,8 @@
       var arr = JSON.parse(raw);
       st.devices = Array.isArray(arr) ? arr : [];
     } catch (e) { st.devices = []; }
-    if (st.devices.length && document.querySelector('[data-therm]')) openPicker();
+    /* ★ V28：连接中 / 已出图时不再自动顶开设备选择浮层（否则选了设备后扫描结果还在推送，弹窗关不掉） */
+    if (st.devices.length && document.querySelector('[data-therm]') && !st.connecting && !isLive()) openPicker();
   }
 
   /* ---------- 原生回调入口 ---------- */
@@ -254,12 +256,14 @@
         st.fps = st.fps ? st.fps * 0.7 + f * 0.3 : f;
       }
       st.lastTs = ts || 0;
+      /* ★ V28：首帧到达 = 连接成功，强制关闭设备选择浮层 */
+      if (st.connecting || st.pickerOpen) { st.connecting = false; closePicker(); }
       draw();
       paintStatus();
     },
     setConnectionState: function (text) {
       st.connText = toText(text);
-      if (/未连接|断开|超时|失败/.test(st.connText)) { st.scanAtMs = 0; closePicker(); }
+      if (/未连接|断开|超时|失败/.test(st.connText)) { st.scanAtMs = 0; st.connecting = false; closePicker(); }
       paintStatus();
     },
     addLog: function (msg) {
@@ -330,6 +334,7 @@
         if (a === 'scan' || a === 'rescan') doScan();
         else if (a === 'disconnect') {
           nativeCall('disconnect');
+          st.connecting = false;
           st.connText = '红外测温已手动断开';
           st.centi = null; draw(); paintStatus();
         } else if (a === 'closepick') closePicker();
@@ -340,7 +345,7 @@
       if (dev) {
         var idx = parseInt(dev.getAttribute('data-th-dev'), 10);
         var d = st.devices[idx];
-        if (d) { nativeCall('connect', d.id); st.connText = '正在连接…'; closePicker(); paintStatus(); }
+        if (d) { st.connecting = true; nativeCall('connect', d.id); st.connText = '正在连接…'; closePicker(); paintStatus(); }
         e.stopPropagation();
         return;
       }
@@ -358,7 +363,7 @@
     draw();
     paintStatus();
     /* ★ V27：状态页整体重渲染会把 picker 一起重建，之前开着就在新 DOM 上恢复，避免一闪一闪 */
-    if (st.pickerOpen && st.devices.length) openPicker();
+    if (st.pickerOpen && st.devices.length && !st.connecting && !isLive()) openPicker();
     return true;
   }
 
