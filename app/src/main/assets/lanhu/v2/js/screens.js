@@ -881,7 +881,10 @@
         + '<div class="fcol"><div>' + T('hospitalPhone', '医院电话') + '：' + s.foot.tel + '</div><div>' + T('hospitalAddr', '医院地址') + '：' + s.foot.addr + '</div></div>'
         + '<div class="fcol">' + labDoc + '<div>' + T('sheetLabTime', '检验时间：') + fmtDT(s.foot.time) + '</div><div>' + s.foot.page + '</div></div>'
         + '<div class="fnote">' + (s.foot.note || '') + '</div>'
-        + '<div class="fbrand">' + (s.footerLogoUri ? '<img class="fb-img" src="' + s.footerLogoUri + '" alt="">'
+        /* ★ 2026-10-13 修复：页脚 LOGO 与医院 LOGO 是两套独立字段，记录单页脚原只认 footerLogoUri。
+           若用户只在「医院LOGO」入口上传、没传「页脚LOGO」，页脚就会空（显示优利特占位）。
+           改为页脚 LOGO 优先、医院 LOGO 兜底，传任意一个都能在页脚显示。 */
+        + '<div class="fbrand">' + ((s.footerLogoUri || s.logoUri) ? '<img class="fb-img" src="' + (s.footerLogoUri || s.logoUri) + '" alt="">'
           : (window.NI && window.NI.paw ? NI.paw : I.paw) + '<div class="bt"><b>优利特</b><span>URIT animal</span></div>') + '</div></div>';
       /* ★ 任务26a：编辑态底栏只留 保存/取消，避免编辑中误切样本/打印 */
       const bar = P.bottombar(ed ? [
