@@ -121,6 +121,11 @@
     if (!ctx) return;
     if (!st.centi || !st.w || !st.h) { ctx.clearRect(0, 0, cv.width, cv.height); return; }
 
+    /* ★ V26：铺满模式下画布分辨率跟随可视区，避免 CSS 拉伸糊掉 */
+    var vw = cv.parentElement ? cv.parentElement.clientWidth : 0;
+    var vh = cv.parentElement ? cv.parentElement.clientHeight : 0;
+    if (vw > 0 && vh > 0 && (cv.width !== vw || cv.height !== vh)) { cv.width = vw; cv.height = vh; }
+
     var w = st.w, h = st.h, d = st.centi;
     var mn = Infinity, mx = -Infinity, maxIdx = 0;
     for (var i = 0; i < d.length; i++) {
@@ -157,6 +162,12 @@
     setText('[data-th-maxv]', fmtC(mx));
     setText('[data-th-minv]', fmtC(mn));
     setText('[data-th-badge]', fmtC(mx));
+
+    /* ★ V26：状态页「红外体温」卡数值 = 热图最高温（同步进 D.status，重渲染不丢） */
+    var maxC = (mx / 100).toFixed(1);
+    try { if (window.D && D.status) D.status.irTemp = maxC; } catch (e) { /* noop */ }
+    var irMv = document.querySelector('[data-ir] .mv');
+    if (irMv && irMv.textContent !== maxC) irMv.textContent = maxC;
   }
 
   /* ---------- 状态文案刷新 ---------- */
@@ -170,6 +181,8 @@
     var box = document.querySelector('[data-therm]');
     if (!box) return;
     var live = isLive();
+    /* ★ V26：连接出图后整区铺满（CSS 切为上下结构：图像铺满 + 按钮条在最底部） */
+    box.classList.toggle('on', !!live);
     var scanning = st.scanAtMs && (Date.now() - st.scanAtMs) < SCAN_MS;
     var empty = box.querySelector('[data-th-empty]');
     if (empty) {

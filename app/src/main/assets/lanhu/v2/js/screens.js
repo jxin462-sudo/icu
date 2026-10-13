@@ -452,7 +452,7 @@
   /* 状态页指标统一读 D.status（由原生 host/controls 注入；无数据显示 --）
      ★ 2026-10-08（#39b）1:1 对齐设计稿 6.png：
      标题 → 通栏细分隔线 → 数值行（大黑字左、蓝色图标右）→ 底部进度条（恒显，无数据为空轨） */
-  function metric(t, v, ico, pct, lvl) {
+  function metric(t, v, ico, pct, lvl, attr) {
     if (lvl) {
       var li = (typeof D.levelIdx === 'number') ? D.levelIdx : 0;
       if (li < 0 || li > 2) li = 0;
@@ -469,7 +469,7 @@
         + '<i data-lvl="green" class="' + (li === 2 ? 'on' : '') + '" style="background:#17B129;--c:#17B129"></i>'
         + '</span></div>';
     }
-    return '<div class="metric"><div class="mt">' + t + '</div><div class="mhr"></div>'
+    return '<div class="metric"' + (attr ? ' ' + attr : '') + '><div class="mt">' + t + '</div><div class="mhr"></div>'
       + '<div class="mvrow"><span class="mv">' + v + '</span><span class="mi">' + I[ico] + '</span></div>'
       + '<div class="pbar"><i style="width:' + ((pct === null || pct === undefined) ? 0 : pct) + '%"></i></div></div>';
   }
@@ -485,7 +485,8 @@
         + metric(T('statusTemp', '舱内温度（℃）'), M.temp || '--', 'thermo', M.tempP)
         + metric(T('statusO2', '氧浓度（%）'), M.o2 || '--', 'o2', M.o2P)
         + metric(T('statusHum', '湿度（%）'), M.hum || '--', 'drop', M.humP)
-        + metric(T('statusIr', '红外体温 ℃'), M.irTemp || '--', 'thermo', M.irP)
+        /* ★ V26：data-ir 供 thermal.js 把热图最高温写进数值区 */
+        + metric(T('statusIr', '红外体温 ℃'), M.irTemp || '--', 'thermo', M.irP, 0, 'data-ir')
         + metric('', '', '', null, 1)
         + metric(T('statusCo2', '二氧化碳（PPM）'), M.co2 || '--', 'co2', M.co2P)
         + metric(T('statusDur', '治疗时长（h）'), M.dur || '--', 'clock', M.durP)
