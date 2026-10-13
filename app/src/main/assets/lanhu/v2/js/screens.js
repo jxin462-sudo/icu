@@ -127,7 +127,9 @@
         printerAvail: '可用打印机', printerAddr: '打印机地址', scanPrinter: '扫描',
         addPrinter: '添加打印机', printTest: '打印测试页', uploadLogo: '上传LOGO',
         hospitalName: '医院名称', hospitalPhone: '医院电话', hospitalAddr: '医院地址', hospitalLogo: '医院LOGO',
-        reportTitle: '报告标题', reportDecl: '报告声明', setBtn: '设置',
+        reportTitle: '报告标题', reportDecl: '报告声明', setBtn: '设置', noLogo: '暂无\nLOGO',
+        /* ★ 2026-10-13 打印页自动保存提示 */
+        orgSaved: '医院信息已保存', titleSaved: '报告标题已保存', declSaved: '报告声明已保存',
         scanUnsupported: '暂不支持自动扫描，请手动填写打印机地址后添加',
         /* ★ 2026-10-10 #53-#57 */
         scanningPrinters: '正在扫描打印机…', noPrinterFound: '未发现打印机，请点「扫描」或手动输入地址',
@@ -177,6 +179,7 @@
         addPrinter: 'Add Printer', printTest: 'Print Test Page', uploadLogo: 'Upload Logo',
         hospitalName: 'Hospital Name', hospitalPhone: 'Hospital Phone', hospitalAddr: 'Hospital Address', hospitalLogo: 'Hospital Logo',
         reportTitle: 'Report Title', reportDecl: 'Report Declaration', setBtn: 'Set',
+        noLogo: 'No\nLOGO', orgSaved: 'Hospital info saved', titleSaved: 'Report title saved', declSaved: 'Declaration saved',
         scanUnsupported: 'Auto-scan not supported; please enter the printer address manually',
         /* ★ 2026-10-10 #53-#57 */
         scanningPrinters: 'Scanning for printers…', noPrinterFound: 'No printer found; tap "Scan" or enter the address manually',
@@ -1197,11 +1200,21 @@
       var pf = function (k, val) {
         var mx = ORG_LIMITS[k] ? ' maxlength="' + ORG_LIMITS[k] + '"' : '';
         var tel = k === 'phone' ? ' data-tel="1"' : '';
-        return '<div class="inp flex"><input class="icu-input" data-org="' + k + '"' + mx + tel + ' value="' + (val || '') + '"></div>';
+        return '<div class="inp flex"><input type="text" class="icu-input" data-org="' + k + '"' + mx + tel + ' value="' + (val || '') + '"></div>';
       };
       var setBtn = '<div class="btn sm" data-print="org">' + T('setBtn', '设置') + '</div>';
       var upLogo = '<div class="btn sm" data-print="logo">' + T('uploadLogo', '上传LOGO') + '</div>';
       var upFooter = '<div class="btn sm" data-print="footerLogo">' + T('uploadLogo', '上传LOGO') + '</div>';
+      /* ★ 2026-10-13：LOGO 预览框补上真实图片 —— 此前只渲染空 .logo-box，
+         「当前LOGO」永远是空框，用户看不到已上传的 logo。
+         医院 LOGO 取 org.logoUri，页脚 LOGO 取 D.settings.footerLogoUri；无图时给占位提示。 */
+      var st = (D.settings || {});
+      function logoBox(uri, ph) {
+        if (uri) return '<div class="logo-box"><img src="' + uri + '" alt="LOGO"></div>';
+        return '<div class="logo-box"><span class="lg-ph">' + ph + '</span></div>';
+      }
+      var hospLogo = logoBox(org.logoUri, T('noLogo', '暂无\nLOGO'));
+      var footLogo = logoBox(st.footerLogoUri, T('noLogo', '暂无\nLOGO'));
       /* ★ 2026-10-10 #57：可用打印机列表 —— NSD 扫描结果只显示打印机名，点击即添加为打印机地址 */
       var scan = D.printerScan || { scanning: false, printers: [] };
       var plist;
@@ -1225,15 +1238,15 @@
         + frow(T('hospitalPhone', '医院电话'), pf('phone', org.phone) + setBtn)
         + frow(T('hospitalAddr', '医院地址'), pf('address', org.address) + setBtn)
         + '<div class="frow"><label>' + T('hospitalLogo', '医院LOGO') + '</label><div class="ctl" style="gap:40px">'
-        + '<div style="text-align:center"><div class="logo-box"></div><div style="font-size:20px;margin-top:6px;color:#575f6b">' + T('curLogo', '当前LOGO') + '</div></div>'
+        + '<div style="text-align:center">' + hospLogo + '<div style="font-size:20px;margin-top:6px;color:#575f6b">' + T('curLogo', '当前LOGO') + '</div></div>'
         + upLogo
-        + '<div style="text-align:center"><div style="font-size:22px;margin-bottom:6px">' + T('footerLogo', '页脚LOGO') + '</div><div class="logo-box"></div><div style="font-size:20px;margin-top:6px;color:#575f6b">' + T('curLogo', '当前LOGO') + '</div></div>'
+        + '<div style="text-align:center"><div style="font-size:22px;margin-bottom:6px">' + T('footerLogo', '页脚LOGO') + '</div>' + footLogo + '<div style="font-size:20px;margin-top:6px;color:#575f6b">' + T('curLogo', '当前LOGO') + '</div></div>'
         + upFooter
         + '</div></div>'
-        + frow(T('reportTitle', '报告标题'), '<div class="inp flex"><input class="icu-input" data-print-title maxlength="30" value="'
-          + ((D.settings && D.settings.reportTitle) || '') + '"></div><div class="btn sm" data-print="reportTitle">' + T('setBtn', '设置') + '</div>')
-        + frow(T('reportDecl', '报告声明'), '<div class="inp flex"><input class="icu-input" data-print-decl maxlength="60" value="'
-          + ((D.settings && D.settings.reportDeclaration) || '') + '"></div><div class="btn sm" data-print="reportDecl">' + T('setBtn', '设置') + '</div>')
+        + frow(T('reportTitle', '报告标题'), '<div class="inp flex"><input type="text" class="icu-input" data-print-title maxlength="30" value="'
+          + (st.reportTitle || '') + '"></div><div class="btn sm" data-print="reportTitle">' + T('setBtn', '设置') + '</div>')
+        + frow(T('reportDecl', '报告声明'), '<div class="inp flex"><input type="text" class="icu-input" data-print-decl maxlength="60" value="'
+          + (st.reportDeclaration || '') + '"></div><div class="btn sm" data-print="reportDecl">' + T('setBtn', '设置') + '</div>')
         + '</div>';
       return setPage('set-print', body);
     }

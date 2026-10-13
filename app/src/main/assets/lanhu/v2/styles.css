@@ -412,7 +412,15 @@ input.inp::placeholder{color:var(--ink3)}
 .sideitem svg{width:32px;height:32px;color:#3a4350}
 .sideitem.on{background:var(--accent);color:#fff}
 .sideitem.on svg{color:#fff}
-.setbody{flex:1;padding:108px 88px 40px;position:relative;overflow:hidden}
+/* ★ 2026-10-13：设置页内容允许滚动。此前 overflow:hidden，一旦打印机列表变长，
+   下面的「医院名称/电话/地址/报告标题/报告声明」就被裁掉且无法滚动到达，
+   表现为"文本框无法输入"。 */
+.setbody{flex:1;padding:108px 88px 40px;position:relative;overflow:auto;-webkit-overflow-scrolling:touch}
+/* 打印页输入框铺满整行（62px 高），保证点击/聚焦区域与可见框一致 */
+.print-fields .inp{height:62px}
+.print-fields .inp input.icu-input{height:100%;line-height:62px;font-size:24px}
+/* 打印机列表限高，避免把后续字段顶出可视区 */
+.print-fields .printer-list{max-height:220px;overflow:auto}
 .setbody .frow{margin-bottom:50px}
 .setbody.mid{display:flex;flex-direction:column;align-items:center;justify-content:center}
 
@@ -778,6 +786,7 @@ body.notes .annot.dz{display:flex}
 .logo-box{width:110px;height:110px;border-radius:8px;background:var(--card);border:1px solid var(--line);
   display:flex;align-items:center;justify-content:center;overflow:hidden}
 .logo-box img{max-width:100%;max-height:100%;object-fit:contain}
+.logo-box .lg-ph{font-size:18px;color:#9aa6b6;text-align:center;line-height:1.3;padding:0 6px}
 /* ★ 任务15(#12)：调试页第 6 个模块 —— 恢复出厂设置卡 */
 .compcard.factory{display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:default}
 .compcard.factory .ct{margin-bottom:18px}

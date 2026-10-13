@@ -1906,8 +1906,14 @@ public class IcuDashboardView extends View {
             return true;
         }
         if ("control_humidity_switch".equals(action)) {
-            // 湿度按协议只读：开关点击 = 主动向主机读取实时湿度并回显。
-            handleControlCardTap(14, "湿度");
+            /* ★ 2026-10-13：恢复湿度开关。协议上固件忽略 set_humidity（只读），
+               但产品需要开关/设置入口：点击即把「上次设定的目标湿度」下发给主机并重新读取回显，
+               未连接时本地保存目标值，用户至少能得到明确反馈而非"点了没反应"。 */
+            Float lastHum = bleManager.getLastSetHumidityValue();
+            float targetHum = (lastHum != null && lastHum > 0f) ? lastHum : 55f;
+            boolean sent = bleManager.setHumidity(targetHum);
+            bleManager.requestHumidity();
+            showSendResult("湿度开关", sent);
             invalidate();
             return true;
         }
@@ -1926,14 +1932,9 @@ public class IcuDashboardView extends View {
             return true;
         }
         if ("control_humidity".equals(action)) {
-            // ★ P2-问题15 修复:湿度取消设置功能,只显示舱内实时湿度。
-            //   这里推翻了早前的 P1-9(当时把湿度从只读改成弹设置框,理由是"用户反馈点不动");
-            //   自测报告明确"湿度是没有设置功能的",以报告为准。
-            //   handleControlCardTap(14) 里 #16 的只读实现一直还在(主动 get_humidity
-            //   + Toast 当前值),直接复用它,不另写一份 —— 既满足只读要求,
-            //   又保留点击反馈,不会退回 P1-9 抱怨的"点不动"。
-            handleControlCardTap(14, "湿度");
-            invalidate();
+            /* ★ 2026-10-13：恢复湿度「设置」入口（此前按只读砍掉，用户要求加回）。
+               数值确定后走 setHumidity：连接时下发主机，未连接时本地保存目标值并提示。 */
+            showNumberDialog(14, "设置湿度", "%", bleManager.getLastSetHumidityValue(), false);
             return true;
         }
         if ("control_time".equals(action)) {

@@ -370,9 +370,10 @@
       D.ctrlRow1 = [
         { tKey: 'ctrlTemp', t: '舱内温度 ℃', v: hostUp ? num(h.temp, '--') : '--', p: 60, set: 1, on: hostUp ? !!c.tempOn : false, ico: 'thermo' },
         { tKey: 'ctrlO2', t: '氧浓度 %', v: hostUp ? num(h.oxygen, '--') : '--', p: 43, set: 1, on: hostUp ? !!c.oxygenOn : false, ico: 'o2' },
-        /* ★ 2026-10-13 V31：湿度按协议只读（无 set_humidity 命令），卡片不再渲染开关/设置，
-           否则开关永远显示「开」且点不关（用户反馈"湿度开关无法正常关闭"）；整卡点击=重新读取 */
-        { tKey: 'ctrlHum', t: '湿度 %', v: hostUp ? num(h.humidity, '--') : '--', p: 35, ro: 1, on: false, ico: 'drop' },
+        /* ★ 2026-10-13：恢复湿度开关/设置（用户要求加回）。协议上固件忽略 set_humidity，
+           但产品需要入口：开关态由主机回包 controls.humidityOn 驱动，未连接显示关闭态。
+           整卡点击走 .ctrl.ro 分支（主动 get_humidity 回显）——该分支已无 ro 卡时自然失效。 */
+        { tKey: 'ctrlHum', t: '湿度 %', v: hostUp ? num(h.humidity, '--') : '--', p: 35, set: 1, on: hostUp ? !!c.humidityOn : false, ico: 'drop' },
         { tKey: 'ctrlCo2', t: '二氧化碳浓度 PPM', v: hostUp ? num(h.co2, '--') : '--', p: 66, set: 1, on: hostUp ? !!c.co2On : false, ico: 'co2' },
         { tKey: 'ctrlLevel', t: '监护等级', v: '', level: 1 }
       ];
@@ -1793,6 +1794,44 @@
       D.lang = v;                                  // 即时生效，不等原生回推
       act('settings_save', JSON.stringify({ language: v }));
       IcuApp.render();
+    }, true);
+    /* ★ 2026-10-13：打印页字段失焦即保存（医院名称/电话/地址、报告标题、报告声明）。
+       此前只能靠「设置」按钮保存，按钮点击一旦被拦或页面被裁，输入就丢、记录单也不同步。
+       blur 在真实输入完成后必然触发，比按钮更可靠；change 兜底。 */
+    function autoSavePrintField(t) {
+      if (!t || !t.getAttribute) return;
+      /* 注意：T2 只在点击处理函数内部定义，这里用同款兜底，避免作用域外引用报错 */
+      var T2 = window.T || function (k, fb) { return fb; };
+      var key = t.getAttribute('data-org');
+      if (key) {
+        if (key === 'phone') {
+          var ph = (t.value || '').trim();
+          if (ph && !/^[\d+][\d\-+ ]{4,19}$/.test(ph)) { toast(T2('errHospPhone', '医院电话格式不正确')); return; }
+        }
+        act('organization_save');
+        toast(T2('orgSaved', '医院信息已保存'));
+        return;
+      }
+      var ttl = t.getAttribute('data-print-title');
+      if (ttl !== null) {
+        act('settings_save', JSON.stringify({ reportTitle: (t.value || '').trim() }));
+        toast(T2('titleSaved', '报告标题已保存'));
+        return;
+      }
+      var dcl = t.getAttribute('data-print-decl');
+      if (dcl !== null) {
+        act('settings_save', JSON.stringify({ reportDeclaration: (t.value || '').trim() }));
+        toast(T2('declSaved', '报告声明已保存'));
+      }
+    }
+    document.getElementById('app-root').addEventListener('blur', function (e) {
+      autoSavePrintField(e.target);
+    }, true);
+    document.getElementById('app-root').addEventListener('change', function (e) {
+      if (e.target && e.target.getAttribute &&
+          (e.target.hasAttribute('data-org') || e.target.hasAttribute('data-print-title') || e.target.hasAttribute('data-print-decl'))) {
+        autoSavePrintField(e.target);
+      }
     }, true);
     /* ★ 任务32：输入框字符过滤（委托到 app-root，弹窗/页面重渲染后仍生效）
        data-tel=电话字符（数字/+/-） data-addr=打印机地址（数字/.//:) data-num2=数字+小数点 */
