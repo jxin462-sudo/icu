@@ -814,8 +814,7 @@ body.notes .annot.dz{display:flex}
 .zone-card .zseg button[disabled]{opacity:.45;cursor:not-allowed}
 .zone-card .znoperm{font-size:18px;color:#8b95a6}
 .usertable select.icu-input{width:100%;height:52px;font-size:20px}
-/* ★ 任务16(#11)：发送数据菜单挂载到按钮内 —— 水平居中于按钮正上方 */
-.send-menu.docked{position:absolute;left:50%;transform:translateX(-50%);bottom:calc(100% + 12px);right:auto;margin:0}
+/* ★ V46：.send-menu.docked 已废弃删除（alignSendMenu 移除，菜单由 positionSendMenu 以 bottombar 为父定位） */
 .bottombar .bbtn{overflow:visible}
 /* ★ 任务16(#1)：调试页第 6 位 = 恢复出厂设置纯按钮（无卡片框/无字段） */
 .compfactory{display:flex;align-items:center;justify-content:center;min-height:170px}

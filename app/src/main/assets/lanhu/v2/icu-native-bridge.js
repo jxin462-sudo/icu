@@ -759,25 +759,11 @@
     box.innerHTML = msg(pending ? TT('qrPending', '二维码生成中…') : '');
     box.dataset.url = '';
   }
-  /* ★ 任务16(#11)：把菜单挂进「发送数据」按钮内部，绝对定位在按钮正上方水平居中
-   —— 与按钮天然对齐，不受视口/缩放影响；未点击选择时无高亮（点击后由 applySendingCard 点亮） */
-  function alignSendMenu() {
-    var m = document.querySelector('.send-menu');
-    if (!m || !document.body.contains(m)) return;
-    if (m.parentElement && m.parentElement.classList.contains('bbtn')) return; // 已挂好
-    var b = document.querySelector('.bottombar .bbtn[data-key="dataSend"]');
-    if (!b) {
-      var sdTxt = TT('sendData', '发送数据');
-      [].some.call(document.querySelectorAll('.bottombar .bbtn'), function (x) {
-        var tc = x.textContent || '';
-        if (tc.indexOf('发送数据') >= 0 || tc.indexOf(sdTxt) >= 0) { b = x; return true; }
-        return false;
-      });
-    }
-    if (!b) return;
-    b.appendChild(m);
-    m.classList.add('docked');
-  }
+  /* ★ V46 删除：任务16 的 alignSendMenu()（把菜单 appendChild 进「发送数据」bbtn + .docked 居中）。
+     它与 positionSendMenu() 冲突：onRender 先 position 后被它改挂到按钮内（.bbtn position:relative），
+     inline left 仍是底栏坐标系 → 菜单相对按钮偏移近千像素，且此后 positionSendMenu 因
+     parent 不是 bottombar 而永久 early-return —— V41~V45 真机菜单不对齐的病根。
+     定位统一由 positionSendMenu() 负责（菜单挂 bottombar，offsetLeft 布局坐标，免疫 stage zoom）。 */
 
   function patchNewSample() {
     var modal = document.querySelector('.modal.wide');
@@ -1761,7 +1747,7 @@
     if (cur === 'query') patchQuery();
     if (cur === 'comp') bindComp();
     if (cur === 'tutorial') loadTutorialSlots();
-    if (cur === 'sending') { applySendingCard(); alignSendMenu(); } // 任务9：原生 invalidate 重渲染后恢复弹层状态
+    if (cur === 'sending') { applySendingCard(); } // 任务9：原生 invalidate 重渲染后恢复弹层状态（V46：移除 alignSendMenu——它把菜单拖进按钮内，与 positionSendMenu 冲突，是 V41~V45 菜单对齐全部失效的病根）
   }
 
   /* ---------- 补偿页 · +/- 步进（本地状态，初始 0 = 中性默认值，非虚构数据） ---------- */
