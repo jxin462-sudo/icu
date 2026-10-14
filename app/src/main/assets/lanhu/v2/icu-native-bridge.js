@@ -1226,7 +1226,7 @@
       /* ★ 2026-10-10 #73：发送数据页底栏再点「发送数据/导出报告」→ 未开始传输（无卡片）时收回/展开发送方式列表 */
       if (cur === 'sending' && (key === 'sendData' || key === 'dataSend' || key === 'exportReport')) {
         stop(e);
-        if (!sendingCard) { D.sendMenuHide = !D.sendMenuHide; if (window.IcuApp) IcuApp.render(); }
+        if (!sendingCard) { D.sendMenuHide = !D.sendMenuHide; if (window.IcuApp) { IcuApp.render(); setTimeout(positionSendMenu, 0); } }
         return;
       }
       if (cur === 'care' || cur === 'care-data' || cur === 'care-record' || (cur === 'sending' && D.sendFrom === 'care') /* ★ #84 护疗来源的发送页也走护疗分支 */) {
@@ -1276,7 +1276,7 @@
           D.selCaseId = effP; openRecordSheetFor(effP); return;
         }
         /* ★ 2026-10-10 #71：护疗页「发送数据」→ 发送页按护疗来源渲染（已结束的样本也能直接选发送方式，不必跳回顾页） */
-        if (key === 'dataSend') { stop(e); var dRows = D.careRows || []; if (!dRows.length) { toast(TT('reviewNoData', '暂无样本数据，无法执行该操作')); return; } var effS = careEffSelId(); if (!effS) { toast(TT('reviewNoSel', '请先选择一个样本')); return; } /* ★ #79：治疗未结束不能发送 */ if (!careEndedOK(careSelCase())) { toast(TT('careNotEndedSend', '该样本治疗未结束，不能发送数据')); return; } D.selCaseId = effS; sendingCard = null; D.sendFrom = 'care'; D.sendMenuHide = false; IcuApp.go('sending'); return; } // 任务9：进入发送数据页（菜单里再选文件助手/蓝牙）
+        if (key === 'dataSend') { stop(e); var dRows = D.careRows || []; if (!dRows.length) { toast(TT('reviewNoData', '暂无样本数据，无法执行该操作')); return; } var effS = careEffSelId(); if (!effS) { toast(TT('reviewNoSel', '请先选择一个样本')); return; } /* ★ #79：治疗未结束不能发送 */ if (!careEndedOK(careSelCase())) { toast(TT('careNotEndedSend', '该样本治疗未结束，不能发送数据')); return; } D.selCaseId = effS; sendingCard = null; D.sendFrom = 'care'; D.sendMenuHide = false; IcuApp.go('sending'); setTimeout(positionSendMenu, 0); return; } // 任务9：进入发送数据页（菜单里再选文件助手/蓝牙）
         if (key === 'tutorial') { stop(e); IcuApp.go('tutorial'); return; } /* ★ 2026-10-09 改为进教程页（槽位绑定照片/视频） */
         if (key === 'careRecord') { /* 交给 app.js 跳 care-record */ return; }
       }
@@ -1293,8 +1293,8 @@
         if (key === 'query') { /* 交给 app.js 跳 query */ return; }
         /* ★ 2026-10-10 #53：回顾页「打印」→ 打开选中样本的治疗记录单预览（选中校验由上方 needSel 门完成），真实打印在记录单页执行 */
         if (key === 'print') { stop(e); D.printFrom = 'review'; openRecordSheetFor(D.selCaseId); return; }
-        if (key === 'exportReport') { stop(e); /* ★ 2026-10-14 V40：文件助手/蓝牙选择列表移到「导出报告」点击弹出，不再直接调系统分享 */ sendingCard = null; D.sendFrom = 'review'; D.sendMenuHide = false; IcuApp.go('sending'); return; }
-        if (key === 'sendData') { stop(e); /* ★ V40：已置灰留二期（底栏 dis 不可点），保留逻辑兜底 */ sendingCard = null; D.sendFrom = 'review'; D.sendMenuHide = false; IcuApp.go('sending'); return; }
+        if (key === 'exportReport') { stop(e); /* ★ 2026-10-14 V40：文件助手/蓝牙选择列表移到「导出报告」点击弹出，不再直接调系统分享 */ sendingCard = null; D.sendFrom = 'review'; D.sendMenuHide = false; IcuApp.go('sending'); setTimeout(positionSendMenu, 0); return; }
+        if (key === 'sendData') { stop(e); /* ★ V40：已置灰留二期（底栏 dis 不可点），保留逻辑兜底 */ sendingCard = null; D.sendFrom = 'review'; D.sendMenuHide = false; IcuApp.go('sending'); setTimeout(positionSendMenu, 0); return; }
         if (key === 'careRecord') { /* 交给 app.js */ return; }
         if (key === 'del') { stop(e); act('patient_delete'); return; }
       }
@@ -1411,6 +1411,7 @@
           sendingCard = null; D.sendMenuHide = false;
           act('export_report', ec.caseNo || ec.recordNo || '');
           IcuApp.go('sending');
+          setTimeout(positionSendMenu, 0);
           return;
         }
         /* 上一样本/下一样本：在 S.cases 全量列表中定位当前样本，切换选中后停留本页并刷新 */
