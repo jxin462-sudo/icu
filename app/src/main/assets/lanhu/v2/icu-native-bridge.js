@@ -69,7 +69,7 @@
      AM4100 连接后每帧 emit → 原生 50ms 节流推送（≈20次/秒），
      整页重渲染风暴会把 rAF 演示波形反复打回初始帧；这里收敛到 ≤8次/秒 */
   /* ★ 2026-10-14 V40：整页重渲染后立刻回填系统时钟，消除「时间先闪回占位符、下一秒才恢复」的数值闪烁 */
-  function refillSysClock() { if (window.__tickSysClock) window.__tickSysClock(); }
+  function refillSysClock() { if (window.__tickSysClock) window.__tickSysClock(); if (window.IcuApp && IcuApp.current && IcuApp.current() === 'sending') positionSendMenu(); }
   var lastRenderAt = 0, renderTimer = 0, lastFullRenderAt = 0;
   function scheduleRender() {
     /* ★ 2026-10-09 新建/编辑样本弹窗打开期间跳过后台重渲染：
@@ -699,6 +699,24 @@
       if (x.classList) x.classList.toggle('on', x.dataset.send === sendingCard);
     });
     if (sendingCard === 'file') renderShareQr(false);
+    positionSendMenu();
+  }
+  /* ★ 2026-10-14 V41：发送方式菜单动态对齐触发按钮——
+     回顾来源对齐「导出报告」、护疗来源对齐「数据发送」，
+     直接读按钮 getBoundingClientRect 定位，不再用写死的 right 像素（按钮宽度随语言/字体变化，估不准） */
+  function positionSendMenu() {
+    var menu = document.querySelector('.send-menu');
+    if (!menu || menu.hidden) return;
+    var key = (D.sendFrom === 'care') ? 'dataSend' : 'exportReport';
+    var btn = document.querySelector('.bottombar .bbtn[data-key="' + key + '"]');
+    if (!btn) return;
+    var br = btn.getBoundingClientRect();
+    var mw = menu.offsetWidth || 206, mh = menu.offsetHeight || 120;
+    menu.style.position = 'fixed';
+    menu.style.right = 'auto';
+    menu.style.bottom = 'auto';
+    menu.style.left = Math.max(8, Math.round(br.left + br.width / 2 - mw / 2)) + 'px';
+    menu.style.top = Math.max(8, Math.round(br.top - mh - 12)) + 'px';
   }
   /* ★ 任务28（V1.02 R25/R42 方案A）：渲染文件助手二维码。
      数据源为原生回推的 S.shareQr {url,error,fileName}：
