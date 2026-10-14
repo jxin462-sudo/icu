@@ -979,8 +979,9 @@
         + qrow(T('fieldPhone', '联系电话'), qinp(''))
         + qrow(T('fieldSpecies', '物种'), '<div class="qchips">' + sp + '</div>', true)
         + '</div>';
+      /* ★ 2026-10-14：查询弹窗背景改为真实回顾列表（reviewTable），不再用空白 careTable([]) */
       return PAGE(P.topbar('review'),
-        '<div class="listwrap" style="opacity:.5">' + careTable([]) + '</div>'
+        '<div class="listwrap" style="opacity:.5">' + reviewTable(false) + '</div>'
         + P.mask('<div class="modal qmodal"><div class="mhead">' + T('query', '查询') + '</div><div class="mbody">' + body + '</div>'
           + '<div class="mfoot"><div class="btn" data-go="review">' + T('confirm', '确认') + '</div><div class="btn primary" data-go="review">' + T('cancel', '取消') + '</div></div></div>')
         + A(452, 315, '住院号') + A(452, 356, '样本号', 'strike')
