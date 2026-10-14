@@ -4,7 +4,7 @@
  * 规则:可使用 !important;本文件应只包含 index.css 没覆盖到的页面级微调
  */
 [data-icu-live] {
-  font-family: OPPOSans-R, "Source Han Sans CN", sans-serif;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif;
   font-weight: 400;
 }
 .text-wrapper_23,

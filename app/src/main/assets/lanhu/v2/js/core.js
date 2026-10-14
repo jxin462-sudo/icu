@@ -43,7 +43,7 @@
     info: s('<circle cx="12" cy="12" r="9"/><path d="M12 11v5.4M12 7.8v.1"/>'),
     logout: s('<path d="M14 4H5v16h9"/><path d="M17 8l4 4-4 4M9 12h12"/>'),
     thermo: s('<path d="M13.5 14V4.6a1.8 1.8 0 0 0-3.6 0V14a3.4 3.4 0 1 0 3.6 0Z"/><path d="M11.7 8h2"/>'),
-    o2: f('<text x="12" y="16.6" font-size="12.5" font-family="Arial,Helvetica,sans-serif" text-anchor="middle">O</text><text x="19.4" y="20.4" font-size="8" font-family="Arial,Helvetica,sans-serif" text-anchor="middle">2</text>'),
+    o2: f('<text x="12" y="16.6" font-size="12.5" font-family="Noto Sans SC,sans-serif" text-anchor="middle">O</text><text x="19.4" y="20.4" font-size="8" font-family="Noto Sans SC,sans-serif" text-anchor="middle">2</text>'),
     drop: sf('<path d="M10.9 9.4s4.3 3.9 4.3 6.5a4.3 4.3 0 0 1-8.6 0c0-2.6 4.3-6.5 4.3-6.5Z"/>',
       '<path d="M16.7 3.9s2.4 2.2 2.4 3.6a2.4 2.4 0 0 1-4.8 0c0-1.4 2.4-3.6 2.4-3.6Z"/>'
       + '<path d="M7.2 6.3s1.9 1.7 1.9 2.8a1.9 1.9 0 0 1-3.8 0c0-1.1 1.9-2.8 1.9-2.8Z"/>'),
@@ -103,8 +103,8 @@
     /* 辐射光线（红外理疗 / 雾化器 / 负离子 / 治疗时长 共用，实测设计 7.png） */
     rays: s('<path d="M12 4.2v3.2M12 16.6v3.2M4.2 12h3.2M16.6 12h3.2M6.5 6.5l2.3 2.3M15.2 15.2l2.3 2.3M17.5 6.5l-2.3 2.3M8.8 15.2l-2.3 2.3"/>'),
     /* 24 小时常开（紫外消毒） */
-    uv24: s('<path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4.5V9h-4.5"/><text x="12" y="15.6" font-size="9" font-family="Arial,sans-serif" fill="currentColor" stroke="none" text-anchor="middle">24</text>'),
-    co2: f('<text x="11" y="16.6" font-size="11.5" font-family="Arial,Helvetica,sans-serif" text-anchor="middle">CO</text><text x="19.6" y="20.6" font-size="7.5" font-family="Arial,Helvetica,sans-serif" text-anchor="middle">2</text>'),
+    uv24: s('<path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4.5V9h-4.5"/><text x="12" y="15.6" font-size="9" font-family="Noto Sans SC,sans-serif" fill="currentColor" stroke="none" text-anchor="middle">24</text>'),
+    co2: f('<text x="11" y="16.6" font-size="11.5" font-family="Noto Sans SC,sans-serif" text-anchor="middle">CO</text><text x="19.6" y="20.6" font-size="7.5" font-family="Noto Sans SC,sans-serif" text-anchor="middle">2</text>'),
     /* 冷光：雪花 */
     snow: s('<path d="M12 3v18M4.6 7.3l14.8 9.4M19.4 7.3 4.6 16.7"/><path d="M12 6.4 9.6 4M12 6.4 14.4 4M12 17.6 9.6 20M12 17.6l2.4 2.4"/>'),
     /* ★ 2026-10-08（#39c）：蓝牙徽标（监护页功能按钮，设计稿 8-1.png） */

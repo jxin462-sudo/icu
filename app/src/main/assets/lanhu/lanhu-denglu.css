@@ -14,7 +14,7 @@
   background: transparent;
   color: #2a2a2a;
   font-size: 18px;
-  font-family: SourceHanSansCN-Regular, "Microsoft YaHei", sans-serif;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif;
   line-height: 50px;
   padding: 0;
   box-sizing: border-box;
@@ -109,7 +109,7 @@
   text-align: center;
   margin: 0 0 27px 0;
   line-height: 40px;
-  font-family: SourceHanSansCN-Regular, "Microsoft YaHei", sans-serif;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif;
   font-weight: 500;
 }
 .icu-register-panel .icu-register-row {

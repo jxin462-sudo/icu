@@ -29,7 +29,7 @@
 *{box-sizing:border-box;margin:0;padding:0}
 [hidden]{display:none !important}
 html,body{height:100%;background:#0b0f14}
-body{font-family:"Microsoft YaHei","PingFang SC","Noto Sans SC","Segoe UI",sans-serif;color:var(--ink);overflow:hidden}
+body{font-family:"Source Han Sans CN","Noto Sans SC","Noto Sans CJK SC",sans-serif;color:var(--ink);overflow:hidden}
 button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
 input,select{font-family:inherit}
 
@@ -260,15 +260,15 @@ input.inp::placeholder{color:var(--ink3)}
 .ctrl.tall{height:301px}
 .ctrl.modecard{height:112px;background:#e8eef8}
 /* 统一内缩：左 36 / 标题顶 32 / 值顶 81 */
-/* 字体实测 7.png：数字=Arial（比例数字，非等宽），CJK 回落 Microsoft YaHei。
-   行1 数字 Arial 68px（"1000"=141px / "39.5"=127px，设计 141/128）；行2 55px；治疗时长 53px；
+/* 2026-10-14：全部改用免费商用思源黑体（Source Han Sans CN/Noto Sans SC，SIL OFL），替换原 Arial+微软雅黑（方正收费）。
+   行1 数字 68px（"1000"=141px / "39.5"=127px，设计 141/128）；行2 55px；治疗时长 53px；
    标题 24px（"红外理疗"=96px，设计 95） */
 /* word-spacing 7px：实测 7.png「氧浓度 %」度→% 间隔 17px（无 word-spacing 时 10px），
    「二氧化碳浓度 PPM」同理 +7px（设计 207 / 渲染 200）。仅含空格的标题受影响，无空格标题不变。 */
-.ctrl .ct{position:absolute;left:36px;top:30px;font-size:24px;line-height:1.2;color:#000;font-family:Arial,"Microsoft YaHei",sans-serif;word-spacing:7px}
-.ctrl .cv{position:absolute;left:35px;top:72px;font-size:68px;line-height:1;color:#000;font-family:Arial,"Microsoft YaHei",sans-serif}
+.ctrl .ct{position:absolute;left:36px;top:30px;font-size:24px;line-height:1.2;color:#000;font-family:"Source Han Sans CN","Noto Sans SC",sans-serif;word-spacing:7px}
+.ctrl .cv{position:absolute;left:35px;top:72px;font-size:68px;line-height:1;color:#000;font-family:"Source Han Sans CN","Noto Sans SC",sans-serif}
 /* 行2 数字 55px：选择器必须挂在卡上（.ctrl.r1v .cv），否则不生效（曾误写成 .ctrl .cv.r1v）。
-   实测设计 r2c1「59:48」墨宽 129px（Arial@55 吻合）；渲染 68px 时为 160px，过大。 */
+   实测设计 r2c1「59:48」墨宽 129px；渲染 68px 时为 160px，过大。 */
 .ctrl.r1v .cv:not(.vs){font-size:55px;top:79px}
 .ctrl .cv.vs{font-size:34px;top:80px}
 /* 图标：尺寸/落位由 icons_traced.js 的 window.TP 逐图标内联给出（1:1 设计像素），
@@ -316,7 +316,7 @@ input.inp::placeholder{color:var(--ink3)}
 .ctrl .gauge svg{width:98px;height:98px}
 .ctrl .gauge .ticks{position:relative;width:98px;height:98px}
 .ctrl .gauge .ticks i{position:absolute;left:50%;top:50%;width:9px;height:26px;margin:-49px 0 0 -4.5px;border-radius:4.5px;background:#fff;transform-origin:4.5px 49px}
-.ctrl .ctime{position:absolute;left:16px;right:16px;bottom:36px;text-align:center;font-size:53px;line-height:1;font-family:Arial,"Microsoft YaHei",sans-serif}
+.ctrl .ctime{position:absolute;left:16px;right:16px;bottom:36px;text-align:center;font-size:53px;line-height:1;font-family:"Source Han Sans CN","Noto Sans SC",sans-serif}
 .ctrl.on .ctime{color:#fff}
 .ctrl .setbtn.tr{left:auto;right:35px;top:32px;bottom:auto}
 /* 短卡（开关卡：标题左上(距顶33) + 图标右侧居中(57×56,距右59,距顶40) + 左下开关，无「设置」） */
@@ -341,7 +341,7 @@ input.inp::placeholder{color:var(--ink3)}
 .mrow.r3{top:616px;height:291px;border-top:1px solid #dddddd;border-bottom-color:#222222}
 .wave{flex:1;position:relative;overflow:hidden;background:#000}
 .wave svg{width:100%;height:100%;display:block}
-.wave .lab{position:absolute;left:25px;top:20px;font-size:30px;letter-spacing:1px;font-family:Consolas,"Segoe UI",monospace}
+.wave .lab{position:absolute;left:25px;top:20px;font-size:30px;letter-spacing:1px;font-family:"Noto Sans Mono","Source Han Sans CN",monospace}
 .vitals{width:390px;flex:0 0 auto;background:#1a1a1a;color:#fff;display:flex;flex-direction:column;padding:0 22px 0 19px}
 .vitals .v{flex:1;min-height:0;padding:18px 0 0;display:flex;flex-direction:column;justify-content:flex-start;overflow:hidden}
 .vitals .vt{font-size:23px;line-height:1.0}
@@ -672,7 +672,7 @@ input.inp::placeholder{color:var(--ink3)}
 .aboutcard .ln{display:flex;font-size:23px;color:var(--ink);margin-bottom:18px;line-height:1.35}
 .aboutcard .ln .k{width:180px;color:var(--ink2);flex:0 0 auto}
 .logwrap{position:absolute;left:172px;top:0;right:0;bottom:0;padding:20px 34px 0;display:flex;flex-direction:column}
-.logbox{flex:1;background:var(--card);border-radius:8px;padding:22px 28px;overflow:hidden;font-size:21px;color:#2b3442;line-height:1.7;font-family:Consolas,Menlo,monospace;white-space:pre-wrap;word-break:break-all}
+.logbox{flex:1;background:var(--card);border-radius:8px;padding:22px 28px;overflow:hidden;font-size:21px;color:#2b3442;line-height:1.7;font-family:"Noto Sans Mono","Source Han Sans CN",monospace;white-space:pre-wrap;word-break:break-all}
 .logfoot{height:96px;display:flex;align-items:center;gap:20px}
 .logfoot .grow{flex:1}
 /* ★ V1.02·任务8 日志页底栏 · 日期框（"2026/08/06" + 日历图标） */

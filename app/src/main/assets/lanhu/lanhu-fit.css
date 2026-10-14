@@ -48,7 +48,7 @@ html.lanhu-fit-ready .page {
 .page [class^="paragraph_"],
 .page [class*=" paragraph_"] {
   line-height: 1.18 !important;
-  font-family: "Microsoft YaHei", "PingFang SC", "Source Han Sans CN", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
 }
 
 /* 患者信息栏医嘱正文。父框 .text-wrapper_17 宽 321px,正文自带 margin-left:7px,
@@ -206,7 +206,7 @@ html.lanhu-fit-ready .page {
   color: #575757 !important;
   font-size: 16px !important;
   line-height: 1.45 !important;
-  font-family: "Microsoft YaHei", "PingFang SC", "Source Han Sans CN", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
   white-space: normal !important;
   word-break: break-word !important;
   overflow: hidden !important;
@@ -283,7 +283,7 @@ html.lanhu-fit-ready .page {
 /* ★ P1-3 修复:ICU 状态页所有倒计时/环境数字统一正常体(不粗体)
    包含:舱内温度 .text_61 / 氧浓度 .text_63 / 红外体温 .text_65 / 湿度 .text_69 /
    治疗时长 .text-wrapper_23 / 二氧化碳 .text_81 / 蓝光理疗 .text_83 /
-   主治医生 .text_71 等 — 统一普通体 + OPPOSans-R
+   主治医生 .text_71 等 — 统一普通体 + 思源黑体
    覆盖 7 个数据卡片 + 治疗时长卡
    ★ 注意:不能把 .text_77 放进来 —— 改版后 .text_77 是内循环开关的状态文字(开/关),
    加 min-width:80px 会把"关"字撑出卡片左侧,与雾化器/暖光照明两个开关不一致。 */
@@ -297,7 +297,7 @@ html.lanhu-fit-ready .page {
 .page.icu-page-status .text_83,
 .page.icu-page-status .text-wrapper_23 {
   font-weight: 400 !important;
-  font-family: OPPOSans-R, "Source Han Sans CN", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
   /* ★ 修复问题8: 治疗时间显示不全，增加最小宽度 */
   min-width: 80px !important;
   white-space: nowrap !important;
@@ -331,7 +331,7 @@ html.lanhu-fit-ready .page {
   font-size: 18px !important;
   line-height: 26px !important;
   font-weight: 400 !important;
-  font-family: "Source Han Sans CN", "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  font-family: "Source Han Sans CN", "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
   color: rgba(87, 87, 87, 1) !important;
   white-space: nowrap !important;
   overflow: visible !important;
@@ -393,7 +393,7 @@ html.lanhu-fit-ready .page {
   height: 20px !important;
   margin-right: 8px !important;
   font-weight: 700 !important;
-  font-family: OPPOSans-B, sans-serif !important;
+  font-family: "Source Han Sans CN", sans-serif !important;
 }
 
 /* 医嘱正文:初稿里正文在「医嘱」标题下方,左边与标题对齐。
@@ -466,7 +466,7 @@ html.lanhu-fit-ready .page {
   color: #4b5563 !important;
   font-size: 16px !important;
   line-height: 32px !important;
-  font-family: "Microsoft YaHei", "PingFang SC", "Source Han Sans CN", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
   user-select: text !important;
   touch-action: auto !important;
 }
@@ -551,7 +551,7 @@ html.lanhu-fit-ready .page {
      transform 叠加导致位置算偏、内容来回跳动。 */
   overflow: hidden !important;
   background: rgba(15, 23, 42, 0.42) !important;
-  font-family: "Microsoft YaHei", "PingFang SC", "Source Han Sans CN", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
   /* P2-BUG#2 修复：改善键盘弹出时的滚动体验 */
   -webkit-overflow-scrolling: touch !important;
   overscroll-behavior: contain !important;
@@ -704,7 +704,7 @@ html.lanhu-fit-ready .page {
   align-items: center !important;
   justify-content: center !important;
   background: rgba(15, 23, 42, 0.46) !important;
-  font-family: "Microsoft YaHei", "PingFang SC", "Source Han Sans CN", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
 }
 
 .icu-cn-datetime__panel {
@@ -869,7 +869,7 @@ html.lanhu-fit-ready .page {
   background: #0077d7 !important;
   color: #fff !important;
   font-size: 14px !important;
-  font-family: "Microsoft YaHei", "PingFang SC", "Source Han Sans CN", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
   touch-action: manipulation !important;
 }
 
@@ -906,7 +906,7 @@ html.lanhu-fit-ready .page {
   background: rgba(255, 255, 255, 0.12) !important;
   color: #e8f5ff !important;
   font-size: 13px !important;
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
   touch-action: manipulation !important;
 }
 
@@ -1091,7 +1091,7 @@ html.lanhu-fit-ready .page {
 .page.icu-page-monitor .icu-monitor-history-tabs button {
   border: 0 !important;
   border-radius: 999px !important;
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
   touch-action: manipulation !important;
 }
 
@@ -1206,7 +1206,7 @@ html.lanhu-fit-ready .page {
   z-index: 9 !important;
   color: rgba(232, 245, 255, 0.68) !important;
   font-size: 15px !important;
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
 }
 
 .page.icu-page-monitor .section_5 .text-wrapper_66,
@@ -1335,7 +1335,7 @@ html.lanhu-fit-ready .page {
   background: rgba(0, 119, 215, 0.92) !important;
   color: #ffffff !important;
   font-size: 14px !important;
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
   box-shadow: 0 6px 16px rgba(0, 69, 125, 0.24) !important;
   touch-action: manipulation !important;
 }
@@ -1405,7 +1405,7 @@ html.lanhu-fit-ready .page {
   background: rgba(255, 255, 255, 0.12) !important;
   color: #ffffff !important;
   font-size: 14px !important;
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
   touch-action: manipulation !important;
 }
 
@@ -1612,7 +1612,7 @@ html.lanhu-fit-ready .page {
   text-align: center !important;
   color: rgba(255, 255, 255, 0.88) !important;
   font-size: 16px !important;
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
 }
 
 .page.icu-page-camera-playback .icu-camera-replay-placeholder {
@@ -1634,7 +1634,7 @@ html.lanhu-fit-ready .page {
 .page.icu-page-camera-playback .icu-camera-replay-footer {
   position: absolute !important;
   z-index: 2 !important;
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
   letter-spacing: 0 !important;
 }
 
@@ -1694,7 +1694,7 @@ html.lanhu-fit-ready .page {
   background: transparent !important;
   color: #4e5f73 !important;
   font-size: 14px !important;
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
 }
 
 .page.icu-page-camera-playback .group_37 button[disabled] {
@@ -1705,7 +1705,7 @@ html.lanhu-fit-ready .page {
 .page.icu-page-camera-playback .icu-camera-pager-total {
   color: #4e5f73 !important;
   font-size: 16px !important;
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
   line-height: 22px !important;
   white-space: nowrap !important;
 }
@@ -1741,7 +1741,7 @@ html.lanhu-fit-ready .page {
   background: #ffffff !important;
   color: #26465f !important;
   font-size: 13px !important;
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
   cursor: pointer !important;
   touch-action: manipulation !important;
 }
@@ -1784,7 +1784,7 @@ html.lanhu-fit-ready .page {
 .page .icu-monitor-summary-item em {
   display: block !important;
   font-style: normal !important;
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
 }
 
 .page .icu-monitor-summary-item strong {
@@ -1808,7 +1808,7 @@ html.lanhu-fit-ready .page {
   margin-top: 7px !important;
   color: #a8bfd0 !important;
   font-size: 12px !important;
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
 }
 
 .page .icu-monitor-limits {
@@ -1816,7 +1816,7 @@ html.lanhu-fit-ready .page {
   grid-template-columns: repeat(2, minmax(120px, 1fr)) !important;
   gap: 6px 10px !important;
   color: #d8e8f3 !important;
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
 }
 
 .page .icu-monitor-limit-row {
@@ -2428,7 +2428,7 @@ html.lanhu-fit-ready .page {
   border-radius: 6px !important;
   background: #ffffff !important;
   box-shadow: 0 8px 22px rgba(51, 86, 122, 0.08) !important;
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif !important;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif !important;
 }
 
 .page .icu-tutorial-card strong {
@@ -2603,7 +2603,7 @@ html.lanhu-fit-ready .page {
   background: transparent !important;
   box-shadow: none !important;
   color: #ffffff !important;
-  font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif;
   font-size: 14px !important;
   line-height: 1;
   flex-shrink: 0 !important;
@@ -3081,7 +3081,7 @@ html.lanhu-fit-ready .page {
   border-radius: 14px;
   padding: 26px 26px 20px;
   box-shadow: 0 18px 48px rgba(15, 23, 42, 0.28);
-  font-family: "PingFang SC", "Microsoft YaHei", "Helvetica Neue", Arial, sans-serif;
+  font-family: "Source Han Sans CN", "Noto Sans SC", "Noto Sans CJK SC", sans-serif;
   color: #1f2937;
 }
 
