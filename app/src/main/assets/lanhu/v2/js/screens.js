@@ -1040,12 +1040,14 @@
       /* ★ 2026-10-10 #71：发送页区分来源 —— D.sendFrom='care'（护疗页底栏进入，已结束的样本也能直接发）
          时背景/底栏/顶栏高亮均为护疗页，不再强制跳回顾页选样本 */
       if (D.sendFrom === 'care') {
-        return PAGE(P.topbar('care'), '<div class="listwrap">' + careTable(D.careRows || []) + '</div>' + cards + menu,
-          P.bottombar(CARE_BAR_FULL, D.sendMenuHide ? '' : 'send') /* ★ #84：菜单收回时不高亮 */);
+        /* ★ V44：菜单挂进 bottombar（extra），bottombar 本身 position:absolute，
+           用布局坐标(offsetLeft)定位，彻底避开 #stage CSS zoom 的坐标系换算问题 */
+        return PAGE(P.topbar('care'), '<div class="listwrap">' + careTable(D.careRows || []) + '</div>' + cards,
+          P.bottombar(CARE_BAR_FULL, D.sendMenuHide ? '' : 'send', menu) /* ★ #84：菜单收回时不高亮 */);
       }
-      return PAGE(P.topbar('review'), reviewBg() + cards + menu,
+      return PAGE(P.topbar('review'), reviewBg() + cards,
         /* ★ 2026-10-14 V40：选择列表挂在「导出报告」上 —— 菜单展开时高亮 'e'（发送数据已置灰二期） */
-        P.bottombar(REVIEW_BAR, D.sendMenuHide ? '' : 'e') /* ★ #84 */);
+        P.bottombar(REVIEW_BAR, D.sendMenuHide ? '' : 'e', menu) /* ★ #84 */);
     }
   };
   SCREENS['del-confirm'] = {

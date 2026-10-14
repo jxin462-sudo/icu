@@ -541,9 +541,11 @@ input.inp::placeholder{color:var(--ink3)}
 .sheet-foot .foot-in{width:150px;height:26px;font-size:14.5px;padding:0 6px;vertical-align:middle}
 
 /* 发送数据：底栏按钮上方弹出菜单 + 二维码卡片（设计图 15-1 / 15-2） ---------- */
-.send-menu{position:absolute;right:630px;bottom:0;width:206px;background:#fff;border-radius:6px;
+/* ★ V44：菜单是 .bottombar 的子元素，bottom 相对底栏顶部浮出；水平位置由
+   bridge positionSendMenu() 按触发按钮 offsetLeft 动态居中（布局坐标，免疫 stage zoom） */
+.send-menu{position:absolute;right:630px;bottom:calc(100% + 12px);width:206px;background:#fff;border-radius:6px;
   box-shadow:0 8px 26px rgba(0,0,0,.24);overflow:hidden;z-index:30}
-/* ★ 2026-10-14 V40：回顾页来源的选择列表改挂「导出报告」—— 左移一个按钮位，与导出报告对齐（护疗来源仍对齐数据发送） */
+/* ★ 2026-10-14 V40：回顾页来源的选择列表改挂「导出报告」—— 左移一个按钮位（仅 JS 定位前的兜底） */
 .send-menu.at-export{right:830px}
 /* ★ 任务15(#8)：两个选项竖直对齐 —— 图标固定尺寸占位 + 文字统一行高，避免不同 icon 造成基线错位 */
 .send-menu .mi{display:flex;align-items:center;gap:10px;height:56px;padding:0 16px;font-size:21px;

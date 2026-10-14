@@ -710,23 +710,20 @@
     var key = (D.sendFrom === 'care') ? 'dataSend' : 'exportReport';
     var btn = document.querySelector('.bottombar .bbtn[data-key="' + key + '"]');
     if (!btn) return;
-    /* ★ #stage 用 CSS zoom=k 整体缩放（app.js fit()）：getBoundingClientRect()
-       返回缩放后的可视坐标，而菜单是 stage 内 absolute 元素，left/top 用的是
-       未缩放的设计稿 CSS px，二者必须除以 k 换算，否则真机上菜单跑偏。 */
-    var stage = document.getElementById('stage');
-    var k = (stage && parseFloat(stage.style.zoom)) || 1;
-    var op = menu.offsetParent || stage;
-    var sr = op ? op.getBoundingClientRect() : { left: 0, top: 0 };
-    var br = btn.getBoundingClientRect();
-    var mr = menu.getBoundingClientRect();
-    var mw = (mr.width || 206) / k, mh = (mr.height || 120) / k;
-    var bx = (br.left - sr.left) / k + br.width / k / 2;
-    var by = (br.top - sr.top) / k;
+    /* ★ V44 根治：不再用 getBoundingClientRect（zoom 后屏幕坐标与设计稿 CSS px
+       不同系导致错位）。菜单已挂进 bottombar（position:absolute），offsetLeft/
+       offsetWidth 与 style.left 同属一套布局坐标（zoom 对二者等比作用，互相抵消），
+       直接以按钮中心对齐菜单、bottom:100%+12px 浮在底栏正上方，不遮挡按钮。 */
+    var bar = menu.parentNode;
+    if (!bar || !bar.classList.contains('bottombar')) return;
+    var x = 0, el = btn;
+    while (el && el !== bar) { x += el.offsetLeft; el = el.offsetParent; }
+    var mw = menu.offsetWidth || 206;
     menu.style.position = 'absolute';
     menu.style.right = 'auto';
-    menu.style.bottom = 'auto';
-    menu.style.left = Math.max(8, Math.round(bx - mw / 2)) + 'px';
-    menu.style.top = Math.max(8, Math.round(by - mh - 12)) + 'px';
+    menu.style.top = 'auto';
+    menu.style.bottom = 'calc(100% + 12px)';
+    menu.style.left = Math.max(0, Math.round(x + btn.offsetWidth / 2 - mw / 2)) + 'px';
   }
   /* ★ 任务28（V1.02 R25/R42 方案A）：渲染文件助手二维码。
      数据源为原生回推的 S.shareQr {url,error,fileName}：
