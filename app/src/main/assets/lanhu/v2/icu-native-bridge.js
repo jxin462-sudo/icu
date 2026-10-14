@@ -68,6 +68,8 @@
   /* ★ 任务38：原生状态事件驱动的前导+尾随节流渲染。
      AM4100 连接后每帧 emit → 原生 50ms 节流推送（≈20次/秒），
      整页重渲染风暴会把 rAF 演示波形反复打回初始帧；这里收敛到 ≤8次/秒 */
+  /* ★ 2026-10-14 V40：整页重渲染后立刻回填系统时钟，消除「时间先闪回占位符、下一秒才恢复」的数值闪烁 */
+  function refillSysClock() { if (window.__tickSysClock) window.__tickSysClock(); }
   var lastRenderAt = 0, renderTimer = 0, lastFullRenderAt = 0;
   function scheduleRender() {
     /* ★ 2026-10-09 新建/编辑样本弹窗打开期间跳过后台重渲染：
@@ -75,7 +77,9 @@
        会把正在填写的内容全部清掉（用户反馈）。该弹窗无实时数据需求，
        确认/取消切屏后渲染自然恢复。 */
     var curNow = IcuApp.current && IcuApp.current();
-    if (curNow === 'new-sample') { lastRenderAt = Date.now(); return; }
+    /* ★ 2026-10-14 V40：用户新增/编辑弹窗（set-user-edit）同样跳过后台重渲染——
+       输入内容只在 DOM，原生每秒推送会把正在输入的用户名/密码冲掉（同 new-sample 问题） */
+    if (curNow === 'new-sample' || curNow === 'set-user-edit') { lastRenderAt = Date.now(); return; }
     /* ★ 任务42：输入框聚焦（软键盘弹起）期间推迟整页重渲染——
        监护连接后原生 ≈8次/秒 推状态，若不推迟，重建 DOM 会销毁聚焦中的输入框、
        键盘被反复收起、文本无法输入。聚焦时 300ms 轮询重试，失焦后自动补渲染 */
@@ -85,9 +89,9 @@
       return;
     }
     var now = Date.now();
-    if (now - lastRenderAt >= 120 && !renderTimer) { lastRenderAt = now; lastFullRenderAt = now; IcuApp.render(); return; }
+    if (now - lastRenderAt >= 120 && !renderTimer) { lastRenderAt = now; lastFullRenderAt = now; IcuApp.render(); refillSysClock(); return; }
     if (renderTimer) return;
-    renderTimer = setTimeout(function () { renderTimer = 0; lastRenderAt = Date.now(); lastFullRenderAt = lastRenderAt; IcuApp.render(); }, 120);
+    renderTimer = setTimeout(function () { renderTimer = 0; lastRenderAt = Date.now(); lastFullRenderAt = lastRenderAt; IcuApp.render(); refillSysClock(); }, 120);
   }
 
   /* ★ 2026-10-09：监护页实时波形"打点"刷新。
@@ -543,7 +547,7 @@
     if (pendingNavAfterSave) { var g = pendingNavAfterSave; pendingNavAfterSave = null; IcuApp.go(g); return; }
     // 普通刷新：重渲染当前屏（若正在表单弹窗里输入则不打断）
     var cur = IcuApp.current();
-    if (cur === 'new-sample' || cur === 'query' || cur === 'login') return;
+    if (cur === 'new-sample' || cur === 'query' || cur === 'login' || cur === 'set-user-edit') return;
     /* ★ 任务26a：记录单编辑态中不随原生推送重渲染，避免正在输入的内容被冲掉（一致性处理见 #26d） */
     if (cur === 'record-sheet' && D.sheetEdit) return;
     /* ★ 2026-10-13 V37：设置页有输入框聚焦（正在打字）时跳过重渲染——
@@ -1145,9 +1149,11 @@
           renderShareQr(true);      // 任务28：先显示"生成中…"，再请原生托管报告并回推下载 URL
           act('export_qr', sendSelCaseNo());
         } else if (kind === 'ble') {
-          sendingCard = 'ble';
+          /* ★ 2026-10-14 V40：蓝牙传输改由系统蓝牙设备选择器选连接后发送，
+             不再显示"正在发送"遮罩（系统弹窗在上层，遮罩会造成误导且需手动关闭） */
+          sendingCard = null;
           applySendingCard();
-          act('bluetooth_send_report', sendSelCaseNo()); // 任务9：蓝牙传输走 S4 既有蓝牙发送（报告 PDF + 系统蓝牙分享）
+          act('bluetooth_send_report', sendSelCaseNo());
         }
         return;
       }
@@ -1199,8 +1205,8 @@
     if (bb && !bb.classList.contains('dis')) {
       var bspan = bb.querySelector('span');
       var key = bb.dataset.key || (bspan ? bspan.textContent : '');
-      /* ★ 2026-10-10 #73：发送数据页底栏再点「发送数据」→ 未开始传输（无卡片）时收回/展开发送方式列表 */
-      if (cur === 'sending' && (key === 'sendData' || key === 'dataSend')) {
+      /* ★ 2026-10-10 #73：发送数据页底栏再点「发送数据/导出报告」→ 未开始传输（无卡片）时收回/展开发送方式列表 */
+      if (cur === 'sending' && (key === 'sendData' || key === 'dataSend' || key === 'exportReport')) {
         stop(e);
         if (!sendingCard) { D.sendMenuHide = !D.sendMenuHide; if (window.IcuApp) IcuApp.render(); }
         return;
@@ -1269,8 +1275,8 @@
         if (key === 'query') { /* 交给 app.js 跳 query */ return; }
         /* ★ 2026-10-10 #53：回顾页「打印」→ 打开选中样本的治疗记录单预览（选中校验由上方 needSel 门完成），真实打印在记录单页执行 */
         if (key === 'print') { stop(e); D.printFrom = 'review'; openRecordSheetFor(D.selCaseId); return; }
-        if (key === 'exportReport') { stop(e); act('export_report'); D.sendFrom = 'review'; D.sendMenuHide = false; IcuApp.go('sending'); return; }
-        if (key === 'sendData') { stop(e); sendingCard = null; D.sendFrom = 'review'; D.sendMenuHide = false; IcuApp.go('sending'); return; }
+        if (key === 'exportReport') { stop(e); /* ★ 2026-10-14 V40：文件助手/蓝牙选择列表移到「导出报告」点击弹出，不再直接调系统分享 */ sendingCard = null; D.sendFrom = 'review'; D.sendMenuHide = false; IcuApp.go('sending'); return; }
+        if (key === 'sendData') { stop(e); /* ★ V40：已置灰留二期（底栏 dis 不可点），保留逻辑兜底 */ sendingCard = null; D.sendFrom = 'review'; D.sendMenuHide = false; IcuApp.go('sending'); return; }
         if (key === 'careRecord') { /* 交给 app.js */ return; }
         if (key === 'del') { stop(e); act('patient_delete'); return; }
       }
@@ -1854,7 +1860,7 @@
         }
       }, 5200);
       // 让顶栏时钟动起来（每 30s 刷一次时间显示）
-      setInterval(function () { if (!pendingEditor && !pendingNavAfterSave) { syncD(); var c = IcuApp.current(); if (c !== 'new-sample' && c !== 'query' && c !== 'login' && c !== 'splash') IcuApp.render(); } }, 30000);
+      setInterval(function () { if (!pendingEditor && !pendingNavAfterSave) { syncD(); var c = IcuApp.current(); if (c !== 'new-sample' && c !== 'query' && c !== 'login' && c !== 'splash' && c !== 'set-user-edit') { IcuApp.render(); refillSysClock(); } } }, 30000);
     } else {
       // 桌面浏览器预览：保持原型 splash
     }
@@ -1873,6 +1879,7 @@
         + ' ' + p2(d.getHours()) + ':' + p2(d.getMinutes()) + ':' + p2(d.getSeconds());
       els.forEach(function (el) { if (el.textContent !== txt) el.textContent = txt; });
     }
+    window.__tickSysClock = tickSysClock; /* ★ V40：供 scheduleRender 重渲染后立即回填，消除时间闪烁 */
     setInterval(tickSysClock, 1000);
   }
 

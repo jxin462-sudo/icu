@@ -1001,7 +1001,8 @@
     { id: 'r', label: '护疗记录', key: 'careRecord', icon: 'doc', go: 'care-record' },
     { id: 'p', label: '打印', key: 'print', icon: 'print', go: 'printing' },
     { id: 'e', label: '导出报告', key: 'exportReport', icon: 'export', go: 'sending' },
-    { id: 's', label: '发送数据', key: 'sendData', icon: 'upload', go: 'sending' },
+    /* ★ 2026-10-14 V40：发送数据置灰留二期 —— 原「文件助手/蓝牙传输」选择列表移到「导出报告」点击弹出 */
+    { id: 's', label: '发送数据', key: 'sendData', icon: 'upload', go: 'sending', dis: 1, tag: '二期' },
     { id: 'd', label: '删除', key: 'del', icon: 'trash', go: 'del-confirm' },
   ];
   function reviewBg() {
@@ -1040,7 +1041,8 @@
           P.bottombar(CARE_BAR_FULL, D.sendMenuHide ? '' : 'send') /* ★ #84：菜单收回时不高亮 */);
       }
       return PAGE(P.topbar('review'), reviewBg() + cards + menu,
-        P.bottombar(REVIEW_BAR, D.sendMenuHide ? '' : 's') /* ★ #84 */);
+        /* ★ 2026-10-14 V40：选择列表挂在「导出报告」上 —— 菜单展开时高亮 'e'（发送数据已置灰二期） */
+        P.bottombar(REVIEW_BAR, D.sendMenuHide ? '' : 'e') /* ★ #84 */);
     }
   };
   SCREENS['del-confirm'] = {

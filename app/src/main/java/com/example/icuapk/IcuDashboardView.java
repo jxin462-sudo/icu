@@ -6688,6 +6688,10 @@ public class IcuDashboardView extends View {
         }
     }
 
+    /* ★ 2026-10-14 V40：蓝牙传输改为「可选择蓝牙连接」——
+       优先把分享意图定向给系统蓝牙应用（com.android.bluetooth），
+       由它弹出已配对设备选择器，用户选定设备后走 OPP 发送；
+       无蓝牙应用/蓝牙关闭/无已配对设备时给出提示并回退到系统分享面板。 */
     private void sendReportViaBluetooth() {
         try {
             File pdf = ensureReportPdf();
@@ -6697,13 +6701,42 @@ public class IcuDashboardView extends View {
                 Toast.makeText(activity, "生成分享文件失败", Toast.LENGTH_SHORT).show();
                 return;
             }
+            android.bluetooth.BluetoothAdapter btAdapter = android.bluetooth.BluetoothAdapter.getDefaultAdapter();
+            if (btAdapter == null) {
+                Toast.makeText(activity, "本机不支持蓝牙，无法蓝牙传输", Toast.LENGTH_LONG).show();
+                return;
+            }
+            if (!btAdapter.isEnabled()) {
+                Toast.makeText(activity, "请先开启蓝牙后再发送", Toast.LENGTH_LONG).show();
+                return;
+            }
+            if (btAdapter.getBondedDevices() == null || btAdapter.getBondedDevices().isEmpty()) {
+                Toast.makeText(activity, "暂无已配对的蓝牙设备，请先在系统设置中配对", Toast.LENGTH_LONG).show();
+                return;
+            }
             Intent intent = new Intent(Intent.ACTION_SEND);
             intent.setType("application/pdf");
             intent.putExtra(Intent.EXTRA_STREAM, uri);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-            activity.startActivity(Intent.createChooser(intent, "通过蓝牙发送报告"));
-            Toast.makeText(activity, "请选择已配对的蓝牙设备发送报告", Toast.LENGTH_LONG).show();
-            appendUserLog("导出", "蓝牙发送", "住院号 " + (currentCase() == null ? "-" : currentCase().caseNo));
+            // 定向系统蓝牙应用 → 弹出蓝牙设备选择器
+            intent.setPackage("com.android.bluetooth");
+            boolean launched = false;
+            try {
+                activity.startActivity(intent);
+                launched = true;
+                Toast.makeText(activity, "请选择要发送到的蓝牙设备", Toast.LENGTH_LONG).show();
+            } catch (Exception ignored) {
+                // 部分定制系统包名不同 → 回退系统分享面板（其中仍可选蓝牙）
+                intent.setPackage(null);
+                try {
+                    activity.startActivity(Intent.createChooser(intent, "通过蓝牙发送报告"));
+                    launched = true;
+                    Toast.makeText(activity, "请选择蓝牙及目标设备发送报告", Toast.LENGTH_LONG).show();
+                } catch (Exception e2) {
+                    Toast.makeText(activity, "未找到可用的蓝牙发送方式", Toast.LENGTH_LONG).show();
+                }
+            }
+            if (launched) appendUserLog("导出", "蓝牙发送", "住院号 " + (currentCase() == null ? "-" : currentCase().caseNo));
         } catch (IOException e) {
             Toast.makeText(activity, "蓝牙发送失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }

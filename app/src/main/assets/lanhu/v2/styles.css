@@ -821,6 +821,9 @@ body.notes .annot.dz{display:flex}
 .modal.wide .frow .inp input.icu-input{background:transparent;border:none;box-shadow:none;color:var(--ink)}
 /* ★ 2026-09-30 用户新增/编辑弹窗：角色下拉原先只占默认小字号，补齐与同弹窗输入框一致（62px 高、24px 字） */
 .modal .frow .inp select.icu-input{flex:1;width:100%;height:62px;min-width:0;box-sizing:border-box;outline:none;font-size:24px;padding:0 14px}
+/* ★ 2026-10-14 V40：用户新增/编辑弹窗输入框补齐与下拉一致的基础尺寸——
+   此前只给 select 补了字号/高度，input 走浏览器默认 13px 小字，看起来"无法正常显示文本" */
+.modal .frow .inp input.icu-input{flex:1;width:100%;height:62px;min-width:0;box-sizing:border-box;outline:none;font-size:24px;padding:0 14px}
 .modal .lf input{background:transparent}
 .usertable tr[data-uname]{cursor:pointer}
 .set-wrap [data-conn]{cursor:pointer}
