@@ -1006,7 +1006,9 @@
     { id: 'd', label: '删除', key: 'del', icon: 'trash', go: 'del-confirm' },
   ];
   function reviewBg() {
-    return '<div style="padding:14px 0 0">' + reviewTable(false) + '</div>';
+    /* ★ 2026-10-14 V44：与回顾页一致包 .listwrap（padding+灰底），
+       否则导出报告/打印等背景页表格左右平铺满屏 */
+    return '<div class="listwrap">' + reviewTable(false) + '</div>';
   }
   SCREENS['printing'] = {
     name: '打印中', group: '3 回顾', render() {
