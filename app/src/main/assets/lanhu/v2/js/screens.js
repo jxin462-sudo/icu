@@ -1026,7 +1026,8 @@
       const mi = [[T('sendFileHelper', '文件助手'), 'doc', 'file'], [T('sendBle', '蓝牙传输'), 'wifi', 'ble']];
       /* ★ 任务16(#11)：默认不高亮 —— 点击后才由 bridge 加 'on' */
       /* ★ 2026-10-10 #73：D.sendMenuHide=true 时收回选择列表（底栏再点「发送数据」切换） */
-      const menu = '<div class="send-menu"' + (D.sendMenuHide ? ' hidden' : '') + '>' + mi.map(function (m) {
+      /* ★ 2026-10-14 V40：回顾来源（导出报告弹出）时加 .at-export，菜单与「导出报告」按钮对齐而非「发送数据」 */
+      const menu = '<div class="send-menu' + (D.sendFrom === 'care' ? '' : ' at-export') + '"' + (D.sendMenuHide ? ' hidden' : '') + '>' + mi.map(function (m) {
         return '<div class="mi" data-send="' + m[2] + '">' + (I[m[1]] || I.doc) + '<span>' + m[0] + '</span></div>';
       }).join('') + '</div>';
       /* ★ 任务28：二维码内容由 bridge 按原生回推的 S.shareQr.url 真实渲染（id=shareQrBox），下方附转发指引 */
