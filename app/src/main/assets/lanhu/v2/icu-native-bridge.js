@@ -926,14 +926,57 @@
   }
 
   /* ---------- 登录 ---------- */
+  /* ★ 2026-10-15 V47：登录失败提示 + 连续错误锁定（传统策略）。
+     同一账号连续输错 5 次 → 锁定 10 分钟；按账号名持久化 localStorage，
+     重启 APP 锁定仍在；锁定期满自动解除并重新计数，登录成功清零。
+     锁定期间不调原生、直接提示剩余时间（避免无意义鉴权+日志刷屏）。 */
+  var LOGIN_MAX_FAILS = 5, LOGIN_LOCK_MS = 10 * 60 * 1000;
+  function loginGuardLoad() { try { return JSON.parse(localStorage.getItem('icu_login_guard') || '{}') || {}; } catch (e) { return {}; } }
+  function loginGuardSave(g) { try { localStorage.setItem('icu_login_guard', JSON.stringify(g)); } catch (e) {} }
+  /* 该账号剩余锁定毫秒数；0=未锁定（过期记录顺手清掉） */
+  function loginLockRemain(name) {
+    var g = loginGuardLoad(), rec = g[name];
+    if (!rec || !rec.lockUntil) return 0;
+    var ms = rec.lockUntil - Date.now();
+    if (ms <= 0) { delete g[name]; loginGuardSave(g); return 0; }
+    return ms;
+  }
+  /* 记一次失败；返回剩余可试次数，0=本次已触发锁定 */
+  function loginFail(name) {
+    var g = loginGuardLoad(), rec = g[name] || { fails: 0, lockUntil: 0 };
+    rec.fails = (rec.fails || 0) + 1;
+    if (rec.fails >= LOGIN_MAX_FAILS) {
+      rec.lockUntil = Date.now() + LOGIN_LOCK_MS;
+      g[name] = rec; loginGuardSave(g);
+      return 0;
+    }
+    g[name] = rec; loginGuardSave(g);
+    return LOGIN_MAX_FAILS - rec.fails;
+  }
+  function loginGuardClear(name) { var g = loginGuardLoad(); if (g[name]) { delete g[name]; loginGuardSave(g); } }
+  function fmtLockRemain(ms) {
+    var s = Math.ceil(ms / 1000), m = Math.floor(s / 60); s = s % 60;
+    return (window.D && D.lang === 'en') ? (m + 'm ' + s + 's') : (m + ' 分 ' + s + ' 秒');
+  }
   function loginSubmit() {
     var box = document.querySelector('.login-box') || document.querySelector('.login-card');
     var inputs = box ? box.querySelectorAll('input') : [];
     var name = inputs[0] ? inputs[0].value.trim() : '';
     var pwd = inputs[1] ? inputs[1].value : '';
-    if (!name || !pwd) { return; }
+    /* ★ V47：空输入此前静默无反应，补提示 */
+    if (!name || !pwd) { toast(TT('loginErrEmpty', '请输入账号和密码')); return; }
+    var lockMs = loginLockRemain(name);
+    if (lockMs > 0) {
+      toast(TT('loginErrLocked', '账号已锁定，请 {t} 后再试').replace('{t}', fmtLockRemain(lockMs)));
+      return;
+    }
     var ok = doLogin(name, pwd);
-    if (ok) { pullState(); pullSettings(); syncD(); IcuApp.setScreen('care'); }
+    if (ok) { loginGuardClear(name); pullState(); pullSettings(); syncD(); IcuApp.setScreen('care'); return; }
+    /* ★ V47：失败提示——清空密码框便于重输，按剩余次数/锁定分别提示 */
+    if (inputs[1]) { inputs[1].value = ''; inputs[1].focus(); }
+    var left = loginFail(name);
+    if (left <= 0) toast(TT('loginErrLock', '已连续输错 5 次，账号锁定 10 分钟'));
+    else toast(TT('loginErrWrong', '账号或密码错误，还可尝试 {n} 次').replace('{n}', String(left)));
   }
 
   /* ---------- 主控开关映射 ---------- */

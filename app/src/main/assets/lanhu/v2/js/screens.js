@@ -21,6 +21,9 @@
     zh: {
       loginTitle: '用户登录', loginBtn: '登 录', debugPwdTitle: '调试密码验证', debugPwdPlaceholder: '请输入调试密码', debugPwdCancel: '取消', debugPwdOk: '确认进入',
       account: '账号名', password: '登录口令', confirmPwd: '确认口令', org: '机构名称（可选）', backToLogin: '已有账号，返回登录',
+      /* ★ 2026-10-15 V47：登录失败提示 + 连续错误锁定（传统策略 5 次/10 分钟） */
+      loginErrEmpty: '请输入账号和密码', loginErrWrong: '账号或密码错误，还可尝试 {n} 次',
+      loginErrLock: '已连续输错 5 次，账号锁定 10 分钟', loginErrLocked: '账号已锁定，请 {t} 后再试',
       navCare: '护疗', navReview: '回顾', navMenu: '菜单',
       newSample: '新建', careRecord: '护疗记录', startCare: '开始护疗', edit: '编辑', dataSend: '数据发送', del: '删除', tutorial: '教程',
       query: '查询', print: '打印', exportReport: '导出报告', sendData: '发送数据',
@@ -46,6 +49,8 @@
     en: {
       loginTitle: 'Login', loginBtn: 'Login', debugPwdTitle: 'Debug Password', debugPwdPlaceholder: 'Enter debug password', debugPwdCancel: 'Cancel', debugPwdOk: 'Confirm',
       account: 'Username', password: 'Password', confirmPwd: 'Confirm Password', org: 'Organization (optional)', backToLogin: 'Back to Login',
+      loginErrEmpty: 'Please enter username and password', loginErrWrong: 'Incorrect username or password, {n} attempt(s) left',
+      loginErrLock: '5 consecutive wrong attempts, account locked for 10 minutes', loginErrLocked: 'Account locked, try again in {t}',
       navCare: 'Care', navReview: 'Review', navMenu: 'Menu',
       newSample: 'New', careRecord: 'Care Record', startCare: 'Start Care', edit: 'Edit', dataSend: 'Send Data', del: 'Delete', tutorial: 'Tutorial',
       query: 'Query', print: 'Print', exportReport: 'Export', sendData: 'Send Data',
