@@ -301,11 +301,17 @@ public class CameraStreamActivity extends Activity {
                 RtspResponse describe = sendWithAuth("DESCRIBE", requestUrl, "Accept: application/sdp\r\n");
                 /* ★ 2026-10-15 V53：挑战优先流程下，到这里仍 401 = 账号密码确实不对（或账号被锁定），
                    错误中带上服务器认证方式便于远程诊断 */
+                /* ★ 2026-10-15 V54：401 诊断分层 —— 先区分「URL 根本没带凭据」与「带了但被拒」，
+                   并把服务器真实挑战原文回显，便于真机精准定位（凭据错/锁定/算法不支持） */
                 if (describe.code == 401) {
+                    if (auth == null || !auth.hasCredentials()) {
+                        throw new IOException("RTSP地址未包含账号密码——请按 rtsp://账号:密码@设备IP:554/stream2 格式填写"
+                                + "（TP-LINK 本地账号，非云端账号，用户名不一定是 admin）");
+                    }
                     throw new IOException("摄像头认证失败（已按服务器要求尝试 "
-                            + (auth == null ? "无" : auth.describe()) + " 认证）："
-                            + "请确认使用的是 TP-LINK 物联 APP「设备设置→高级设置→摄像头账号」创建的本地账号密码"
-                            + "（非云端账号，用户名不一定是 admin）；连续输错会锁定约 30 分钟，请稍后再试");
+                            + auth.describe() + " 认证）。服务器挑战："
+                            + (auth.lastChallenge.isEmpty() ? "无" : auth.lastChallenge)
+                            + "。请确认账号密码正确；连续输错会锁定约 30 分钟，请稍后再试");
                 }
                 if (describe.code != 200) {
                     throw new IOException("DESCRIBE失败: " + describe.statusLine);
@@ -323,6 +329,9 @@ public class CameraStreamActivity extends Activity {
 
                 RtspResponse setup = sendWithAuth("SETUP", controlUrl,
                         "Transport: RTP/AVP/TCP;unicast;interleaved=0-1\r\n");
+                if (setup.code == 401) {
+                    throw new IOException("SETUP认证失败（" + auth.describe() + "）：账号密码可能错误或已被锁定");
+                }
                 if (setup.code != 200) {
                     throw new IOException("SETUP失败: " + setup.statusLine);
                 }
@@ -332,6 +341,9 @@ public class CameraStreamActivity extends Activity {
                 }
 
                 RtspResponse play = sendWithAuth("PLAY", requestUrl, "Range: npt=0.000-\r\n");
+                if (play.code == 401) {
+                    throw new IOException("PLAY认证失败（" + auth.describe() + "）：账号密码可能错误或已被锁定");
+                }
                 if (play.code != 200) {
                     throw new IOException("PLAY失败: " + play.statusLine);
                 }
@@ -633,6 +645,8 @@ public class CameraStreamActivity extends Activity {
             private String nonce = "";
             private String qop = "";
             private String opaque = "";
+            /* ★ V54：摘要算法（默认 MD5；新固件可能挑战 SHA-256 / *-sess 变体） */
+            private String algorithm = "";
             private String cnonce = "";
             private int nc;
             /* 诊断用：服务器最后一次认证挑战的原文（realm/nonce 非敏感），认证失败时随错误露出 */
@@ -662,6 +676,7 @@ public class CameraStreamActivity extends Activity {
                     String qopRaw = param(wwwAuthenticate, "qop");
                     qop = qopRaw.contains("auth") ? "auth" : "";
                     opaque = param(wwwAuthenticate, "opaque");
+                    algorithm = param(wwwAuthenticate, "algorithm");
                     if (TextUtils.isEmpty(cnonce) || !"digest".equals(mode)) {
                         cnonce = Long.toHexString(System.nanoTime())
                                 + Long.toHexString(Double.doubleToLongBits(Math.random()));
@@ -687,8 +702,11 @@ public class CameraStreamActivity extends Activity {
                 if ("basic".equals(mode)) {
                     return "Basic " + Base64.encodeToString((user + ":" + pass).getBytes(), Base64.NO_WRAP);
                 }
-                String ha1 = md5Hex(user + ":" + realm + ":" + pass);
-                String ha2 = md5Hex(method + ":" + url);
+                String ha1 = hashHex(user + ":" + realm + ":" + pass);
+                if (algorithm.toLowerCase(Locale.US).endsWith("-sess")) {
+                    ha1 = hashHex(ha1 + ":" + nonce + ":" + cnonce);
+                }
+                String ha2 = hashHex(method + ":" + url);
                 StringBuilder h = new StringBuilder("Digest username=\"").append(user)
                         .append("\", realm=\"").append(realm)
                         .append("\", nonce=\"").append(nonce)
@@ -697,23 +715,30 @@ public class CameraStreamActivity extends Activity {
                 if (!TextUtils.isEmpty(qop)) {
                     nc++;
                     String ncHex = String.format(Locale.US, "%08x", nc);
-                    response = md5Hex(ha1 + ":" + nonce + ":" + ncHex + ":" + cnonce + ":" + qop + ":" + ha2);
+                    response = hashHex(ha1 + ":" + nonce + ":" + ncHex + ":" + cnonce + ":" + qop + ":" + ha2);
                     h.append(", qop=").append(qop).append(", nc=").append(ncHex)
                             .append(", cnonce=\"").append(cnonce).append("\"");
                 } else {
-                    response = md5Hex(ha1 + ":" + nonce + ":" + ha2);
+                    response = hashHex(ha1 + ":" + nonce + ":" + ha2);
                 }
                 h.append(", response=\"").append(response).append("\"");
+                if (!TextUtils.isEmpty(algorithm)) {
+                    h.append(", algorithm=").append(algorithm);
+                }
                 if (!TextUtils.isEmpty(opaque)) {
                     h.append(", opaque=\"").append(opaque).append("\"");
                 }
                 return h.toString();
             }
 
-            /** 诊断：已采用的认证方式描述（无认证/挑战未到/服务器挑战原文截断）。 */
+            /** 诊断：已采用的认证方式 + realm/算法（无认证/挑战未到/服务器挑战原文截断）。 */
             String describe() {
                 if (!TextUtils.isEmpty(mode)) {
-                    return "digest".equals(mode) ? "Digest" : "Basic";
+                    if ("basic".equals(mode)) {
+                        return "Basic";
+                    }
+                    return "Digest(realm=" + realm
+                            + ", algo=" + (TextUtils.isEmpty(algorithm) ? "MD5" : algorithm) + ")";
                 }
                 if (!TextUtils.isEmpty(lastChallenge)) {
                     String c = lastChallenge.length() > 80 ? lastChallenge.substring(0, 80) + "…" : lastChallenge;
@@ -735,9 +760,10 @@ public class CameraStreamActivity extends Activity {
                 return m.find() ? m.group(1) : "";
             }
 
-            private static String md5Hex(String s) {
+            private String hashHex(String s) {
+                String jca = algorithm.toLowerCase(Locale.US).startsWith("sha-256") ? "SHA-256" : "MD5";
                 try {
-                    java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+                    java.security.MessageDigest md = java.security.MessageDigest.getInstance(jca);
                     byte[] d = md.digest(s.getBytes("UTF-8"));
                     StringBuilder sb = new StringBuilder(d.length * 2);
                     for (byte b : d) {
