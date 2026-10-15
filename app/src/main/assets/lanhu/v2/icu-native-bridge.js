@@ -1543,17 +1543,24 @@
       if (tile) {
         var tg = tile.dataset.go;
         if (tg === 'logout-confirm') { stop(e); IcuApp.go('logout-confirm'); return; }
-        if (tg === 'exit-confirm') { stop(e); IcuApp.go('exit-confirm'); return; }
+        if (tg === 'exit-confirm') {
+          stop(e);
+          /* ★ 2026-10-15 V49：关闭软件按 V1.02 收紧为工程师/管理员可用（原生 exit_app 同步兜底拦截） */
+          var __rc = D.accountRole || '';
+          if (__rc !== 'service' && __rc !== 'admin') { toast(TT('exitNoPerm', '无权限：关闭软件仅管理员/工程师可用')); return; }
+          IcuApp.go('exit-confirm'); return;
+        }
         if (tg === 'x') { stop(e); IcuApp.go('comp'); return; } // 调试→补偿
         // set-general / about / log 交给 app.js 的 data-go
       }
     }
 
-    /* ★ 任务13（R93）：菜单页舱区切换 —— 2026-09-30 用户确认：所有角色均可切换左/右舱 */
+    /* ★ 任务13（R93）：菜单页舱区切换 —— 2026-09-30 曾放开全角色；2026-10-15 V49 按 V1.02 收紧为仅工程师（原生 tablet_zone_* 同步拦截） */
     if (cur === 'menu') {
       var zb = e.target.closest('[data-zone]');
       if (zb) {
         stop(e);
+        if ((D.accountRole || '') !== 'service') { toast(TT('zoneNoPerm', '无权限：仅工程师可切换左/右舱')); return; }
         act(zb.dataset.zone === 'right' ? 'tablet_zone_right' : 'tablet_zone_left');
         return;
       }

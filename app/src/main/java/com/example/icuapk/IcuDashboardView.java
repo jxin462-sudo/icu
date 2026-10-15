@@ -4983,9 +4983,14 @@ public class IcuDashboardView extends View {
         return accountStore.getCurrentRole();
     }
 
-    /** R93 → 2026-09-30 用户确认：所有角色均可切换左舱/右舱 */
+    /** R93 → 2026-09-30 曾放开全角色；★ 2026-10-15 V49 按 V1.02 文档收紧：仅工程师(Service)可切换左右舱 */
     public boolean canSwitchZone() {
-        return true;
+        return accountStore.isCurrentService();
+    }
+
+    /** ★ 2026-10-15 V49：关闭软件按 V1.02 收紧为管理员可用（工程师拥有所有权限，一并放行） */
+    public boolean canCloseApp() {
+        return accountStore.isCurrentAdminOrService();
     }
 
     /**
@@ -11100,6 +11105,14 @@ public class IcuDashboardView extends View {
         drawSmallButton(canvas, "左舱", left.left + dp(112), left.top + dp(62), dp(52), dp(24), "left".equals(bleManager.getCurrentZone()), new ClickAction() {
             @Override
             public void run() {
+                /* ★ 2026-10-15 V49：与统一入口一致的角色/监护中门禁（此前 legacy 按钮可绕过） */
+                if (!canSwitchZone()) {
+                    Toast.makeText(activity, "无权限：仅工程师可切换左/右舱", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (blockZoneSwitchIfMonitoring()) {
+                    return;
+                }
                 // 走统一的切舱入口：同步重置病例选中项与抓拍选中下标，避免沿用另一舱的状态。
                 switchPatientZone("left");
                 invalidate();
@@ -11108,6 +11121,13 @@ public class IcuDashboardView extends View {
         drawSmallButton(canvas, "右舱", left.left + dp(174), left.top + dp(62), dp(52), dp(24), "right".equals(bleManager.getCurrentZone()), new ClickAction() {
             @Override
             public void run() {
+                if (!canSwitchZone()) {
+                    Toast.makeText(activity, "无权限：仅工程师可切换左/右舱", Toast.LENGTH_SHORT).show();
+                    return;
+                }
+                if (blockZoneSwitchIfMonitoring()) {
+                    return;
+                }
                 switchPatientZone("right");
                 invalidate();
             }

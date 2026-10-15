@@ -1912,7 +1912,12 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
                         return;
                     }
                     // ★ V1.02 S8 退出软件（管理员可用）：退出 App 回到系统桌面。
+                    //   ★ 2026-10-15 V49：收紧为真实门禁——工程师/管理员可退出，其他角色拒绝并提示
                     if ("exit_app".equals(action)) {
+                        if (!dashboardView.canCloseApp()) {
+                            Toast.makeText(MainActivity.this, "无权限：关闭软件仅管理员/工程师可用", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
                         dashboardView.appendUserLog("系统", "退出软件", "用户点击退出");
                         finishAffinity();
                         return;

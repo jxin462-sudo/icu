@@ -262,6 +262,7 @@
         phPhone: '请输入联系电话', phDoctor: '请输入主治医生',
         maxVitalsRows: '最多 50 行体征记录',
         factoryNoPerm: '无权限：恢复出厂设置仅工程师可用',
+        zoneNoPerm: '无权限：仅工程师可切换左/右舱', exitNoPerm: '无权限：关闭软件仅管理员/工程师可用',
         errPrinterAddr: '请输入打印机地址', errPrinterAddrFmt: '打印机地址格式不正确，示例 192.168.1.10:9100',
         errHospPhone: '医院电话格式不正确',
         errUserName: '请输入用户名', errPwdReq: '密码必填', errPwdLen: '密码至少 4 位', errRoleReq: '权限必选',
@@ -319,6 +320,7 @@
         phPhone: 'Enter phone number', phDoctor: 'Enter doctor',
         maxVitalsRows: 'Up to 50 vitals rows',
         factoryNoPerm: 'No permission: factory reset is engineer-only',
+        zoneNoPerm: 'No permission: only engineers can switch cabins', exitNoPerm: 'No permission: only admin/engineer can exit the app',
         errPrinterAddr: 'Please enter printer address', errPrinterAddrFmt: 'Invalid printer address, e.g. 192.168.1.10:9100',
         errHospPhone: 'Invalid hospital phone format',
         errUserName: 'Please enter username', errPwdReq: 'Password is required', errPwdLen: 'Password must be at least 4 characters', errRoleReq: 'Role is required',
@@ -1104,7 +1106,7 @@
         return '<div class="tile' + (x[3] ? ' dis' : '') + '"' + (x[3] ? '' : ' data-go="' + x[0] + '"') + '>'
           + '<div class="ti">' + (I[x[2]] || I.doc) + '</div><span>' + T(x[1], x[1]) + '</span></div>';
       }).join('');
-      /* ★ 任务13（R93）→ 2026-09-30 用户确认：舱区切换卡，所有角色均可切换 */
+      /* ★ 任务13（R93）→ 2026-09-30 曾放开全角色；2026-10-15 V49 按 V1.02 收紧：舱区切换仅工程师（bridge 点击拦截+原生兜底） */
       var isLeft = (D.zone !== 'right');
       var zoneCard = '<div class="zone-card">'
         + '<span class="zt">' + T('zoneTitle', '当前舱区') + '：' + (isLeft ? T('zoneLeft', '左舱') : T('zoneRight', '右舱')) + '</span>'
