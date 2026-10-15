@@ -10,8 +10,8 @@ android {
         applicationId 'com.example.icuapk'
         minSdk 24
         targetSdk 30
-        versionCode 70
-        versionName 'V52-20261015'
+        versionCode 71
+        versionName 'V53-20261015'
     }
 
     lint {

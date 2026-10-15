@@ -298,14 +298,14 @@ public class CameraStreamActivity extends Activity {
                 input = socket.getInputStream();
                 output = socket.getOutputStream();
 
-                RtspResponse describe = sendRequest("DESCRIBE", requestUrl, "Accept: application/sdp\r\n");
-                /* ★ 2026-10-15 V51：401 → 解析 WWW-Authenticate 升级 Digest 重试一次
-                   （TP-LINK 新固件 RTSP 默认要 Digest，旧实现只发 Basic 必然 401） */
-                if (describe.code == 401 && auth != null && auth.upgrade(describe.headers.get("www-authenticate"))) {
-                    describe = sendRequest("DESCRIBE", requestUrl, "Accept: application/sdp\r\n");
-                }
+                RtspResponse describe = sendWithAuth("DESCRIBE", requestUrl, "Accept: application/sdp\r\n");
+                /* ★ 2026-10-15 V53：挑战优先流程下，到这里仍 401 = 账号密码确实不对（或账号被锁定），
+                   错误中带上服务器认证方式便于远程诊断 */
                 if (describe.code == 401) {
-                    throw new IOException("摄像头认证失败：请使用 TP-LINK 物联 APP「设备设置→高级设置→摄像头账号」创建的本地账号密码（非云端账号），并确认摄像头 RTSP 已开启");
+                    throw new IOException("摄像头认证失败（已按服务器要求尝试 "
+                            + (auth == null ? "无" : auth.describe()) + " 认证）："
+                            + "请确认使用的是 TP-LINK 物联 APP「设备设置→高级设置→摄像头账号」创建的本地账号密码"
+                            + "（非云端账号，用户名不一定是 admin）；连续输错会锁定约 30 分钟，请稍后再试");
                 }
                 if (describe.code != 200) {
                     throw new IOException("DESCRIBE失败: " + describe.statusLine);
@@ -321,7 +321,7 @@ public class CameraStreamActivity extends Activity {
                     throw new IOException("没有找到视频轨道control地址");
                 }
 
-                RtspResponse setup = sendRequest("SETUP", controlUrl,
+                RtspResponse setup = sendWithAuth("SETUP", controlUrl,
                         "Transport: RTP/AVP/TCP;unicast;interleaved=0-1\r\n");
                 if (setup.code != 200) {
                     throw new IOException("SETUP失败: " + setup.statusLine);
@@ -331,7 +331,7 @@ public class CameraStreamActivity extends Activity {
                     throw new IOException("SETUP没有返回Session");
                 }
 
-                RtspResponse play = sendRequest("PLAY", requestUrl, "Range: npt=0.000-\r\n");
+                RtspResponse play = sendWithAuth("PLAY", requestUrl, "Range: npt=0.000-\r\n");
                 if (play.code != 200) {
                     throw new IOException("PLAY失败: " + play.statusLine);
                 }
@@ -349,6 +349,16 @@ public class CameraStreamActivity extends Activity {
         void stop() {
             stopped = true;
             closeQuietly();
+        }
+
+        /* ★ 2026-10-15 V53：发请求；401 时按服务器挑战升级认证并重试一次
+           （DESCRIBE 的挑战协商 + SETUP/PLAY 的 stale nonce 换发都走这里） */
+        private RtspResponse sendWithAuth(String method, String url, String extraHeaders) throws IOException {
+            RtspResponse resp = sendRequest(method, url, extraHeaders);
+            if (resp.code == 401 && auth != null && auth.upgrade(resp.headers.get("www-authenticate"))) {
+                resp = sendRequest(method, url, extraHeaders);
+            }
+            return resp;
         }
 
         private RtspResponse sendRequest(String method, String url, String extraHeaders) throws IOException {
@@ -612,8 +622,10 @@ public class CameraStreamActivity extends Activity {
             return builder.toString();
         }
 
-        /* ★ 2026-10-15 V51：RTSP 认证状态机 —— 默认 Basic 首发，401 收到 Digest 挑战后升级重试。
-           TP-LINK 物联新固件 RTSP 默认要求 Digest；老摄像头仍走 Basic，互不影响。 */
+        /* ★ 2026-10-15 V53：RTSP 认证状态机 —— 挑战优先（与 VLC/ffmpeg 同流程）：
+           首次请求不带认证头 → 401 读 WWW-Authenticate → 按服务器要求回答 Digest 或 Basic；
+           后续 SETUP/PLAY 复用同一认证态；stale=true 换新 nonce 自动重试一次。
+           （V51 的 Basic 预发被部分 TP-LINK 新固件直接拒绝，故改挑战优先。） */
         private static final class RtspAuth {
             private String userInfo = "";
             private String mode = ""; // "" | "basic" | "digest"
@@ -623,47 +635,58 @@ public class CameraStreamActivity extends Activity {
             private String opaque = "";
             private String cnonce = "";
             private int nc;
+            /* 诊断用：服务器最后一次认证挑战的原文（realm/nonce 非敏感），认证失败时随错误露出 */
+            String lastChallenge = "";
 
             static RtspAuth from(URI uri) {
                 RtspAuth a = new RtspAuth();
                 String ui = uri.getRawUserInfo();
                 a.userInfo = ui == null ? "" : ui;
-                if (!TextUtils.isEmpty(a.userInfo)) {
-                    a.mode = "basic";
-                }
                 return a;
             }
 
-            /** 解析 401 的 WWW-Authenticate；能升级为 Digest 返回 true（Basic 已发过仍 401 = 账号密码错，不再重试）。 */
+            boolean hasCredentials() {
+                return !TextUtils.isEmpty(userInfo);
+            }
+
+            /** 解析 401 的 WWW-Authenticate（Digest 优先、Basic 兜底、stale 换 nonce 重试）。能回答返回 true。 */
             boolean upgrade(String wwwAuthenticate) {
-                if (TextUtils.isEmpty(wwwAuthenticate) || TextUtils.isEmpty(userInfo)) {
+                if (TextUtils.isEmpty(wwwAuthenticate) || !hasCredentials()) {
                     return false;
                 }
-                if (!wwwAuthenticate.toLowerCase(Locale.US).startsWith("digest")) {
-                    return false;
+                lastChallenge = wwwAuthenticate;
+                String lower = wwwAuthenticate.toLowerCase(Locale.US);
+                if (lower.startsWith("digest") || lower.contains("digest ")) {
+                    realm = param(wwwAuthenticate, "realm");
+                    nonce = param(wwwAuthenticate, "nonce");
+                    String qopRaw = param(wwwAuthenticate, "qop");
+                    qop = qopRaw.contains("auth") ? "auth" : "";
+                    opaque = param(wwwAuthenticate, "opaque");
+                    if (TextUtils.isEmpty(cnonce) || !"digest".equals(mode)) {
+                        cnonce = Long.toHexString(System.nanoTime())
+                                + Long.toHexString(Double.doubleToLongBits(Math.random()));
+                    }
+                    nc = 0;
+                    mode = "digest";
+                    return true;
                 }
-                realm = param(wwwAuthenticate, "realm");
-                nonce = param(wwwAuthenticate, "nonce");
-                String qopRaw = param(wwwAuthenticate, "qop");
-                qop = qopRaw.contains("auth") ? "auth" : "";
-                opaque = param(wwwAuthenticate, "opaque");
-                cnonce = Long.toHexString(System.nanoTime())
-                        + Long.toHexString(Double.doubleToLongBits(Math.random()));
-                nc = 0;
-                mode = "digest";
-                return true;
+                if (lower.startsWith("basic") || lower.contains("basic ")) {
+                    mode = "basic";
+                    return true;
+                }
+                return false;
             }
 
             String header(String method, String url) {
-                if (TextUtils.isEmpty(userInfo) || TextUtils.isEmpty(mode)) {
+                if (!hasCredentials() || TextUtils.isEmpty(mode)) {
                     return "";
-                }
-                if ("basic".equals(mode)) {
-                    return "Basic " + Base64.encodeToString(userInfo.getBytes(), Base64.NO_WRAP);
                 }
                 int colon = userInfo.indexOf(':');
                 String user = Uri.decode(colon >= 0 ? userInfo.substring(0, colon) : userInfo);
                 String pass = Uri.decode(colon >= 0 ? userInfo.substring(colon + 1) : "");
+                if ("basic".equals(mode)) {
+                    return "Basic " + Base64.encodeToString((user + ":" + pass).getBytes(), Base64.NO_WRAP);
+                }
                 String ha1 = md5Hex(user + ":" + realm + ":" + pass);
                 String ha2 = md5Hex(method + ":" + url);
                 StringBuilder h = new StringBuilder("Digest username=\"").append(user)
@@ -685,6 +708,18 @@ public class CameraStreamActivity extends Activity {
                     h.append(", opaque=\"").append(opaque).append("\"");
                 }
                 return h.toString();
+            }
+
+            /** 诊断：已采用的认证方式描述（无认证/挑战未到/服务器挑战原文截断）。 */
+            String describe() {
+                if (!TextUtils.isEmpty(mode)) {
+                    return "digest".equals(mode) ? "Digest" : "Basic";
+                }
+                if (!TextUtils.isEmpty(lastChallenge)) {
+                    String c = lastChallenge.length() > 80 ? lastChallenge.substring(0, 80) + "…" : lastChallenge;
+                    return "未识别(" + c + ")";
+                }
+                return "服务器未返回认证方式";
             }
 
             private static String param(String wa, String key) {

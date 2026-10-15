@@ -10720,7 +10720,7 @@ public class IcuDashboardView extends View {
            （security.tp-link.com.cn detail_article_4432/4729 + Tapo 官方 FAQ） */
         help.setText("内置预览使用手写 RTSP H.264 解码，只支持 RTSP 地址。\n"
                 + "单目 TP-LINK 请优先填写 /stream2 或 /stream1。\n"
-                + "账号密码：用 TP-LINK 物联 APP「设备设置→高级设置→摄像头账号」创建的本地账号（不是 TP-LINK 云端账号）。\n"
+                + "账号密码：用 TP-LINK 物联 APP「设备设置→高级设置→摄像头账号」创建的本地账号（不是云端账号，用户名不一定是 admin）。\n"
                 + "请在摄像头后台开启 RTSP，确认 H.264 编码、端口 554；平板须和摄像头在同一局域网。\n"
                 + "注意：连续输错密码摄像头会锁定约 30 分钟。");
         help.setTextSize(13);
