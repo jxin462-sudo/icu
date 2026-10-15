@@ -509,6 +509,13 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         }
     }
 
+    /** ★ 2026-10-15 V52：预览失败条「重新配置」入口 —— 直接打开摄像头配置弹窗（保存后自动重连） */
+    public void openCameraConfigDialog() {
+        if (dashboardView != null) {
+            dashboardView.openCameraConfigDialog();
+        }
+    }
+
     private void updateLanhuCameraPreview(float left, float top, float width, float height,
                                           float viewportWidth, float viewportHeight, boolean visible) {
         if (!visible || lanhuWebView == null || width <= 2 || height <= 2) {

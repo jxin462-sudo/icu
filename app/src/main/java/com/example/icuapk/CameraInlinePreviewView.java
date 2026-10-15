@@ -8,7 +8,9 @@ import android.view.Gravity;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
+import android.widget.Button;
 import android.widget.FrameLayout;
+import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import java.util.ArrayList;
@@ -17,6 +19,9 @@ import java.util.List;
 final class CameraInlinePreviewView extends FrameLayout {
     private final TextureView textureView;
     private final TextView statusText;
+    /* ★ 2026-10-15 V52：失败操作条（重试/重新配置）——此前失败后只有一行错误文字，无法重新输入配置 */
+    private final LinearLayout failureBar;
+    private final MainActivity host;
     private String[] streamUrls = new String[0];
     private String currentKey = "";
     private int streamIndex;
@@ -28,6 +33,7 @@ final class CameraInlinePreviewView extends FrameLayout {
 
     CameraInlinePreviewView(MainActivity activity) {
         super(activity);
+        host = activity;
         setBackgroundColor(Color.BLACK);
         setVisibility(View.GONE);
         setClickable(false);
@@ -73,6 +79,44 @@ final class CameraInlinePreviewView extends FrameLayout {
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.TOP);
         addView(statusText, statusParams);
+
+        /* ★ 2026-10-15 V52：失败操作条 —— 「重试」重连当前配置；「重新配置」直接打开摄像头配置弹窗重新输入 */
+        failureBar = new LinearLayout(activity);
+        failureBar.setOrientation(LinearLayout.HORIZONTAL);
+        failureBar.setGravity(Gravity.CENTER);
+        failureBar.setPadding(dp(8), dp(6), dp(8), dp(6));
+        failureBar.setBackgroundColor(Color.argb(170, 0, 0, 0));
+        failureBar.setVisibility(View.GONE);
+        Button retryButton = new Button(activity);
+        retryButton.setText("重试");
+        retryButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                restartPreview(streamUrls);
+            }
+        });
+        failureBar.addView(retryButton, new LinearLayout.LayoutParams(dp(92), dp(40)));
+        Button configButton = new Button(activity);
+        configButton.setText("重新配置");
+        configButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                host.openCameraConfigDialog();
+            }
+        });
+        LinearLayout.LayoutParams configParams = new LinearLayout.LayoutParams(dp(130), dp(40));
+        configParams.leftMargin = dp(12);
+        failureBar.addView(configButton, configParams);
+        FrameLayout.LayoutParams barParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        addView(failureBar, barParams);
+    }
+
+    private void showFailureActions() {
+        failureBar.setVisibility(View.VISIBLE);
+        failureBar.bringToFront();
     }
 
     void setPreview(String[] urls) {
@@ -139,14 +183,17 @@ final class CameraInlinePreviewView extends FrameLayout {
         }
         if (streamUrls.length == 0) {
             statusText.setText("未配置摄像头地址");
+            showFailureActions();   // V52：未配置也给「重新配置」入口
             return;
         }
         startPlayback();
     }
 
     private void startPlayback() {
+        failureBar.setVisibility(View.GONE);
         if (streamIndex >= streamUrls.length) {
             statusText.setText("摄像头候选地址都无法播放");
+            showFailureActions();
             return;
         }
         if (previewSurface == null || !previewSurface.isValid()) {
@@ -174,6 +221,7 @@ final class CameraInlinePreviewView extends FrameLayout {
                     public void run() {
                         if (!tryNextUrl(message)) {
                             statusText.setText("内嵌预览失败: " + message + "\n当前地址: " + maskPassword(url));
+                            showFailureActions();   // V52：全部地址失败 → 露出 重试/重新配置
                         }
                     }
                 });

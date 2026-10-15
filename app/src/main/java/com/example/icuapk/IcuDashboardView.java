@@ -10701,6 +10701,11 @@ public class IcuDashboardView extends View {
         }
     }
 
+    /** ★ 2026-10-15 V52：预览失败条「重新配置」的公开入口（供 MainActivity 转发） */
+    public void openCameraConfigDialog() {
+        showTpLinkCameraDialog();
+    }
+
     private void showTpLinkCameraDialog() {
         LinearLayout form = new LinearLayout(activity);
         form.setOrientation(LinearLayout.VERTICAL);
