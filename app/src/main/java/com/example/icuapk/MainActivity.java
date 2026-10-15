@@ -128,6 +128,8 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         thermalBleManager = new ThermalBleManager(this);
         thermalBleManager.setListener(this);
         dashboardView = new IcuDashboardView(this, bleManager, am4100Manager);
+        // ★ 2026-10-15 V50：启动时记录 APP 版本（首跑本功能版本/后续升级都会进更新记录，内容取 assets changelog.json）
+        dashboardView.noteAppVersion();
         /* ★ 2026-10-08 日志页·堆栈信息：未捕获异常落库（错误记录 + 堆栈），再交还原默认处理器 */
         installCrashLogger();
         dashboardView.setVisibility(View.INVISIBLE);
@@ -1588,6 +1590,16 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         host.put("lastReceived", safeJsonText(bleManager.getLastReceived()));
         host.put("lastError", safeJsonText(bleManager.getLastError()));
         host.put("summary", safeJsonText(bleManager.getLastParsedStatus()));
+        /* ★ 2026-10-15 V50：设备版本下发（关于页·版本信息）。未连接时一律空串，H5 显示「--」，
+           避免拿上次缓存值冒充当前值（数据准确）；变化记录由 VersionHistoryStore 落盘。 */
+        boolean verConn = bleManager.isConnected();
+        host.put("mainVersion", verConn ? safeJsonText(bleManager.getMainVersion()) : "");
+        host.put("ctrlVersion", verConn ? safeJsonText(bleManager.getCtrlVersion()) : "");
+        host.put("btVersion", verConn ? safeJsonText(bleManager.getBtVersion()) : "");
+        if (verConn) {
+            dashboardView.noteDeviceVersions(bleManager.getMainVersion(),
+                    bleManager.getCtrlVersion(), bleManager.getBtVersion());
+        }
 
         JSONObject controls = new JSONObject();
         putControl(controls, "temp", 0);
@@ -1909,6 +1921,11 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
                     }
                     if ("camera_preview_resume".equals(action)) {
                         resumeCameraPreviewAfterPrintPreview();
+                        return;
+                    }
+                    // ★ 2026-10-15 V50：关于页版本信息「刷新」——重查 主控/监护/蓝牙 版本并回推状态
+                    if ("version_refresh".equals(action)) {
+                        dashboardView.refreshVersions();
                         return;
                     }
                     // ★ V1.02 S8 退出软件（管理员可用）：退出 App 回到系统桌面。

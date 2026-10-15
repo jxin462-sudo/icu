@@ -1481,6 +1481,16 @@ public class BleManager {
         emit();
     }
 
+    /** ★ 2026-10-15 V50：关于页版本信息「刷新」——只重查 主控/监护/蓝牙 版本，不带动环境全量扫描。 */
+    public void requestVersions() {
+        if (!isConnected()) {
+            return;
+        }
+        sendCommand("{\"cmd\":\"get_main_version\"}");
+        sendCommand("{\"cmd\":\"get_ctrl_version\"}");
+        sendCommand("{\"cmd\":\"get_bt_ver\"}");
+    }
+
     /** 每 3 秒执行一次；当前舱优先，另一舱随后。 */
     public void readEnvironmentStatus() {
         if (!isWriteQueueOverloaded()) {

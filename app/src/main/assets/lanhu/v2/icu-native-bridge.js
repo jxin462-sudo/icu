@@ -287,12 +287,21 @@
       D.debugLogs = Array.isArray(S.debugLogs) ? S.debugLogs : [];
       D.commLogs = Array.isArray(S.commLogs) ? S.commLogs : [];
       D.stackLogs = Array.isArray(S.stackLogs) ? S.stackLogs : [];
-      /* ★ 2026-10-10 版本控制：关于页「版本信息」框（原生 appVersion 回推真实 APK 版本） */
+      /* ★ 2026-10-10 版本控制：关于页「版本信息」框（原生 appVersion 回推真实 APK 版本）
+         ★ 2026-10-15 V50：扩展 主控/监护/蓝牙版本——主机蓝牙未连接统一显示「--」（不拿缓存冒充当前值）；
+            更新记录全量下发 D.verHist，H5 本地时间筛选/分页 */
       var av = S.appVersion || {};
+      var vhHost = S.host || {};
+      var vhUp = !!((S.host && S.host.connected) || (S.ble && S.ble.host && S.ble.host.connected));
+      var vhVal = function (v) { return vhUp && v ? String(v) : '--'; };
       D.aboutVer = av.name ? [
         [TT('verApp', '软件版本'), String(av.name)],
-        [TT('verCode', '内部版本号'), String(av.code == null ? '-' : av.code)]
+        [TT('verCode', '内部版本号'), String(av.code == null ? '-' : av.code)],
+        [TT('verMain', '主控版本'), vhVal(vhHost.mainVersion)],
+        [TT('verCtrl', '监护版本'), vhVal(vhHost.ctrlVersion)],
+        [TT('verBt', '蓝牙版本'), vhVal(vhHost.btVersion)]
       ] : [];
+      D.verHist = Array.isArray(S.versionHistory) ? S.versionHistory : [];
       // 当前选中的病例 caseId（用于表格行 sel 类）
       D.selCaseId = (S.patient && S.patient.caseId) || '';
 
@@ -1555,6 +1564,28 @@
       }
     }
 
+    /* ★ 2026-10-15 V50：关于页·更新记录 —— 翻页/清筛选/刷新（本地筛选分页；刷新走原生重查设备版本） */
+    var vhP = e.target.closest ? e.target.closest('[data-vh-page]') : null;
+    if (vhP) {
+      stop(e);
+      D.vhPage = (D.vhPage || 1) + parseInt(vhP.dataset.vhPage, 10);
+      IcuApp.render();
+      return;
+    }
+    var vhC = e.target.closest ? e.target.closest('[data-vh-clear]') : null;
+    if (vhC) {
+      stop(e);
+      D.vhStart = ''; D.vhEnd = ''; D.vhPage = 1;
+      IcuApp.render();
+      return;
+    }
+    var vhR = e.target.closest ? e.target.closest('[data-vh-refresh]') : null;
+    if (vhR) {
+      stop(e);
+      act('version_refresh');
+      return;
+    }
+
     /* ★ 任务13（R93）：菜单页舱区切换 —— 2026-09-30 曾放开全角色；2026-10-15 V49 按 V1.02 收紧为仅工程师（原生 tablet_zone_* 同步拦截） */
     if (cur === 'menu') {
       var zb = e.target.closest('[data-zone]');
@@ -1961,6 +1992,16 @@
       if (!ld) return;
       D.logDate = ld.value || '';
       D.logPage = 1;
+      IcuApp.render();
+    }, true);
+    /* ★ 2026-10-15 V50：关于页·更新记录 时间筛选（开始/结束日期，空=不限） */
+    document.getElementById('app-root').addEventListener('change', function (e) {
+      var vs = e.target.closest ? e.target.closest('[data-vh-start]') : null;
+      var ve = e.target.closest ? e.target.closest('[data-vh-end]') : null;
+      if (!vs && !ve) return;
+      if (vs) D.vhStart = vs.value || '';
+      if (ve) D.vhEnd = ve.value || '';
+      D.vhPage = 1;
       IcuApp.render();
     }, true);
     /* ★ 任务15(#4)：语言选择列表（下拉）的 change 事件 */

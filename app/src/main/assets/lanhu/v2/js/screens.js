@@ -119,6 +119,11 @@
         compTemp: '温度补偿（℃）', compO2: '氧浓度补偿（%）', compHum: '湿度补偿（%）',
         compCo2: '二氧化碳浓度补偿（PPM）', compIr: '红外体温补偿（℃）',
         aboutBasic: '基础信息', aboutVer: '版本信息', verApp: '软件版本', verCode: '内部版本号',
+        /* ★ 2026-10-15 V50：版本信息扩展——设备版本 + 更新记录（时间查询/翻页/刷新） */
+        verMain: '主控版本', verCtrl: '监护版本', verBt: '蓝牙版本',
+        verHist: '更新记录', vhTime: '时间', vhModule: '模块', vhChange: '版本变化', vhContent: '更新内容',
+        vhAll: '全部', vhRefresh: '刷新', vhEmpty: '暂无更新记录', vhStart: '开始日期', vhEnd: '结束日期',
+        vhModApp: 'APP', vhModMain: '主控', vhModCtrl: '监护', vhModBt: '蓝牙',
         tuTitle: '使用教程', tuPick: '＋ 选择照片/视频', tuChange: '重选', tuClear: '移除',
         tuSlot: '教程位', tuHint: '点击空位从相册选择照片或视频；点击已绑定的内容可播放/查看。',
         logFront: '前端调试', logBack: '后端调试', logErr: '错误记录', logComm: '通信记录',
@@ -175,6 +180,11 @@
         compTemp: 'Temp Comp (℃)', compO2: 'O₂ Comp (%)', compHum: 'Humidity Comp (%)',
         compCo2: 'CO₂ Comp (PPM)', compIr: 'IR Temp Comp (℃)',
         aboutBasic: 'Basic Info', aboutVer: 'Version Info', verApp: 'App Version', verCode: 'Version Code',
+        /* ★ 2026-10-15 V50: device versions + update history */
+        verMain: 'Main Control', verCtrl: 'Monitor', verBt: 'Bluetooth',
+        verHist: 'Update History', vhTime: 'Time', vhModule: 'Module', vhChange: 'Version', vhContent: 'Changes',
+        vhAll: 'All', vhRefresh: 'Refresh', vhEmpty: 'No update records', vhStart: 'Start date', vhEnd: 'End date',
+        vhModApp: 'APP', vhModMain: 'Main', vhModCtrl: 'Monitor', vhModBt: 'BT',
         tuTitle: 'Tutorial', tuPick: '＋ Pick photo/video', tuChange: 'Change', tuClear: 'Remove',
         tuSlot: 'Slot', tuHint: 'Tap an empty slot to pick a photo or video from the gallery; tap a bound item to play/view it.',
         logFront: 'Frontend', logBack: 'Backend', logErr: 'Errors', logComm: 'Comm',
@@ -1447,17 +1457,63 @@
     }
   };
 
-  /* p29 关于 */
+  /* p29 关于
+     ★ 2026-10-15 V50：版本信息卡扩展（APP/主控/监护/蓝牙）+ 新增「更新记录」整宽卡。
+     更新记录与日志页同模式：原生全量下发(D.verHist)，H5 本地时间筛选(开始/结束日期)+分页；
+     「刷新」走原生 version_refresh 重查设备版本。 */
   SCREENS['about'] = {
     name: '关于', group: '5 设置', render() {
       const base = D.aboutBase.map(function (x) { return '<div class="ln"><span style="flex:1">' + x + '</span></div>'; }).join('');
       const ver = D.aboutVer.map(function (v) {
         return '<div class="ln"><span class="k">' + (v[0] || '') + '</span><span>' + v[1] + '</span></div>';
       }).join('');
+      const VH_SIZE = 8;
+      const all = Array.isArray(D.verHist) ? D.verHist : [];
+      const ds = D.vhStart || '', de = D.vhEnd || '';
+      const rows = all.filter(function (r) {
+        const d = String(r.time || '').slice(0, 10);
+        return (!ds || d >= ds) && (!de || d <= de);
+      });
+      const totalP = Math.max(1, Math.ceil(rows.length / VH_SIZE));
+      let page = D.vhPage || 1;
+      if (page > totalP) page = totalP;
+      if (page < 1) page = 1;
+      D.vhPage = page;
+      const MODS = {
+        'APP': T('vhModApp', 'APP'), '主控': T('vhModMain', '主控'),
+        '监护': T('vhModCtrl', '监护'), '蓝牙': T('vhModBt', '蓝牙')
+      };
+      const head = '<tr><th>' + T('vhTime', '时间') + '</th><th>' + T('vhModule', '模块') + '</th>'
+        + '<th>' + T('vhChange', '版本变化') + '</th><th>' + T('vhContent', '更新内容') + '</th></tr>';
+      let body;
+      if (!rows.length) {
+        body = '<tr><td colspan="4" class="logempty">' + T('vhEmpty', '暂无更新记录') + '</td></tr>';
+      } else {
+        body = rows.slice((page - 1) * VH_SIZE, page * VH_SIZE).map(function (r) {
+          return '<tr><td>' + esc(r.time) + '</td><td>' + esc(MODS[r.module] || r.module || '') + '</td>'
+            + '<td>' + esc((r.from || '—') + ' → ' + (r.to || '—')) + '</td>'
+            + '<td class="vhcontent">' + esc(r.content || '—') + '</td></tr>';
+        }).join('');
+      }
+      const vhCard = '<div class="aboutcard wide"><h3>' + T('verHist', '更新记录') + '</h3>'
+        + '<div class="vhbox"><table class="tbl vhtbl"><thead>' + head + '</thead><tbody>' + body + '</tbody></table></div>'
+        + '<div class="logfoot vhfoot">'
+        + '<input type="date" class="logdate" data-vh-start value="' + ds + '" title="' + T('vhStart', '开始日期') + '">'
+        + '<span class="vhsep">~</span>'
+        + '<input type="date" class="logdate" data-vh-end value="' + de + '" title="' + T('vhEnd', '结束日期') + '">'
+        + '<div class="btn" data-vh-clear>' + T('vhAll', '全部') + '</div>'
+        + '<div class="grow"></div>'
+        + '<div class="btn' + (page <= 1 ? ' dim' : '') + '" data-vh-page="-1">' + T('prevPage', '‹ 上一页') + '</div>'
+        + '<div class="logpage">' + T('logPageInfo', '第 {n}/{m} 页').replace('{n}', page).replace('{m}', totalP) + '</div>'
+        + '<div class="btn primary' + (page >= totalP ? ' dim' : '') + '" data-vh-page="1">' + T('nextPage', '下一页 ›') + '</div>'
+        + '<div class="grow"></div>'
+        + '<div class="btn" data-vh-refresh>' + T('vhRefresh', '刷新') + '</div>'
+        + '</div></div>';
       return PAGE(P.topbarBack('menu'),
-        '<div class="about-grid">'
+        '<div class="about-grid"><div class="aboutrow">'
         + '<div class="aboutcard"><h3>' + T('aboutBasic', '基础信息') + '</h3>' + base + '</div>'
-        + '<div class="aboutcard"><h3>' + T('aboutVer', '版本信息') + '</h3>' + ver + '</div></div>', null, true);
+        + '<div class="aboutcard"><h3>' + T('aboutVer', '版本信息') + '</h3>' + ver + '</div></div>'
+        + vhCard + '</div>', null, true);
     }
   };
 

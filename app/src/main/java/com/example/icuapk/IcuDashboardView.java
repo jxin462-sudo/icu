@@ -1095,6 +1095,8 @@ public class IcuDashboardView extends View {
                 root.put("appVersion", av);
             } catch (Exception ignored) {
             }
+            // ★ 2026-10-15 V50：版本更新记录全量下发（关于页·版本信息；H5 负责时间筛选/分页）
+            root.put("versionHistory", versionHistoryJson());
             root.put("zone", zone);
             root.put("organization", organizationToJson(currentOrganization()));
             root.put("accountName", accountStore.getCurrentAccount());
@@ -4991,6 +4993,75 @@ public class IcuDashboardView extends View {
     /** ★ 2026-10-15 V49：关闭软件按 V1.02 收紧为管理员可用（工程师拥有所有权限，一并放行） */
     public boolean canCloseApp() {
         return accountStore.isCurrentAdminOrService();
+    }
+
+    /* ==================================================================
+       ★ 2026-10-15 V50：版本更新记录（关于页·版本信息）
+       ================================================================== */
+    private VersionHistoryStore versionHistoryStore;
+
+    private synchronized VersionHistoryStore versionHistoryStore() {
+        if (versionHistoryStore == null) {
+            versionHistoryStore = new VersionHistoryStore(activity.getApplicationContext());
+        }
+        return versionHistoryStore;
+    }
+
+    /** APP 自身版本记录：版本未变直接跳过（不读 assets）；变化时更新内容取 assets changelog.json。 */
+    public void noteAppVersion() {
+        try {
+            PackageInfo pi = activity.getPackageManager().getPackageInfo(activity.getPackageName(), 0);
+            String name = pi.versionName == null ? "" : pi.versionName;
+            VersionHistoryStore store = versionHistoryStore();
+            if (name.equals(store.lastVersion("app"))) {
+                return;
+            }
+            store.noteVersion("app", "APP", name, loadChangelogContent(name));
+        } catch (Exception ignored) {
+        }
+    }
+
+    /** 设备版本记录：主控/监护/蓝牙（空值=未读到，不计）。由 MainActivity.buildHostStateJson 每秒调用。 */
+    public void noteDeviceVersions(String main, String ctrl, String bt) {
+        VersionHistoryStore store = versionHistoryStore();
+        store.noteVersion("main", "主控", main, "");
+        store.noteVersion("ctrl", "监护", ctrl, "");
+        store.noteVersion("bt", "蓝牙", bt, "");
+    }
+
+    /** 更新记录全量（最新在前），随 firstPhaseState 下发；H5 侧时间筛选/分页。 */
+    public JSONArray versionHistoryJson() {
+        return versionHistoryStore().itemsJson();
+    }
+
+    /** 关于页「刷新」：重查设备版本并回推状态；主机未连接时本地记录照刷、设备版本给提示。 */
+    public void refreshVersions() {
+        if (bleManager != null && bleManager.isConnected()) {
+            bleManager.requestVersions();
+            Toast.makeText(activity, "正在刷新版本信息…", Toast.LENGTH_SHORT).show();
+        } else {
+            Toast.makeText(activity, "主机未连接，设备版本暂无法刷新", Toast.LENGTH_SHORT).show();
+        }
+        if (activity != null) {
+            activity.notifyLanhuStateChanged();
+        }
+    }
+
+    /** assets/lanhu/v2/changelog.json：versionName → 更新内容（无该键/读取失败 → 空串）。 */
+    private String loadChangelogContent(String versionName) {
+        try {
+            java.io.InputStream is = activity.getAssets().open("lanhu/v2/changelog.json");
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
+            int n;
+            while ((n = is.read(buf)) != -1) {
+                bos.write(buf, 0, n);
+            }
+            is.close();
+            return new JSONObject(bos.toString("UTF-8")).optString(versionName, "");
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     /**
