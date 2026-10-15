@@ -10711,9 +10711,13 @@ public class IcuDashboardView extends View {
                 cameraStreamUrl, InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_VARIATION_URI);
 
         TextView help = new TextView(activity);
+        /* ★ 2026-10-15 V51：按 TP-LINK 官方 RTSP 教程补充认证要点
+           （security.tp-link.com.cn detail_article_4432/4729 + Tapo 官方 FAQ） */
         help.setText("内置预览使用手写 RTSP H.264 解码，只支持 RTSP 地址。\n"
                 + "单目 TP-LINK 请优先填写 /stream2 或 /stream1。\n"
-                + "请在摄像头后台开启RTSP，确认账号密码、H.264编码、端口554和设备网络；如果是192.168.x.x地址，手机必须和摄像头在同一局域网。");
+                + "账号密码：用 TP-LINK 物联 APP「设备设置→高级设置→摄像头账号」创建的本地账号（不是 TP-LINK 云端账号）。\n"
+                + "请在摄像头后台开启 RTSP，确认 H.264 编码、端口 554；平板须和摄像头在同一局域网。\n"
+                + "注意：连续输错密码摄像头会锁定约 30 分钟。");
         help.setTextSize(13);
         help.setPadding(0, dpInt(8), 0, 0);
         form.addView(help);

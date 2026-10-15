@@ -264,7 +264,8 @@ public class CameraStreamActivity extends Activity {
         private int cSeq = 1;
         private String session = "";
         private String requestUrl;
-        private String authorization = "";
+        /* ★ 2026-10-15 V51：认证状态（Basic→401 自动升级 Digest 重试），替代原一次性 Basic 头 */
+        private RtspAuth auth;
         private byte[] sps;
         private byte[] pps;
         private MediaCodec decoder;
@@ -290,7 +291,7 @@ public class CameraStreamActivity extends Activity {
                 }
                 int port = uri.getPort() > 0 ? uri.getPort() : 554;
                 requestUrl = buildRequestUrl(uri, host, port);
-                authorization = buildAuthorization(uri);
+                auth = RtspAuth.from(uri);
                 notifyStatus("正在建立RTSP连接: " + host + ":" + port);
                 socket = new Socket(host, port);
                 socket.setSoTimeout(12000);
@@ -298,8 +299,13 @@ public class CameraStreamActivity extends Activity {
                 output = socket.getOutputStream();
 
                 RtspResponse describe = sendRequest("DESCRIBE", requestUrl, "Accept: application/sdp\r\n");
+                /* ★ 2026-10-15 V51：401 → 解析 WWW-Authenticate 升级 Digest 重试一次
+                   （TP-LINK 新固件 RTSP 默认要 Digest，旧实现只发 Basic 必然 401） */
+                if (describe.code == 401 && auth != null && auth.upgrade(describe.headers.get("www-authenticate"))) {
+                    describe = sendRequest("DESCRIBE", requestUrl, "Accept: application/sdp\r\n");
+                }
                 if (describe.code == 401) {
-                    throw new IOException("账号或密码认证失败");
+                    throw new IOException("摄像头认证失败：请使用 TP-LINK 物联 APP「设备设置→高级设置→摄像头账号」创建的本地账号密码（非云端账号），并确认摄像头 RTSP 已开启");
                 }
                 if (describe.code != 200) {
                     throw new IOException("DESCRIBE失败: " + describe.statusLine);
@@ -350,8 +356,9 @@ public class CameraStreamActivity extends Activity {
             request.append(method).append(' ').append(url).append(" RTSP/1.0\r\n");
             request.append("CSeq: ").append(cSeq++).append("\r\n");
             request.append("User-Agent: ICU-TPLink-RTSP\r\n");
-            if (!TextUtils.isEmpty(authorization)) {
-                request.append("Authorization: ").append(authorization).append("\r\n");
+            String authHeader = auth == null ? "" : auth.header(method, url);
+            if (!TextUtils.isEmpty(authHeader)) {
+                request.append("Authorization: ").append(authHeader).append("\r\n");
             }
             if (!TextUtils.isEmpty(session)) {
                 request.append("Session: ").append(session).append("\r\n");
@@ -605,12 +612,108 @@ public class CameraStreamActivity extends Activity {
             return builder.toString();
         }
 
-        private String buildAuthorization(URI uri) {
-            String userInfo = uri.getRawUserInfo();
-            if (TextUtils.isEmpty(userInfo)) {
-                return "";
+        /* ★ 2026-10-15 V51：RTSP 认证状态机 —— 默认 Basic 首发，401 收到 Digest 挑战后升级重试。
+           TP-LINK 物联新固件 RTSP 默认要求 Digest；老摄像头仍走 Basic，互不影响。 */
+        private static final class RtspAuth {
+            private String userInfo = "";
+            private String mode = ""; // "" | "basic" | "digest"
+            private String realm = "";
+            private String nonce = "";
+            private String qop = "";
+            private String opaque = "";
+            private String cnonce = "";
+            private int nc;
+
+            static RtspAuth from(URI uri) {
+                RtspAuth a = new RtspAuth();
+                String ui = uri.getRawUserInfo();
+                a.userInfo = ui == null ? "" : ui;
+                if (!TextUtils.isEmpty(a.userInfo)) {
+                    a.mode = "basic";
+                }
+                return a;
             }
-            return "Basic " + Base64.encodeToString(userInfo.getBytes(), Base64.NO_WRAP);
+
+            /** 解析 401 的 WWW-Authenticate；能升级为 Digest 返回 true（Basic 已发过仍 401 = 账号密码错，不再重试）。 */
+            boolean upgrade(String wwwAuthenticate) {
+                if (TextUtils.isEmpty(wwwAuthenticate) || TextUtils.isEmpty(userInfo)) {
+                    return false;
+                }
+                if (!wwwAuthenticate.toLowerCase(Locale.US).startsWith("digest")) {
+                    return false;
+                }
+                realm = param(wwwAuthenticate, "realm");
+                nonce = param(wwwAuthenticate, "nonce");
+                String qopRaw = param(wwwAuthenticate, "qop");
+                qop = qopRaw.contains("auth") ? "auth" : "";
+                opaque = param(wwwAuthenticate, "opaque");
+                cnonce = Long.toHexString(System.nanoTime())
+                        + Long.toHexString(Double.doubleToLongBits(Math.random()));
+                nc = 0;
+                mode = "digest";
+                return true;
+            }
+
+            String header(String method, String url) {
+                if (TextUtils.isEmpty(userInfo) || TextUtils.isEmpty(mode)) {
+                    return "";
+                }
+                if ("basic".equals(mode)) {
+                    return "Basic " + Base64.encodeToString(userInfo.getBytes(), Base64.NO_WRAP);
+                }
+                int colon = userInfo.indexOf(':');
+                String user = Uri.decode(colon >= 0 ? userInfo.substring(0, colon) : userInfo);
+                String pass = Uri.decode(colon >= 0 ? userInfo.substring(colon + 1) : "");
+                String ha1 = md5Hex(user + ":" + realm + ":" + pass);
+                String ha2 = md5Hex(method + ":" + url);
+                StringBuilder h = new StringBuilder("Digest username=\"").append(user)
+                        .append("\", realm=\"").append(realm)
+                        .append("\", nonce=\"").append(nonce)
+                        .append("\", uri=\"").append(url).append("\"");
+                String response;
+                if (!TextUtils.isEmpty(qop)) {
+                    nc++;
+                    String ncHex = String.format(Locale.US, "%08x", nc);
+                    response = md5Hex(ha1 + ":" + nonce + ":" + ncHex + ":" + cnonce + ":" + qop + ":" + ha2);
+                    h.append(", qop=").append(qop).append(", nc=").append(ncHex)
+                            .append(", cnonce=\"").append(cnonce).append("\"");
+                } else {
+                    response = md5Hex(ha1 + ":" + nonce + ":" + ha2);
+                }
+                h.append(", response=\"").append(response).append("\"");
+                if (!TextUtils.isEmpty(opaque)) {
+                    h.append(", opaque=\"").append(opaque).append("\"");
+                }
+                return h.toString();
+            }
+
+            private static String param(String wa, String key) {
+                java.util.regex.Matcher m = java.util.regex.Pattern
+                        .compile(key + "=\"([^\"]*)\"", java.util.regex.Pattern.CASE_INSENSITIVE)
+                        .matcher(wa);
+                if (m.find()) {
+                    return m.group(1);
+                }
+                m = java.util.regex.Pattern
+                        .compile(key + "=([^,\\s]+)", java.util.regex.Pattern.CASE_INSENSITIVE)
+                        .matcher(wa);
+                return m.find() ? m.group(1) : "";
+            }
+
+            private static String md5Hex(String s) {
+                try {
+                    java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+                    byte[] d = md.digest(s.getBytes("UTF-8"));
+                    StringBuilder sb = new StringBuilder(d.length * 2);
+                    for (byte b : d) {
+                        sb.append(Character.forDigit((b >> 4) & 0xF, 16))
+                                .append(Character.forDigit(b & 0xF, 16));
+                    }
+                    return sb.toString();
+                } catch (Exception e) {
+                    return "";
+                }
+            }
         }
 
         private void parseSpropParameterSets(String sdp) {
