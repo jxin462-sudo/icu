@@ -293,7 +293,15 @@ public class CameraStreamActivity extends Activity {
                 requestUrl = buildRequestUrl(uri, host, port);
                 auth = RtspAuth.from(uri);
                 notifyStatus("正在建立RTSP连接: " + host + ":" + port);
-                socket = new Socket(host, port);
+                /* ★ 2026-10-15 V55：TCP 连接失败单独捕获，给出面向用户的网络层排查提示，
+                   与「认证失败/H265/路径错」区分开，避免"连接不上"时无从下手 */
+                try {
+                    socket = new Socket(host, port);
+                } catch (IOException connectEx) {
+                    throw new IOException("无法连接摄像头 " + host + ":" + port
+                            + "（网络层失败：请确认平板与摄像头在同一局域网、IP 正确、"
+                            + "摄像头已开机且 RTSP 端口 " + port + " 已开放）", connectEx);
+                }
                 socket.setSoTimeout(12000);
                 input = socket.getInputStream();
                 output = socket.getOutputStream();

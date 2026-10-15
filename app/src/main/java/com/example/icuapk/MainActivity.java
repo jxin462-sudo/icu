@@ -552,10 +552,6 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         }
         String[] cleanedUrls = sanitizeCameraPreviewUrls(urls);
         lastCameraPreviewUrls = cleanedUrls;
-        // 任务9：未配置摄像头地址时不再显示原生黑块（遮挡视频页），让 H5 灰色占位露出
-        lastInlineCameraVisible = visible && bounds != null && bounds.width() > 2 && bounds.height() > 2
-                && cleanedUrls.length > 0;
-        lastInlineCameraBounds = lastInlineCameraVisible ? new RectF(bounds) : null;
         if (cameraPreviewPausedForPrintPreview) {
             cameraInlinePreviewView.stopPreview();
             cameraInlinePreviewView.setVisibility(View.GONE);
@@ -567,12 +563,22 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
             return;
         }
         if (cameraFullscreenVisible) {
+            /* ★ 2026-10-15 V55：退出全屏后预览盖住整屏、不回左侧视频框的病根——
+               此前边界记录(lastInlineCameraBounds)在上面的守卫之前就被 H5 上报覆盖：
+               全屏期间 H5 底层照常收 icu-native-state 重渲染并重报画面区域（可能是
+               监护页 .cam.big 的大区域等过期值），退出全屏 restoreInlineCameraPreview
+               就把预览恢复到那个错误大区域。故全屏期间只刷新全屏预览的地址，
+               冻结内嵌预览的边界记录，退出时按进入全屏前的视频框恢复。 */
             cameraInlinePreviewView.setActive(false);
             if (cameraFullscreenPreviewView != null) {
                 cameraFullscreenPreviewView.setPreview(cleanedUrls);
             }
             return;
         }
+        // 任务9：未配置摄像头地址时不再显示原生黑块（遮挡视频页），让 H5 灰色占位露出
+        lastInlineCameraVisible = visible && bounds != null && bounds.width() > 2 && bounds.height() > 2
+                && cleanedUrls.length > 0;
+        lastInlineCameraBounds = lastInlineCameraVisible ? new RectF(bounds) : null;
         if (!lastInlineCameraVisible || lastInlineCameraBounds == null) {
             cameraInlinePreviewView.setActive(false);
             return;
@@ -725,6 +731,9 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         applyCameraPreviewBounds(cameraInlinePreviewView, lastInlineCameraBounds);
         cameraInlinePreviewView.setPreview(lastCameraPreviewUrls);
         cameraInlinePreviewView.setActive(true);
+        /* ★ 2026-10-15 V55：恢复后立即让 H5 重渲染并重新上报当前画面区域——
+           若全屏期间 H5 页面发生过变化，几十毫秒内即按最新视频框自愈矫正 */
+        notifyLanhuStateChanged();
     }
 
     private void setThermalFullscreenVisible(boolean visible) {
