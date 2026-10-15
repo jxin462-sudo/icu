@@ -14,6 +14,11 @@
   var D = window.D;
   if (!D || !window.IcuApp) { return; }
 
+  /* ★ 2026-10-15 V48：语言持久化双保险 —— 用户每次切换同时写 localStorage（icu_lang）+ 原生 S5；
+     启动时在首帧渲染前先从 localStorage 恢复（原生 S5 仍是正式存储，syncD 会再校准，
+     但 localStorage 优先——保证二次启动必按上次退出前的语言显示，不受原生恢复时序影响） */
+  try { var __bootLang = localStorage.getItem('icu_lang'); if (__bootLang === 'en' || __bootLang === 'zh') D.lang = __bootLang; } catch (e) {}
+
   /* ---------- 原生桥小封装（容错，桌面浏览器预览时 IcuNative 不存在） ---------- */
   function N() { return window.IcuNative || null; }
   function hasNative() { var n = N(); return !!(n && n.firstPhaseState); }
@@ -64,6 +69,7 @@
   /* ★ 任务38：蓝牙连接状态边沿检测（false→true / true→false 时弹窗提示）。
      null 表示尚未初始化，首次同步不弹。 */
   var prevHostConn = null, prevMonConn = null, prevScreen = null, prevPrintSeq = null;
+  var lastShareQrError = ''; /* ★ V48：文件助手传输失败 toast 边沿检测 */
 
   /* ★ 任务38：原生状态事件驱动的前导+尾随节流渲染。
      AM4100 连接后每帧 emit → 原生 50ms 节流推送（≈20次/秒），
@@ -199,12 +205,17 @@
     if (!arr || !arr.length) return out;
     for (var i = 0; i < arr.length; i++) {
       var p = arr[i] || {};
+      /* ★ 2026-10-15 V48：状态列语义按用户定义 —— 未开治疗=''（新建未开始，currentTreatment 占位不算）、
+         已开始且结束时间=进行中 → ok(护疗中)；已开始且结束时间已落具体时刻 → err(已结束)。
+         不用 currentTreatment 判定：新建样本占位时它也为 true，会误显「护疗中」。 */
+      var st = '';
+      if (p.treatmentStarted) st = (p.treatmentEndTime && p.treatmentEndTime !== '进行中') ? 'err' : 'ok';
       out.push({
         caseId: p.caseId || '',
         no: p.caseNo || '', name: p.petName || '', sp: p.species || '',
         owner: p.ownerName || '', tel: p.ownerPhone || '', doc: p.doctor || '',
         illness: p.disease || '', time: (p.visitDate || '').replace('T', ' '),
-        st: p.currentTreatment ? 'ok' : (p.transferredOut ? 'err' : 'load')
+        st: st
       });
     }
     return out;
@@ -241,7 +252,10 @@
         };
       });
       // ★ V1.02 任务12：语言从原生 S5 设置回推（window.__icuSettings.language）
-      D.lang = (D.settings && D.settings.language) || (S.settings && S.settings.language)
+      /* ★ 2026-10-15 V48：localStorage（用户上次显式选择）优先于原生回推值，
+         保证二次启动/恢复时序异常时仍按上次退出前语言显示；出厂重置时该键会被清除（调试页动作） */
+      var __lsLang = ''; try { __lsLang = localStorage.getItem('icu_lang') || ''; } catch (e) {}
+      D.lang = __lsLang || (D.settings && D.settings.language) || (S.settings && S.settings.language)
         || (window.__icuSettings && window.__icuSettings.language) || 'zh';
       var now = new Date();
       D.time = pad(now.getHours()) + ':' + pad(now.getMinutes());
@@ -255,6 +269,10 @@
 
       D.careRows = mapRows(S.careCases);
       D.reviewRows = mapRows(S.historyCases);
+      /* ★ 2026-10-15 V48：手动添加的打印机地址簿（localStorage，本机持久），
+         设置-打印页与 NSD 扫描结果合并渲染、点击即选 */
+      try { var __pl = JSON.parse(localStorage.getItem('icu_printer_list') || '[]'); D.printerSaved = Array.isArray(__pl) ? __pl : []; }
+      catch (e) { D.printerSaved = []; }
       /* ★ 2026-10-08 日志页：用户/操作日志（原生 userOpLog，倒序最新在前） */
       D.userLogs = Array.isArray(S.userLogs) ? S.userLogs : [];
       /* ★ 2026-10-08 日志页：前端调试（H5 侧捕获）/ 错误记录（H5 + 原生合并）
@@ -531,6 +549,11 @@
     if (D.sheetEdit && IcuApp.current() !== 'record-sheet') D.sheetEdit = null;
     /* ★ 任务12/V37：先拉全量状态（S.settings 随每次下发），再同步 S5 设置进 D，最后注入 D */
     pullState(); pullSettings(); syncD();
+    /* ★ 2026-10-15 V48：文件助手（微信）传输失败明确提示 —— shareQr.error 新出现时 toast 一次
+       （二维码框内同步显示原文；边沿检测防止每秒推送反复弹） */
+    var __qrErr = (S.shareQr && S.shareQr.error) || '';
+    if (__qrErr && __qrErr !== lastShareQrError) toast(__qrErr);
+    lastShareQrError = __qrErr;
     // 新建草稿确认后：原生新病例已生成（pendingInitialEntry）→ 把暂存 payload 写入并跳 care-data
     if (pendingSaveAfterCreate && S.patient && S.patient.pendingInitialEntry) {
       var payload = pendingSaveAfterCreate;
@@ -828,23 +851,62 @@
       if (!silName) silName = '兔';
       sil.innerHTML = window.silSvg ? window.silSvg(silName) : '';
     }
-    /* ★ 任务12：物种「其它」chip → 显示/隐藏自填输入框，并更新剪影 */
+    /* ★ 2026-10-15 V48：性别/物种 chips 与已存值同步 + 「其它」chip 内联输入。
+       ① 编辑态此前 chips 恒为默认（雄性/兔），保存会把已存 性别/物种 冲掉——按 p.sex/p.species 回填选中；
+       ② 草稿态性别清空默认选中（性别必填，逼用户主动选择）；物种保留默认兔；
+       ③ 「其它」chip：单击后 chip 本体变输入框直接打字（用户要求：文本直接输入到按钮上），
+          点其他物种 chip 即还原；并修复旧实现读 .chip.on 时机早于 app.js 勾选
+          （chip 上的监听在 target 阶段先跑、root 冒泡阶段才打 .on）导致的
+          「要双击才出输入框、点含物种名按钮输入框不收起」两个 bug —— 现直接用被点击的 chip 判定。 */
     var spGroups = modal.querySelectorAll('.frow .chips');
     if (spGroups.length >= 2) {
+      var sexGroup = spGroups[0];
       var spGroup = spGroups[1];
-      var otherBox = modal.querySelector('.species-other');
+      var revertOtherChip = function () {
+        var oc = spGroup.querySelector('.chip[data-spec="other"]');
+        if (oc && oc.querySelector('input')) oc.textContent = TT('speciesOther', '其它');
+      };
+      var makeOtherEditable = function (chip, val, focus) {
+        chip.innerHTML = '<input class="chip-other-inp" data-other-species maxlength="10" placeholder="'
+          + TT('fieldOtherSpecies', '其他物种') + '" value="' + String(val || '').replace(/"/g, '&quot;') + '">';
+        var inp = chip.querySelector('input');
+        inp.addEventListener('click', function (ev) { ev.stopPropagation(); });
+        chip.classList.add('on');
+        /* 仅用户点击时聚焦（编辑态回填不弹软键盘） */
+        if (focus) inp.focus();
+      };
       spGroup.querySelectorAll('.chip').forEach(function (c) {
-        c.addEventListener('click', function () {
-          var on = spGroup.querySelector('.chip.on');
-          var isOther = !!(on && (on.dataset.spec === 'other' || on.textContent === '其它'));
-          if (otherBox) {
-            otherBox.hidden = !isOther;
-            if (!isOther) { var oi = otherBox.querySelector('input'); if (oi) oi.value = ''; }
-          }
+        c.addEventListener('click', function (ev) {
+          if (ev.target && ev.target.tagName === 'INPUT') return;
+          var isOther = (c.dataset.spec === 'other');
+          if (isOther) { if (!c.querySelector('input')) makeOtherEditable(c, '', true); }
+          else revertOtherChip();
           var sil2 = modal.querySelector('#petSil');
-          if (sil2) sil2.innerHTML = window.silSvg ? window.silSvg(silNameOf(on)) : '';
+          if (sil2) sil2.innerHTML = window.silSvg ? window.silSvg(silNameOf(c)) : '';
         });
       });
+      /* 性别：草稿态清空默认选中（必填逼选）；编辑态按已存值选中 */
+      if (draftNewMode) {
+        sexGroup.querySelectorAll('.chip').forEach(function (c) { c.classList.remove('on'); });
+      } else if (p && p.sex) {
+        sexGroup.querySelectorAll('.chip').forEach(function (c) {
+          c.classList.toggle('on', (c.dataset.sex || '') === p.sex || c.textContent === p.sex);
+        });
+      }
+      /* 物种：编辑态按已存值选中（预置键/中文名命中预置 chip；否则选中「其它」并回填自填文本） */
+      if (!draftNewMode && p && p.species) {
+        var zh2key = { '犬': 'dog', '猫': 'cat', '兔': 'rabbit', '蜥蜴': 'lizard', '蛇': 'snake' };
+        var keyHit = zh2key[p.species] || p.species;
+        var hit = null;
+        spGroup.querySelectorAll('.chip').forEach(function (c) { if (c.dataset.spec === keyHit) hit = c; });
+        spGroup.querySelectorAll('.chip').forEach(function (c) { c.classList.remove('on'); });
+        if (hit) {
+          hit.classList.add('on');
+        } else {
+          var oc2 = spGroup.querySelector('.chip[data-spec="other"]');
+          if (oc2) makeOtherEditable(oc2, (p.species === '其它' || p.species === 'other') ? '' : p.species);
+        }
+      }
     }
   }
   function gatherNewSample() {
@@ -877,12 +939,15 @@
     o.visitDate = draftNewMode ? '' : ((S.patient && S.patient.visitDate) || '');
     return o;
   }
-  /* ★ 任务12：新建样本必填 / 格式校验；返回错误文案（空=通过） */
+  /* ★ 任务12：新建样本必填 / 格式校验；返回错误文案（空=通过）
+     ★ 2026-10-15 V48：必填扩为 宠物名/年龄/性别/联系电话（用户指定四项），未填齐不保存；取消本就不保存 */
   function validateNewSample(o) {
     var T = (typeof window !== 'undefined' && window.T) ? window.T : function (k, fb) { return fb; };
     if (!o) return T('errForm', '表单数据无效');
     var name = (o.petName || '').trim();
     if (!name) return T('errPetName', '宠物名不能为空');
+    if (!(o.age || '').trim()) return T('errAgeReq', '年龄不能为空');
+    if (!(o.sex || '').trim()) return T('errSexReq', '请选择性别');
     var phone = (o.ownerPhone || '').trim();
     if (!phone) return T('errPhoneEmpty', '联系电话不能为空');
     // 中国大陆手机号 11 位；放宽允许 7~12 位数字（座机/分机）
@@ -1087,6 +1152,7 @@
         D.lang = langBtn.dataset.lang;
         window.__icuSettings = window.__icuSettings || {};
         window.__icuSettings.language = langBtn.dataset.lang;
+        try { localStorage.setItem('icu_lang', langBtn.dataset.lang); } catch (e2) {} /* ★ V48 */
         act('settings_save', JSON.stringify({ language: langBtn.dataset.lang }));
         IcuApp.render();
         return;
@@ -1546,7 +1612,7 @@
       if (fyBtn) {
         stop(e);
         window.__factoryConfirm = false;
-        if (fyBtn.dataset.factoryConfirm === 'yes') act('factory_reset');
+        if (fyBtn.dataset.factoryConfirm === 'yes') { try { localStorage.removeItem('icu_lang'); } catch (e2) {} act('factory_reset'); } /* ★ V48：出厂重置语言回默认中文，清掉 localStorage 记忆 */
         IcuApp.render();
         return;
       }
@@ -1574,8 +1640,17 @@
           if (!addr) { toast(T2('errPrinterAddr', '请输入打印机地址')); return; }
           /* ★ 任务32：打印机地址格式校验（IPv4，可带端口） */
           if (!/^(\d{1,3}\.){3}\d{1,3}(:\d{1,5})?$/.test(addr)) { toast(T2('errPrinterAddrFmt', '打印机地址格式不正确，示例 192.168.1.10:9100')); return; }
+          /* ★ 2026-10-15 V48：加入本机地址簿（去重），添加成功后出现在「可用打印机」列表可被选择 */
+          var plist2 = []; try { var _pa = JSON.parse(localStorage.getItem('icu_printer_list') || '[]'); if (Array.isArray(_pa)) plist2 = _pa; } catch (e) {}
+          var dup = plist2.some(function (x) { return x && x.addr === addr; });
+          if (!dup) {
+            plist2.push({ addr: addr, name: addr });
+            try { localStorage.setItem('icu_printer_list', JSON.stringify(plist2)); } catch (e) {}
+            D.printerSaved = plist2;
+          }
           act('settings_save', JSON.stringify({ printerAddress: addr }));
-          toast(T2('printerAdded', '已添加打印机'));
+          toast(dup ? T2('printerSelected', '已选择该打印机') : T2('printerAdded', '已添加打印机'));
+          IcuApp.render();
           return;
         }
         if (pk === 'test') { act('print_test'); return; }
@@ -1817,7 +1892,11 @@
     if (!t || !t.dataset || t.dataset.disease === undefined) return;
     var caseId = t.dataset.caseid;
     if (!caseId) return;
-    syncPatient({ caseId: caseId, disease: t.value.trim() });
+    var dv = t.value.trim();
+    /* ★ 2026-10-15 V48：病症标准选项在英文界面显示的是翻译文本（screens.dTxt），
+       存回前把标准英文反查回中文规范值；自定义文本原样保留 */
+    if (window.dTxtReverse) dv = window.dTxtReverse(dv);
+    syncPatient({ caseId: caseId, disease: dv });
   }
 
   /* ★ 任务23：打开指定样本的治疗记录单预览（record-sheet）。
@@ -1883,6 +1962,7 @@
       if (!sel) return;
       var v = sel.value === 'en' ? 'en' : 'zh';
       D.lang = v;                                  // 即时生效，不等原生回推
+      try { localStorage.setItem('icu_lang', v); } catch (e2) {} /* ★ V48：语言选择双保险持久化 */
       act('settings_save', JSON.stringify({ language: v }));
       IcuApp.render();
     }, true);

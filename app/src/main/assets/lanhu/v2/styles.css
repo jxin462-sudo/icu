@@ -134,6 +134,9 @@ input.inp::placeholder{color:var(--ink3)}
 .chips.cols3 .chip{min-width:106px}
 .chip{height:56px;min-width:96px;padding:0 24px;border-radius:8px;background:var(--card);display:flex;align-items:center;justify-content:center;font-size:23px;color:var(--ink);cursor:pointer}
 .chip.on{background:var(--accent);color:#fff}
+/* ★ 2026-10-15 V48：「其它」物种 chip 内联输入 —— 文本直接打在按钮上（选中态白字，placeholder 半透明白） */
+.chip .chip-other-inp{width:128px;background:transparent;border:none;outline:none;font-size:23px;color:inherit;text-align:center;font-family:inherit;cursor:text}
+.chip .chip-other-inp::placeholder{color:rgba(255,255,255,.7)}
 .chip.wide{min-width:120px}
 
 /* 表格 ---------------------------------------------------------------------- */
@@ -507,6 +510,9 @@ input.inp::placeholder{color:var(--ink3)}
 .printer-list{flex:1;display:flex;flex-direction:column;gap:8px}
 .printer-item{display:flex;align-items:center;padding:12px 18px;background:var(--card);border-radius:10px;cursor:pointer;font-size:22px}
 .printer-item:active{background:#dbe7f5}
+/* ★ 2026-10-15 V48：当前生效打印机地址高亮 */
+.printer-item.on{background:var(--accent);color:#fff}
+.printer-item.on .pname{color:#fff}
 .printer-item .pname{font-weight:600}
 .sheet-info .sheet-in{width:150px}
 .tproj .p.ed{cursor:pointer}

@@ -3577,6 +3577,20 @@ public class IcuDashboardView extends View {
     /** 选择器返回后调用：持久化授权、存绑定、后台生成缩略图。 */
     void onTutorialMediaSelected(int slot, Uri uri) {
         if (uri == null || slot < 0 || slot >= TUTORIAL_SLOT_COUNT) return;
+        /* ★ 2026-10-15 V48：绑定前先校验文件可读，损坏/无权限文件明确提示且不绑定 */
+        java.io.InputStream probe = null;
+        try {
+            probe = activity.getContentResolver().openInputStream(uri);
+            if (probe == null) throw new IOException("openInputStream null");
+        } catch (Exception e) {
+            Toast.makeText(activity, "教程文件读取失败，请重新选择", Toast.LENGTH_LONG).show();
+            return;
+        } finally {
+            if (probe != null) {
+                try { probe.close(); } catch (Exception ignored) {
+                }
+            }
+        }
         try {
             activity.getContentResolver().takePersistableUriPermission(
                     uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
@@ -4870,6 +4884,28 @@ public class IcuDashboardView extends View {
     }
 
     /**
+     * ★ 2026-10-15 V48：治疗时长 = 点「开始护疗」起算（此前只在治疗功能开关开启时由 BleManager 累计，
+     *   未开任何治疗功能时恒为 --，用户要求点开始护疗即计时）。
+     *   取当前选中样本：已开始护疗 → 进行中按 当前时间-treatmentStartTime 实时累计；
+     *   已结束 → 按 结束-开始 冻结显示；未开始/无样本返回 -1（调用方显示 --）。
+     */
+    public long currentCaseTreatmentElapsedMs() {
+        PatientCase p = currentCase();
+        if (p == null || !p.treatmentStarted || TextUtils.isEmpty(p.treatmentStartTime)) {
+            return -1L;
+        }
+        long start = parseVisitDate(p.treatmentStartTime).getTimeInMillis();
+        long end = System.currentTimeMillis();
+        if (!"进行中".equals(p.treatmentEndTime) && !TextUtils.isEmpty(p.treatmentEndTime)) {
+            long parsedEnd = parseVisitDate(p.treatmentEndTime).getTimeInMillis();
+            if (parsedEnd > 0L) {
+                end = parsedEnd;
+            }
+        }
+        return Math.max(0L, end - start);
+    }
+
+    /**
      * 给 JS 桥调用：在网页端注册新账号。成功后会立即设为当前账号并切换机构。
      *
      * @return "ok" 表示成功；否则返回面向用户的错误描述
@@ -5235,12 +5271,37 @@ public class IcuDashboardView extends View {
         return "timed_control_default_" + controlIndex;
     }
 
+    /* ★ 2026-10-15 V48：LOGO 上传失败提示——先校验所选文件是可解码图片，无效文件不入库 */
+    private boolean isDecodableImage(Uri uri) {
+        java.io.InputStream is = null;
+        try {
+            is = activity.getContentResolver().openInputStream(uri);
+            if (is == null) return false;
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inJustDecodeBounds = true;
+            BitmapFactory.decodeStream(is, null, opts);
+            return opts.outWidth > 0 && opts.outHeight > 0;
+        } catch (Exception e) {
+            return false;
+        } finally {
+            if (is != null) {
+                try { is.close(); } catch (Exception ignored) {
+                }
+            }
+        }
+    }
+
     void chooseOrganizationLogo() {
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("image/*");
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-        activity.startActivityForResult(intent, REQUEST_ORGANIZATION_LOGO);
+        try {
+            activity.startActivityForResult(intent, REQUEST_ORGANIZATION_LOGO);
+        } catch (Exception e) {
+            /* ★ V48：无可用文件选择器时明确提示（此前异常上抛无反馈） */
+            Toast.makeText(activity, "无法打开文件选择器，LOGO 上传失败", Toast.LENGTH_LONG).show();
+        }
     }
 
     // ★ 任务31：页脚LOGO 选择器（与医院LOGO 同样的系统文档选择器，独立请求码）
@@ -5249,11 +5310,21 @@ public class IcuDashboardView extends View {
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("image/*");
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
-        activity.startActivityForResult(intent, REQUEST_FOOTER_LOGO);
+        try {
+            activity.startActivityForResult(intent, REQUEST_FOOTER_LOGO);
+        } catch (Exception e) {
+            /* ★ V48：无可用文件选择器时明确提示 */
+            Toast.makeText(activity, "无法打开文件选择器，LOGO 上传失败", Toast.LENGTH_LONG).show();
+        }
     }
 
     void onFooterLogoSelected(Uri logoUri) {
         if (logoUri == null) {
+            return;
+        }
+        /* ★ 2026-10-15 V48：无效图片 → 失败提示，不写库 */
+        if (!isDecodableImage(logoUri)) {
+            Toast.makeText(activity, "LOGO 上传失败：文件不是有效图片", Toast.LENGTH_LONG).show();
             return;
         }
         try {
@@ -5272,6 +5343,11 @@ public class IcuDashboardView extends View {
 
     void onOrganizationLogoSelected(Uri logoUri) {
         if (logoUri == null) {
+            return;
+        }
+        /* ★ 2026-10-15 V48：无效图片（损坏/非图片文件）→ 失败提示，不写库 */
+        if (!isDecodableImage(logoUri)) {
+            Toast.makeText(activity, "LOGO 上传失败：文件不是有效图片", Toast.LENGTH_LONG).show();
             return;
         }
         try {
@@ -6670,7 +6746,11 @@ public class IcuDashboardView extends View {
     private void exportReportViaShare() {
         try {
             File pdf = ensureReportPdf();
-            if (pdf == null) return;
+            /* ★ 2026-10-15 V48：报告生成失败此前静默返回 */
+            if (pdf == null || !pdf.exists()) {
+                Toast.makeText(activity, "报告生成失败，无法分享", Toast.LENGTH_LONG).show();
+                return;
+            }
             Uri uri = copyPdfToDownloads(pdf, createPdfFileName());
             if (uri == null) {
                 Toast.makeText(activity, "生成分享文件失败", Toast.LENGTH_SHORT).show();
@@ -6683,7 +6763,8 @@ public class IcuDashboardView extends View {
             activity.startActivity(Intent.createChooser(intent, "发送报告（微信文件传输助手 / 蓝牙等）"));
             Toast.makeText(activity, "请选择微信「文件传输助手」或蓝牙设备发送报告", Toast.LENGTH_LONG).show();
             appendUserLog("导出", "导出报告", "住院号 " + (currentCase() == null ? "-" : currentCase().caseNo));
-        } catch (IOException e) {
+        } catch (Exception e) {
+            /* ★ 2026-10-15 V48：catch 放宽到 Exception */
             Toast.makeText(activity, "导出失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
@@ -6695,7 +6776,11 @@ public class IcuDashboardView extends View {
     private void sendReportViaBluetooth() {
         try {
             File pdf = ensureReportPdf();
-            if (pdf == null) return;
+            /* ★ 2026-10-15 V48：报告生成失败此前静默返回，用户得不到任何反馈 */
+            if (pdf == null || !pdf.exists()) {
+                Toast.makeText(activity, "报告生成失败，无法蓝牙发送", Toast.LENGTH_LONG).show();
+                return;
+            }
             Uri uri = copyPdfToDownloads(pdf, createPdfFileName());
             if (uri == null) {
                 Toast.makeText(activity, "生成分享文件失败", Toast.LENGTH_SHORT).show();
@@ -6737,7 +6822,8 @@ public class IcuDashboardView extends View {
                 }
             }
             if (launched) appendUserLog("导出", "蓝牙发送", "住院号 " + (currentCase() == null ? "-" : currentCase().caseNo));
-        } catch (IOException e) {
+        } catch (Exception e) {
+            /* ★ 2026-10-15 V48：catch 从 IOException 放宽——PDF 生成/URI 解析的运行时异常也要有提示 */
             Toast.makeText(activity, "蓝牙发送失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
@@ -6769,7 +6855,8 @@ public class IcuDashboardView extends View {
             shareQrName = displayName;
             shareQrUrl = "http://" + ip + ":" + ShareHttpServer.PORT + "/r/" + token;
             appendUserLog("导出", "文件助手二维码", "住院号 " + (currentCase() == null ? "-" : currentCase().caseNo));
-        } catch (IOException e) {
+        } catch (Exception e) {
+            /* ★ 2026-10-15 V48：catch 放宽到 Exception——注册服务/IO 以外异常也回推错误文案（H5 框内显示+toast） */
             shareQrError = "生成失败: " + e.getMessage();
         }
     }

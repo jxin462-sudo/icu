@@ -86,6 +86,19 @@
     return (sp && m[sp]) ? T(m[sp], sp) : (sp || '');
   }
   window.spTxt = spTxt;
+  /* ★ 2026-10-15 V48：病症标准选项（历史下拉值）随语言切换显示；自定义文本原样。
+     dTxtReverse 供 bridge 在存回前把标准英文反查回中文规范值（数据层始终存中文，双语仅显示层） */
+  var DISEASE_I18N = { '绝育': 'disSpay', '骨折': 'disFracture', '心脏病': 'disHeart', '幼儿护理': 'disInfant' };
+  function dTxt(v) { var k = v && DISEASE_I18N[v]; return k ? T(k, v) : (v || ''); }
+  function dTxtReverse(v) {
+    if (!v) return v;
+    for (var zh in DISEASE_I18N) { if (T(DISEASE_I18N[zh], zh) === v) return zh; }
+    return v;
+  }
+  window.dTxt = dTxt;
+  window.dTxtReverse = dTxtReverse;
+  /* ★ V48：护疗/回顾列表「状态」列文本：护疗中 / 已结束 / 未开始（空） */
+  function stTxt(st) { return st === 'ok' ? T('stTreating', '护疗中') : (st === 'err' ? T('stEnded', '已结束') : ''); }
   /* 补充翻译键（菜单 / 控制 / 监护 / 视频 / 弹窗 / 补偿 / 关于 / 日志） */
   (function () {
     var more = {
@@ -139,6 +152,10 @@
         /* ★ 2026-10-10 #53-#57 */
         scanningPrinters: '正在扫描打印机…', noPrinterFound: '未发现打印机，请点「扫描」或手动输入地址',
         printerAdded: '已添加打印机', printOk: '打印成功', printFail: '打印失败',
+        /* ★ 2026-10-15 V48 */
+        printerSelected: '已选择该打印机', colStatus: '状态', stTreating: '护疗中', stEnded: '已结束',
+        errAgeReq: '年龄不能为空', errSexReq: '请选择性别',
+        disSpay: '绝育', disFracture: '骨折', disHeart: '心脏病', disInfant: '幼儿护理',
         sheetEditHint: '编辑模式：高亮区域可修改，完成后点保存'
       },
       en: {
@@ -189,6 +206,10 @@
         /* ★ 2026-10-10 #53-#57 */
         scanningPrinters: 'Scanning for printers…', noPrinterFound: 'No printer found; tap "Scan" or enter the address manually',
         printerAdded: 'Printer added', printOk: 'Print succeeded', printFail: 'Print failed',
+        /* ★ 2026-10-15 V48 */
+        printerSelected: 'Printer selected', colStatus: 'Status', stTreating: 'Treating', stEnded: 'Ended',
+        errAgeReq: 'Age is required', errSexReq: 'Please select sex',
+        disSpay: 'Spay/Neuter', disFracture: 'Fracture', disHeart: 'Heart Disease', disInfant: 'Infant Care',
         sheetEditHint: 'Edit mode: highlighted areas are editable; tap Save when done'
       }
     };
@@ -361,7 +382,8 @@
      ★ 行为可点击切换"选中的样本"（tr.data-caseid 让 bridge 查找 S.cases 全量下标并调 patient_select_<zone>_<idx>）
      ★ "sel" 反映 D.selCaseId（bridge 在 syncD 后写入），而非硬编码 i===0 */
   function careTable(rows, noAutoSel) {
-    const head = [T('fieldCaseNo', '住院号'), T('fieldPetName', '宠物名'), T('fieldSpecies', '物种'), T('fieldOwner', '宠物主人'), T('fieldPhone', '联系电话'), T('colDoctor', '医生'), T('colDisease', '病症'), T('colCreateTime', '创建时间')];
+    /* ★ 2026-10-15 V48：病症与创建时间之间加「状态」列（未开治疗=空 / 护疗中 / 已结束） */
+    const head = [T('fieldCaseNo', '住院号'), T('fieldPetName', '宠物名'), T('fieldSpecies', '物种'), T('fieldOwner', '宠物主人'), T('fieldPhone', '联系电话'), T('colDoctor', '医生'), T('colDisease', '病症'), T('colStatus', '状态'), T('colCreateTime', '创建时间')];
     /* ★ 任务15(#11)：noAutoSel=true 时不做任何默认选中（未点击不高亮），点击后才由 bridge 写入 D.selCaseId */
     const selId = noAutoSel ? (D.selCaseId || '') : (D.selCaseId || (rows[0] && rows[0].caseId) || '');
     let h = '<table class="tbl list"><tr>' + head.map(function (t) { return '<th>' + t + '</th>'; }).join('') + '</tr>';
@@ -370,7 +392,8 @@
       h += '<tr class="' + (sel ? 'sel' : '') + '" data-caseid="' + (r.caseId || '') + '">'
         + '<td>' + r.no + '</td><td>' + r.name + '</td><td>' + spTxt(r.sp) + '</td>'
         + '<td>' + r.owner + '</td><td>' + r.tel + '</td><td>' + r.doc + '</td>'
-        + '<td><input class="iln-in" data-disease data-caseid="' + (r.caseId || '') + '" value="' + (r.illness || '') + '" placeholder="' + T('phDisease', '请输入') + '" maxlength="20"></td>'
+        + '<td><input class="iln-in" data-disease data-caseid="' + (r.caseId || '') + '" value="' + dTxt(r.illness) + '" placeholder="' + T('phDisease', '请输入') + '" maxlength="20"></td>'
+        + '<td>' + stTxt(r.st) + '</td>'
         + '<td>' + fmtDT(r.time) + '</td></tr>';
     });
     return h + '</table>';
@@ -420,9 +443,11 @@
         + '<div class="col">'
         + '<div class="frow" data-row="caseNo"><label>' + T('fieldCaseNo', '住院号') + '</label><div class="ctl"><div class="inp flex"></div></div></div>'
         + '<div class="frow" data-row="petName"><label><span style="color:#f0483e">*</span>' + T('fieldPetName', '宠物名') + '</label><div class="ctl"><div class="inp flex"></div></div></div>'
-        + '<div class="frow" data-row="age"><label>' + T('fieldAge', '年龄') + '</label><div class="ctl"><div class="inp flex icu-field-row"><input class="icu-input" data-field="age" value="">' + au + '</div></div></div>'
-        + '<div class="frow"><label>' + T('fieldSex', '性别') + '</label><div class="ctl"><div class="chips cols3"><div class="chip" data-sex="female">' + T('sexFemale', '雌性') + '</div><div class="chip on" data-sex="male">' + T('sexMale', '雄性') + '</div><div class="chip" data-sex="unknown">' + T('sexUnknown', '未知') + '</div></div></div></div>'
-        + '<div class="frow" style="align-items:flex-start" data-row="species"><label style="padding-top:16px">' + T('fieldSpecies', '物种') + '</label><div class="ctl"><div class="chips cols3">' + sp + '</div><div class="species-other" hidden><input data-other-species maxlength="10" placeholder="' + T('fieldOtherSpecies', '其他物种') + '"></div></div></div>'
+        + '<div class="frow" data-row="age"><label><span style="color:#f0483e">*</span>' + T('fieldAge', '年龄') + '</label><div class="ctl"><div class="inp flex icu-field-row"><input class="icu-input" data-field="age" value="">' + au + '</div></div></div>'
+        + '<div class="frow"><label><span style="color:#f0483e">*</span>' + T('fieldSex', '性别') + '</label><div class="ctl"><div class="chips cols3"><div class="chip" data-sex="female">' + T('sexFemale', '雌性') + '</div><div class="chip on" data-sex="male">' + T('sexMale', '雄性') + '</div><div class="chip" data-sex="unknown">' + T('sexUnknown', '未知') + '</div></div></div></div>'
+        /* ★ 2026-10-15 V48：「其它」物种改为 chip 本体内联输入（bridge 点击后把 chip 换成输入框），
+           不再用独立的 .species-other 输入框（旧实现有双击才弹出、点其他物种不收起的 bug） */
+        + '<div class="frow" style="align-items:flex-start" data-row="species"><label style="padding-top:16px">' + T('fieldSpecies', '物种') + '</label><div class="ctl"><div class="chips cols3">' + sp + '</div></div></div>'
         + '<div class="frow" data-row="ownerName"><label>' + T('fieldOwner', '宠物主人') + '</label><div class="ctl"><div class="inp flex"></div></div></div>'
         + '</div>'
         + '<div class="col">'
@@ -930,10 +955,10 @@
   /* ======================================================================
      p13 回顾列表
      ====================================================================== */
-  /* 回顾列表（对齐设计图 13.png：住院号 / 宠物名 / 物种 / 宠物主人 / 联系电话 / 医生 / 病症 / 创建时间）
-     —— 原「护疗类型」列在改版设计图中已删除 */
+  /* 回顾列表（对齐设计图 13.png：住院号 / 宠物名 / 物种 / 宠物主人 / 联系电话 / 医生 / 病症 / 状态 / 创建时间）
+     —— 原「护疗类型」列在改版设计图中已删除；★ V48：与护疗列表一致补「状态」列 */
   function reviewTable(selFirst) {
-    const head = [T('fieldCaseNo', '住院号'), T('fieldPetName', '宠物名'), T('fieldSpecies', '物种'), T('fieldOwner', '宠物主人'), T('fieldPhone', '联系电话'), T('colDoctor', '医生'), T('colDisease', '病症'), T('colCreateTime', '创建时间')];
+    const head = [T('fieldCaseNo', '住院号'), T('fieldPetName', '宠物名'), T('fieldSpecies', '物种'), T('fieldOwner', '宠物主人'), T('fieldPhone', '联系电话'), T('colDoctor', '医生'), T('colDisease', '病症'), T('colStatus', '状态'), T('colCreateTime', '创建时间')];
     let t = '<table class="tbl list" style="font-size:21px"><tr><th class="ck"></th>'
       + head.map(function (x) { return '<th>' + x + '</th>'; }).join('') + '</tr>';
     D.reviewRows.forEach(function (r, i) {
@@ -942,7 +967,8 @@
       t += '<tr class="' + (on ? 'sel' : '') + '" data-caseid="' + (r.caseId || '') + '"><td class="ck"><span class="ckbox' + (on ? ' on' : '') + '"></span></td>'
         + '<td>' + r.no + '</td><td>' + r.name + '</td><td>' + spTxt(r.sp) + '</td>'
         + '<td>' + r.owner + '</td><td>' + r.tel + '</td><td>' + r.doc + '</td>'
-        + '<td><input class="iln-in" data-disease data-caseid="' + (r.caseId || '') + '" value="' + (r.illness || '') + '" placeholder="' + T('phDisease', '请输入') + '" maxlength="20"></td>'
+        + '<td><input class="iln-in" data-disease data-caseid="' + (r.caseId || '') + '" value="' + dTxt(r.illness) + '" placeholder="' + T('phDisease', '请输入') + '" maxlength="20"></td>'
+        + '<td>' + stTxt(r.st) + '</td>'
         + '<td>' + fmtDT(r.time) + '</td></tr>';
     });
     return t + '</table>';
@@ -1238,15 +1264,23 @@
       }
       var hospLogo = logoBox(org.logoUri, T('noLogo', '暂无\nLOGO'));
       var footLogo = logoBox(st.footerLogoUri, T('noLogo', '暂无\nLOGO'));
-      /* ★ 2026-10-10 #57：可用打印机列表 —— NSD 扫描结果只显示打印机名，点击即添加为打印机地址 */
+      /* ★ 2026-10-10 #57：可用打印机列表 —— NSD 扫描结果只显示打印机名，点击即添加为打印机地址
+         ★ 2026-10-15 V48：合并手动添加的地址簿（D.printerSaved，localStorage 持久），
+           添加成功后即出现在列表可被选择；当前生效地址高亮（.on）。 */
       var scan = D.printerScan || { scanning: false, printers: [] };
+      var curAddr = (D.settings && D.settings.printerAddress) || '';
+      var pitems = [];
+      (scan.printers || []).forEach(function (p) { if (p && p.addr) pitems.push({ addr: p.addr, name: p.name || p.addr }); });
+      (D.printerSaved || []).forEach(function (sp) {
+        if (sp && sp.addr && !pitems.some(function (x) { return x.addr === sp.addr; })) pitems.push({ addr: sp.addr, name: sp.name || sp.addr });
+      });
       var plist;
       if (scan.scanning) {
         plist = '<div class="inp flex" style="align-items:center;color:#575f6b">' + T('scanningPrinters', '正在扫描打印机…') + '</div>';
-      } else if (scan.printers.length) {
-        plist = '<div class="printer-list">' + scan.printers.map(function (p) {
-          return '<div class="printer-item" data-printer-addr="' + (p.addr || '') + '" data-printer-name="' + (p.name || '') + '">'
-            + '<span class="pname">' + (p.name || '') + '</span></div>';
+      } else if (pitems.length) {
+        plist = '<div class="printer-list">' + pitems.map(function (p) {
+          return '<div class="printer-item' + (p.addr === curAddr ? ' on' : '') + '" data-printer-addr="' + esc(p.addr) + '" data-printer-name="' + esc(p.name) + '">'
+            + '<span class="pname">' + p.name + '</span></div>';
         }).join('') + '</div>';
       } else {
         plist = '<div class="inp flex" style="align-items:center;color:#9aa6b6">' + T('noPrinterFound', '未发现打印机，请点「扫描」或手动输入地址') + '</div>';

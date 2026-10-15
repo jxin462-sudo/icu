@@ -1575,9 +1575,12 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         host.put("pendingStatusLightColor", safeJsonText(bleManager.getPendingStatusLightColor()));
         host.put("pendingControls", safeJsonText(bleManager.getPendingControlNames()));
         host.put("infraredTemp", safeJsonText(bleManager.getInfraredTempText()));
-        // ★ V25：主控页治疗时长按 HH:MM:SS 时钟格式；状态页另用 treatmentHours（小数小时）
-        host.put("treatmentTime", safeJsonText(bleManager.getTreatmentTimeClockText()));
-        host.put("treatmentHours", safeJsonText(bleManager.getTreatmentTimeHoursText()));
+        /* ★ 2026-10-15 V48：治疗时长改由选中样本的护疗开始时间计算（点「开始护疗」即起算），
+           不再依赖 BleManager 的治疗开关累计（未开治疗功能时恒 --）；
+           已结束样本按 结束-开始 冻结显示。格式不变：主控 HH:MM:SS、状态页小数小时（V25）。 */
+        long treatElapsedMs = dashboardView.currentCaseTreatmentElapsedMs();
+        host.put("treatmentTime", formatTreatmentClockText(treatElapsedMs));
+        host.put("treatmentHours", formatTreatmentHoursText(treatElapsedMs));
         host.put("treatmentMinutes", bleManager.getTreatmentMinutesValue() == null
                 ? 0 : bleManager.getTreatmentMinutesValue());
         host.put("treatmentRemainingMs", bleManager.getCountdownRemainingMs(15));
@@ -1756,6 +1759,20 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
 
     private String safeJsonText(String value) {
         return value == null ? "" : value;
+    }
+
+    /* ★ 2026-10-15 V48：治疗时长显示格式化（源=IcuDashboardView.currentCaseTreatmentElapsedMs，
+       点开始护疗起算）。-1=无计时 → "--"，与 V25 原格式一致 */
+    private static String formatTreatmentClockText(long ms) {
+        if (ms < 0L) return "--";
+        int totalSeconds = (int) (ms / 1000L);
+        return String.format(java.util.Locale.US, "%02d:%02d:%02d",
+                totalSeconds / 3600, (totalSeconds % 3600) / 60, totalSeconds % 60);
+    }
+
+    private static String formatTreatmentHoursText(long ms) {
+        if (ms < 0L) return "--";
+        return String.format(java.util.Locale.US, "%.1f", ms / 3600000.0);
     }
 
     private final class LanhuNativeBridge {
