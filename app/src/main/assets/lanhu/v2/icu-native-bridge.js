@@ -306,6 +306,14 @@
       D.selCaseId = (S.patient && S.patient.caseId) || '';
 
       var h = S.host || {}, c = h.controls || {};
+      // ★ V56b:补偿(校准)偏移应用到显示读数——仅影响界面呈现,不改设备原始值/不改下发。
+      //   与 V56 的 set_*_comp 下发互补:固件若不支持补偿命令,也能在 App 内看到校准后的读数。
+      var compVals = (D.compVals && D.compVals.length >= 5) ? D.compVals : [0, 0, 0, 0, 0];
+      function comped(raw, idx) {
+        var off = compVals[idx] || 0;
+        if (raw == null || raw === '' || isNaN(parseFloat(raw))) return raw;
+        return parseFloat(raw) + off;
+      }
       D.hospital = (S.organization && S.organization.name) || '';
       /* ★ 任务31：打印设置同步进治疗记录单预览 —— 医院名/电话/地址/医院LOGO/页脚LOGO/报告标题/报告声明。
          此前 D.sheet.foot 等字段无人赋值，预览永远显示空值与占位「LOGO」文本 */
@@ -325,8 +333,8 @@
       /* ★ V22：主机蓝牙未连接时状态页/主控页主机数据全部空值+关闭态 */
       var hostUp = !!((S.host && S.host.connected) || (S.ble && S.ble.host && S.ble.host.connected));
       D.status = {
-        temp: hostUp ? num(h.temp, '--') : '--', o2: hostUp ? num(h.oxygen, '--') : '--', hum: hostUp ? num(h.humidity, '--') : '--',
-        co2: hostUp ? num(h.co2, '--') : '--', irTemp: hostUp ? num(h.infraredTemp, '--') : '--', dur: text(h.treatmentHours, '--'),
+        temp: hostUp ? num(comped(h.temp, 0), '--') : '--', o2: hostUp ? num(comped(h.oxygen, 1), '--') : '--', hum: hostUp ? num(comped(h.humidity, 2), '--') : '--',
+        co2: hostUp ? num(comped(h.co2, 3), '--') : '--', irTemp: hostUp ? num(comped(h.infraredTemp, 4), '--') : '--', dur: text(h.treatmentHours, '--'),
         red: hostUp ? text(c.redTherapy, '--') : '--', blue: hostUp ? text(c.blueTherapy, '--') : '--'
       };
       /* ★ 任务33：AM4100 监护宝实时体征接入。S.monitor.connected 且有数据时填真实值；
@@ -406,13 +414,13 @@
       /* ★ V15 ⑦：row1 环境卡带开关态（temp/氧气/CO2 的 enable 由主机回包驱动；湿度只读，值存在即视为开）
          ★ V22：未连接主机蓝牙时全部空值+关闭态 */
       D.ctrlRow1 = [
-        { tKey: 'ctrlTemp', t: '舱内温度 ℃', v: hostUp ? num(h.temp, '--') : '--', p: 60, set: 1, on: hostUp ? !!c.tempOn : false, ico: 'thermo' },
-        { tKey: 'ctrlO2', t: '氧浓度 %', v: hostUp ? num(h.oxygen, '--') : '--', p: 43, set: 1, on: hostUp ? !!c.oxygenOn : false, ico: 'o2' },
+        { tKey: 'ctrlTemp', t: '舱内温度 ℃', v: hostUp ? num(comped(h.temp, 0), '--') : '--', p: 60, set: 1, on: hostUp ? !!c.tempOn : false, ico: 'thermo' },
+        { tKey: 'ctrlO2', t: '氧浓度 %', v: hostUp ? num(comped(h.oxygen, 1), '--') : '--', p: 43, set: 1, on: hostUp ? !!c.oxygenOn : false, ico: 'o2' },
         /* ★ 2026-10-13：恢复湿度开关/设置（用户要求加回）。协议上固件忽略 set_humidity，
            但产品需要入口：开关态由主机回包 controls.humidityOn 驱动，未连接显示关闭态。
            整卡点击走 .ctrl.ro 分支（主动 get_humidity 回显）——该分支已无 ro 卡时自然失效。 */
-        { tKey: 'ctrlHum', t: '湿度 %', v: hostUp ? num(h.humidity, '--') : '--', p: 35, set: 1, on: hostUp ? !!c.humidityOn : false, ico: 'drop' },
-        { tKey: 'ctrlCo2', t: '二氧化碳浓度 PPM', v: hostUp ? num(h.co2, '--') : '--', p: 66, set: 1, on: hostUp ? !!c.co2On : false, ico: 'co2' },
+        { tKey: 'ctrlHum', t: '湿度 %', v: hostUp ? num(comped(h.humidity, 2), '--') : '--', p: 35, set: 1, on: hostUp ? !!c.humidityOn : false, ico: 'drop' },
+        { tKey: 'ctrlCo2', t: '二氧化碳浓度 PPM', v: hostUp ? num(comped(h.co2, 3), '--') : '--', p: 66, set: 1, on: hostUp ? !!c.co2On : false, ico: 'co2' },
         { tKey: 'ctrlLevel', t: '监护等级', v: '', level: 1 }
       ];
       /* ★ V22：定时控件显示态 —— 未连接/无样本→'--'；关闭→'关'（不再显示遗留时长）；
