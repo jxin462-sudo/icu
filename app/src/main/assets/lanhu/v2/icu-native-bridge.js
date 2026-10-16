@@ -302,6 +302,10 @@
         [TT('verBt', '蓝牙版本'), vhVal(vhHost.btVersion)]
       ] : [];
       D.verHist = Array.isArray(S.versionHistory) ? S.versionHistory : [];
+      /* ★ 2026-10-16 V58：设备信息（设置-常规 型号/机号/生产日期，工程师可编辑）
+         + 平板基础信息（关于页基础信息卡，原生 Build.* 真实值） */
+      D.deviceProfile = S.deviceProfile || {};
+      D.padInfo = S.padInfo || {};
       // 当前选中的病例 caseId（用于表格行 sel 类）
       D.selCaseId = (S.patient && S.patient.caseId) || '';
 
@@ -1112,6 +1116,20 @@
 
     /* ★ 2026-10-09 升级·软件页「选择文件」：打开微信文件传输助手覆盖层 */
     if (e.target.closest('[data-apk-update]')) { stop(e); act('apk_update_open'); return; }
+
+    /* ★ 2026-10-16 V58：设置-常规 设备信息保存（仅工程师；原生 applyDeviceProfileFromText 另有门禁兜底） */
+    var devSaveBtn = e.target.closest('[data-devsave]');
+    if (devSaveBtn) {
+      stop(e);
+      if ((D.accountRole || '') !== 'service') { toast(TT('devNoPerm', '无权限：设备信息仅工程师可修改')); return; }
+      var _rv = function (sel) { var el = document.querySelector(sel); return el ? String(el.value || '').trim() : ''; };
+      act('device_profile_save', JSON.stringify({
+        model: _rv('input[data-dev-model]'),
+        sn: _rv('input[data-dev-sn]'),
+        prodDate: _rv('input[data-dev-prod]')
+      }));
+      return;
+    }
 
     /* ★ 2026-10-08 蓝牙设备选择弹窗：点设备=连接；重新搜索；取消=停止扫描并关闭 */
     if (D.blePick) {

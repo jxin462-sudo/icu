@@ -41,6 +41,9 @@
       fieldOwner: '宠物主人', fieldPhone: '联系电话', fieldDoctor: '主治医生',
       setGeneral: '常规', setConn: '连接', setTransfer: '传输', setPrint: '打印', setUser: '用户', setUpgrade: '升级',
       lang: '语言', time: '时间', model: '型号', sn: '机号/SN', prodDate: '生产日期', reset: '恢复', factoryReset: '恢复出厂设置',
+      /* ★ 2026-10-16 V58：设备信息保存（仅工程师）+ 关于页基础信息 */
+      devSave: '保存', devNoPerm: '无权限：设备信息仅工程师可修改',
+      abProductModel: '产品型号', abPadModel: '平板型号', abManufacturer: '制造商', abAndroid: 'Android 版本',
       langZh: '中文', langEn: 'English', sexFemale: '雌性', sexMale: '雄性', sexUnknown: '未知',
       ageDay: '天', ageMonth: '月', ageYear: '岁',
       speciesDog: '犬', speciesCat: '猫', speciesRabbit: '兔', speciesLizard: '蜥蜴', speciesSnake: '蛇', speciesOther: '其它',
@@ -68,6 +71,9 @@
       fieldOwner: 'Owner', fieldPhone: 'Phone', fieldDoctor: 'Doctor',
       setGeneral: 'General', setConn: 'Connection', setTransfer: 'Transfer', setPrint: 'Print', setUser: 'Users', setUpgrade: 'Upgrade',
       lang: 'Language', time: 'Time', model: 'Model', sn: 'S/N', prodDate: 'Mfg. Date', reset: 'Reset', factoryReset: 'Factory Reset',
+      /* ★ 2026-10-16 V58 */
+      devSave: 'Save', devNoPerm: 'No permission: device info editable by Engineer only',
+      abProductModel: 'Product Model', abPadModel: 'Pad Model', abManufacturer: 'Manufacturer', abAndroid: 'Android Version',
       langZh: '中文', langEn: 'English', sexFemale: 'Female', sexMale: 'Male', sexUnknown: 'Unknown',
       ageDay: 'Day', ageMonth: 'Month', ageYear: 'Year',
       speciesDog: 'Dog', speciesCat: 'Cat', speciesRabbit: 'Rabbit', speciesLizard: 'Lizard', speciesSnake: 'Snake', speciesOther: 'Other',
@@ -1165,20 +1171,32 @@
       var langSel = '<select class="icu-input lang-select" data-langsel>'
         + '<option value="zh"' + (isEn ? '' : ' selected') + '>' + T('langZh', '中文') + '</option>'
         + '<option value="en"' + (isEn ? ' selected' : '') + '>' + T('langEn', 'English') + '</option></select>';
-      return setPage('set-general',
-        '<div style="width:960px;margin:0 auto">'
-        + frow(T('lang', '语言'), '<div class="inp" style="width:400px">' + langSel + '</div>')
-        /* ★ 2026-09-30：时间自动显示系统当前时间（bridge 每秒刷新 [data-sysclock]）；「应用/格式」按钮无实际功能，已按用户要求删除 */
-        + frow(T('time', '时间'), '<div class="inp" style="width:400px"><span data-sysclock>' + T('dateTimePh', '----年--月--日 --:--:--') + '</span></div>')
-        /* ★ 任务16(#10)：删除「工程师参数（出厂后不可修改，置灰）」提示行 */
-        + frow(T('model', '型号'), '<div class="inp dis" style="width:400px"></div>')
-        + frow(T('sn', '机号/SN'), '<div class="inp dis" style="width:400px"></div>')
-        + frow(T('prodDate', '生产日期'), '<div class="inp dis" style="width:400px"></div>')
-        /* ★ 任务15(#12)：恢复出厂设置已移到「调试」页第 6 个模块 */
-        + '</div>'
-        + A(560, 330, '（这三个工程师账号可编辑，出厂后不可修改，为灰色）', 'plain'));
-    }
-  };
+        /* ★ 2026-10-16 V58：型号/机号/生产日期 接真实 deviceProfile（原生持久化、随状态每秒下发）。
+           V1.02：仅工程师可录入——service 角色渲染输入框+保存按钮；其他角色只读置灰（原生另有门禁）。
+           保存后关于页「基础信息」同源显示（满足「与主机/关于信息一致」）。 */
+        var dp = D.deviceProfile || {};
+        var isSvc = (D.accountRole || '') === 'service';
+        var devRow = function (labelKey, labelFb, attr, v, ph, type) {
+          var inner = isSvc
+            ? '<div class="inp flex" style="width:400px"><input type="' + (type || 'text') + '" class="icu-input" ' + attr
+              + ' maxlength="40" placeholder="' + ph + '" value="' + esc(v || '') + '"></div>'
+            : '<div class="inp dis" style="width:400px">' + esc(v || '') + '</div>';
+          return frow(T(labelKey, labelFb), inner);
+        };
+        return setPage('set-general',
+          '<div style="width:960px;margin:0 auto">'
+          + frow(T('lang', '语言'), '<div class="inp" style="width:400px">' + langSel + '</div>')
+          /* ★ 2026-09-30：时间自动显示系统当前时间（bridge 每秒刷新 [data-sysclock]）；「应用/格式」按钮无实际功能，已按用户要求删除 */
+          + frow(T('time', '时间'), '<div class="inp" style="width:400px"><span data-sysclock>' + T('dateTimePh', '----年--月--日 --:--:--') + '</span></div>')
+          /* ★ 任务16(#10)：删除「工程师参数（出厂后不可修改，置灰）」提示行 */
+          + devRow('model', '型号', 'data-dev-model', dp.productModel, 'EM-150Vet-20')
+          + devRow('sn', '机号/SN', 'data-dev-sn', dp.serialNo, '')
+          + devRow('prodDate', '生产日期', 'data-dev-prod', dp.manufactureDate, '', 'date')
+          + (isSvc ? '<div style="text-align:right;margin-top:8px"><div class="btn primary" data-devsave="1">' + T('devSave', '保存') + '</div></div>' : '')
+          /* ★ 任务15(#12)：恢复出厂设置已移到「调试」页第 6 个模块 */
+          + '</div>');
+      }
+    };
 
   /* p20 设置·连接 */
   /* ★ 2026-10-08 蓝牙设备选择弹窗：主机/监护分开（D.blePick='host'|'monitor'）
@@ -1463,7 +1481,18 @@
      「刷新」走原生 version_refresh 重查设备版本。 */
   SCREENS['about'] = {
     name: '关于', group: '5 设置', render() {
-      const base = D.aboutBase.map(function (x) { return '<div class="ln"><span style="flex:1">' + x + '</span></div>'; }).join('');
+      /* ★ 2026-10-16 V58：基础信息卡填真实数据 —— 设备信息（设置-常规工程师维护的 deviceProfile，
+         与其同源保证一致）+ 平板真实信息（原生 Build.* 下发的 padInfo）；只读展示（不可编辑项置灰语义无输入框） */
+      var dp = D.deviceProfile || {}, pi = D.padInfo || {};
+      var baseRows = [
+        [T('abProductModel', '产品型号'), dp.productModel || '--'],
+        [T('sn', '机号/SN'), dp.serialNo || '--'],
+        [T('prodDate', '生产日期'), dp.manufactureDate || '--'],
+        [T('abPadModel', '平板型号'), pi.model || '--'],
+        [T('abManufacturer', '制造商'), pi.manufacturer || '--'],
+        [T('abAndroid', 'Android 版本'), pi.android ? String(pi.android) + (pi.sdk ? '（SDK ' + pi.sdk + '）' : '') : '--']
+      ];
+      const base = baseRows.map(function (x) { return '<div class="ln"><span class="k">' + x[0] + '</span><span>' + esc(x[1]) + '</span></div>'; }).join('');
       const ver = D.aboutVer.map(function (v) {
         return '<div class="ln"><span class="k">' + (v[0] || '') + '</span><span>' + v[1] + '</span></div>';
       }).join('');

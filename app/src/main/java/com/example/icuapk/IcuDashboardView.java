@@ -1166,6 +1166,16 @@ public class IcuDashboardView extends View {
             // 页面通用数据绑定使用顶层 host；与 ble.host 共用同一份实时主机状态，避免跨页面字段不一致。
             root.put("host", ble.optJSONObject("host"));
             root.put("deviceProfile", deviceProfileToJson());
+            // ★ 2026-10-16 V58：关于页「基础信息」读平板真实信息（Build.*）
+            try {
+                JSONObject pad = new JSONObject();
+                pad.put("model", Build.MODEL == null ? "" : Build.MODEL);
+                pad.put("manufacturer", Build.MANUFACTURER == null ? "" : Build.MANUFACTURER);
+                pad.put("android", Build.VERSION.RELEASE == null ? "" : Build.VERSION.RELEASE);
+                pad.put("sdk", Build.VERSION.SDK_INT);
+                root.put("padInfo", pad);
+            } catch (JSONException ignored) {
+            }
             root.put("camera", cameraStateToJson());
             // ★ 2026-10-08 日志页：用户/操作日志（userOpLog）推给 H5，倒序（最新在前）
             root.put("userLogs", userLogsToJson());
@@ -3489,6 +3499,36 @@ public class IcuDashboardView extends View {
             }
         } catch (JSONException ignored) {
         }
+    }
+
+    /* ★ 2026-10-16 V58：设置-常规「型号/机号/生产日期」保存。
+       V1.02：由工程师权限账号录入，其余角色只读置灰——H5 侧已按角色渲染，此处原生门禁兜底。
+       值写入既有 DeviceProfile（productModel/serialNo/manufactureDate），随全量状态每秒下发，
+       关于页「基础信息」同源显示，满足「与主机/关于信息一致」。 */
+    void applyDeviceProfileFromText(String text) {
+        if (!accountStore.isCurrentService()) {
+            Toast.makeText(activity, "无权限：设备信息仅工程师可修改", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            JSONObject obj = new JSONObject(text == null ? "" : text);
+            deviceProfile.productModel = cap(obj.optString("model", deviceProfile.productModel), 40);
+            deviceProfile.serialNo = cap(obj.optString("sn", deviceProfile.serialNo), 40);
+            deviceProfile.manufactureDate = cap(obj.optString("prodDate", deviceProfile.manufactureDate), 20);
+            saveUiSettings();
+            if (activity != null) activity.notifyLanhuStateChanged();
+            Toast.makeText(activity, "设备信息已保存", Toast.LENGTH_SHORT).show();
+            appendUserLog("设置", "设备信息", "型号=" + deviceProfile.productModel
+                    + " 机号=" + deviceProfile.serialNo + " 生产日期=" + deviceProfile.manufactureDate);
+        } catch (JSONException e) {
+            Toast.makeText(activity, "保存失败: " + e.getMessage(), Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    private static String cap(String s, int max) {
+        if (s == null) return "";
+        s = s.trim();
+        return s.length() > max ? s.substring(0, max) : s;
     }
 
     /** 恢复出厂：清空 S5 设置、仪器档案、机构、监护设置（账号权限由独立文件保留）。 */

@@ -1931,6 +1931,11 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
                         dashboardView.applyS5SettingsFromText(text);
                         return;
                     }
+                    // ★ 2026-10-16 V58：设置-常规 设备信息（型号/机号/生产日期）保存，原生侧角色门禁
+                    if ("device_profile_save".equals(action)) {
+                        dashboardView.applyDeviceProfileFromText(text);
+                        return;
+                    }
                     if ("camera_preview_pause".equals(action)) {
                         pauseCameraPreviewForPrintPreview();
                         return;
