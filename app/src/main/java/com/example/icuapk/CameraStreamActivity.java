@@ -295,8 +295,11 @@ public class CameraStreamActivity extends Activity {
                 notifyStatus("正在建立RTSP连接: " + host + ":" + port);
                 /* ★ 2026-10-15 V55：TCP 连接失败单独捕获，给出面向用户的网络层排查提示，
                    与「认证失败/H265/路径错」区分开，避免"连接不上"时无从下手 */
+                /* ★ 2026-10-16 V59：补 8s 连接超时——new Socket(host,port) 无超时，IP 不通时
+                   会卡在「正在建立RTSP连接」长达数分钟（等 OS 层 SYN 超时） */
                 try {
-                    socket = new Socket(host, port);
+                    socket = new Socket();
+                    socket.connect(new java.net.InetSocketAddress(host, port), 8000);
                 } catch (IOException connectEx) {
                     throw new IOException("无法连接摄像头 " + host + ":" + port
                             + "（网络层失败：请确认平板与摄像头在同一局域网、IP 正确、"

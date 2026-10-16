@@ -1167,9 +1167,12 @@ public class IcuDashboardView extends View {
             root.put("host", ble.optJSONObject("host"));
             root.put("deviceProfile", deviceProfileToJson());
             // ★ 2026-10-16 V58：关于页「基础信息」读平板真实信息（Build.*）
+            // ★ 2026-10-16 V59：型号与安卓系统「关于平板」显示对齐——优先 Build.MODEL（系统设置里显示的型号），
+            //   为空依次回退 DEVICE/PRODUCT；品牌含在型号里时制造商行自然同源
             try {
                 JSONObject pad = new JSONObject();
-                pad.put("model", Build.MODEL == null ? "" : Build.MODEL);
+                String padModel = firstNonEmpty(Build.MODEL, firstNonEmpty(Build.DEVICE, Build.PRODUCT == null ? "" : Build.PRODUCT));
+                pad.put("model", padModel);
                 pad.put("manufacturer", Build.MANUFACTURER == null ? "" : Build.MANUFACTURER);
                 pad.put("android", Build.VERSION.RELEASE == null ? "" : Build.VERSION.RELEASE);
                 pad.put("sdk", Build.VERSION.SDK_INT);

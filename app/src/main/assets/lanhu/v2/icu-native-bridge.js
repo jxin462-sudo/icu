@@ -1898,9 +1898,31 @@
   function reportCamera(cur) {
     var n = N();
     if (!n || !n.cameraPreview) return;
-    var sel = (cur === 'video') ? '.video-view .fisheye' : (cur === 'status') ? '.cam.big .fisheye' : null;
+    /* ★ 2026-10-16 V59：上报目标从 .fisheye 改为其父容器（.video-view / .cam.big）——
+       .fisheye 用 left:50%+transform:translate(-50%,-50%) 居中，offsetLeft 链不含 transform 会算偏；
+       容器是纯布局盒无 transform，offsetLeft 链精确。 */
+    var sel = (cur === 'video') ? '.video-view' : (cur === 'status') ? '.cam.big' : null;
     var el = sel ? document.querySelector(sel) : null;
     if (!el) { try { n.cameraPreview(0, 0, 0, 0, 0, 0, false); } catch (e) {} return; }
+    /* ★ 2026-10-16 V59：zoom 免疫的区域上报（大黑画面病根）——
+       本 WebView 的 getBoundingClientRect 返回未乘 stage zoom 的布局像素，且不含 #viewport
+       对缩放后 stage 的居中偏移；原生再乘 scaleX 换算后位置/尺寸全错（预览盖过右栏、
+       底部操作条被顶出可视区）。改用 offsetLeft 链拿 stage 内布局坐标（V45 菜单同款方案），
+       自行乘 zoom 并加居中偏移，得到真实可视 CSS px 再交给原生换算物理像素。 */
+    var stage = document.getElementById('stage');
+    var x = 0, y = 0, node = el;
+    while (node && node !== stage && node !== document.body) { x += node.offsetLeft; y += node.offsetTop; node = node.offsetParent; }
+    if (node === stage && stage) {
+      var k = parseFloat(stage.style.zoom) || 1;
+      var vw = window.innerWidth || 1280, vh = window.innerHeight || 800;
+      var stageW = (stage.offsetWidth || 1920) * k, stageH = (stage.offsetHeight || 1200) * k;
+      /* 居中偏移可为负（stage 大于窗口时 flex 仍居中，溢出两侧对称——不可钳 0） */
+      var offX = (vw - stageW) / 2, offY = (vh - stageH) / 2;
+      try {
+        n.cameraPreview(offX + x * k, offY + y * k, el.offsetWidth * k, el.offsetHeight * k, vw, vh, true);
+      } catch (e) {}
+      return;
+    }
     var r = el.getBoundingClientRect();
     try {
       n.cameraPreview(r.left, r.top, r.width, r.height,

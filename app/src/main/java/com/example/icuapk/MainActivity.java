@@ -576,8 +576,13 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
             return;
         }
         // 任务9：未配置摄像头地址时不再显示原生黑块（遮挡视频页），让 H5 灰色占位露出
+        /* ★ 2026-10-16 V59：用户点过「取消连接」则保持隐藏（停留在本页期间不自动拉起）；
+           离开页面（visible=false）自动解除闩锁，回来重新连接 */
+        if (!visible) {
+            cameraInlinePreviewView.clearCancelledByUser();
+        }
         lastInlineCameraVisible = visible && bounds != null && bounds.width() > 2 && bounds.height() > 2
-                && cleanedUrls.length > 0;
+                && cleanedUrls.length > 0 && !cameraInlinePreviewView.isCancelledByUser();
         lastInlineCameraBounds = lastInlineCameraVisible ? new RectF(bounds) : null;
         if (!lastInlineCameraVisible || lastInlineCameraBounds == null) {
             cameraInlinePreviewView.setActive(false);
@@ -646,6 +651,13 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         overlay.setClickable(true);
 
         cameraFullscreenPreviewView = new CameraInlinePreviewView(this);
+        /* ★ 2026-10-16 V59：全屏实例的「取消连接」= 退出全屏回页面（闩锁仍由该实例自持） */
+        cameraFullscreenPreviewView.setCancelListener(new CameraInlinePreviewView.CancelListener() {
+            @Override
+            public void onCancel() {
+                dismissCameraFullscreenOverlay();
+            }
+        });
         overlay.addView(cameraFullscreenPreviewView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
@@ -722,6 +734,11 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         if (thermalFullscreenVisible) {
             cameraInlinePreviewView.setActive(false);
             cameraInlinePreviewView.setVisibility(View.GONE);
+            return;
+        }
+        /* ★ 2026-10-16 V59：用户已点「取消连接」则不自动恢复预览 */
+        if (cameraInlinePreviewView.isCancelledByUser()) {
+            cameraInlinePreviewView.setActive(false);
             return;
         }
         if (!lastInlineCameraVisible || lastInlineCameraBounds == null) {

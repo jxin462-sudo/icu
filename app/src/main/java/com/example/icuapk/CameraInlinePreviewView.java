@@ -30,11 +30,22 @@ final class CameraInlinePreviewView extends FrameLayout {
     private Surface previewSurface;
     private Bitmap lastFrameBitmap;
     private CameraStreamActivity.RtspH264Client rtspClient;
+    /* ★ 2026-10-16 V59：用户点「取消连接」后的闩锁——停留在本页期间不再自动拉起预览，
+       离开页面（H5 上报 visible=false）或改地址/点重新连接时解除（见 MainActivity 调用点） */
+    private boolean cancelledByUser;
+    /* ★ 2026-10-16 V59：「取消连接」回调——内嵌预览默认自行隐藏；全屏实例由宿主改为退出全屏 */
+    interface CancelListener { void onCancel(); }
+    private CancelListener cancelListener;
+
+    void setCancelListener(CancelListener listener) { cancelListener = listener; }
+    boolean isCancelledByUser() { return cancelledByUser; }
+    void clearCancelledByUser() { cancelledByUser = false; }
 
     CameraInlinePreviewView(MainActivity activity) {
         super(activity);
         host = activity;
-        setBackgroundColor(Color.BLACK);
+        /* ★ 2026-10-16 V59：背景由纯黑改设计稿视频区深灰(#4d4d4d)——连接中不再是大黑画面（对齐 9.png） */
+        setBackgroundColor(Color.rgb(0x4d, 0x4d, 0x4d));
         setVisibility(View.GONE);
         setClickable(false);
 
@@ -81,6 +92,9 @@ final class CameraInlinePreviewView extends FrameLayout {
         addView(statusText, statusParams);
 
         /* ★ 2026-10-15 V52：失败操作条 —— 「重试」重连当前配置；「重新配置」直接打开摄像头配置弹窗重新输入 */
+        /* ★ 2026-10-15 V52：失败操作条 —— 「重试」重连当前配置；「重新配置」直接打开摄像头配置弹窗重新输入
+           ★ 2026-10-16 V59：扩为三键「重新连接/取消连接/重新配置」，且连接中也常驻（此前仅失败才露出，
+           连接卡住时用户无任何可操作入口）；收到首帧（解码器启动）后自动收起 */
         failureBar = new LinearLayout(activity);
         failureBar.setOrientation(LinearLayout.HORIZONTAL);
         failureBar.setGravity(Gravity.CENTER);
@@ -88,23 +102,42 @@ final class CameraInlinePreviewView extends FrameLayout {
         failureBar.setBackgroundColor(Color.argb(170, 0, 0, 0));
         failureBar.setVisibility(View.GONE);
         Button retryButton = new Button(activity);
-        retryButton.setText("重试");
+        retryButton.setText("重新连接");
         retryButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                cancelledByUser = false;
                 restartPreview(streamUrls);
             }
         });
-        failureBar.addView(retryButton, new LinearLayout.LayoutParams(dp(92), dp(40)));
+        failureBar.addView(retryButton, new LinearLayout.LayoutParams(dp(118), dp(40)));
+        Button cancelButton = new Button(activity);
+        cancelButton.setText("取消连接");
+        cancelButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                cancelledByUser = true;
+                stopPreview();
+                if (cancelListener != null) {
+                    cancelListener.onCancel();   // 全屏实例：退出全屏回页面
+                } else {
+                    setActive(false);            // 内嵌实例：隐藏预览，露出 H5 灰色鱼眼占位
+                }
+            }
+        });
+        LinearLayout.LayoutParams cancelParams = new LinearLayout.LayoutParams(dp(118), dp(40));
+        cancelParams.leftMargin = dp(12);
+        failureBar.addView(cancelButton, cancelParams);
         Button configButton = new Button(activity);
         configButton.setText("重新配置");
         configButton.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
+                cancelledByUser = false;
                 host.openCameraConfigDialog();
             }
         });
-        LinearLayout.LayoutParams configParams = new LinearLayout.LayoutParams(dp(130), dp(40));
+        LinearLayout.LayoutParams configParams = new LinearLayout.LayoutParams(dp(118), dp(40));
         configParams.leftMargin = dp(12);
         failureBar.addView(configButton, configParams);
         FrameLayout.LayoutParams barParams = new FrameLayout.LayoutParams(
@@ -125,6 +158,7 @@ final class CameraInlinePreviewView extends FrameLayout {
         if (nextKey.equals(currentKey)) {
             return;
         }
+        cancelledByUser = false;   // V59：地址变更（重新配置保存）自动解除取消闩锁
         currentKey = nextKey;
         streamUrls = cleaned;
         streamIndex = 0;
@@ -190,7 +224,9 @@ final class CameraInlinePreviewView extends FrameLayout {
     }
 
     private void startPlayback() {
-        failureBar.setVisibility(View.GONE);
+        /* ★ 2026-10-16 V59：连接中也露出操作条（重新连接/取消连接/重新配置），
+           不再等全部失败才出现；收到首帧（解码器启动）后收起 */
+        showFailureActions();
         if (streamIndex >= streamUrls.length) {
             statusText.setText("摄像头候选地址都无法播放");
             showFailureActions();
@@ -201,6 +237,7 @@ final class CameraInlinePreviewView extends FrameLayout {
             return;
         }
         final String url = streamUrls[streamIndex];
+        statusText.setVisibility(View.VISIBLE);   // V59：上次成功播放时被隐藏，重连要恢复
         statusText.setText("内嵌预览连接中 " + (streamIndex + 1) + "/" + streamUrls.length + ": " + maskPassword(url));
         stopPreview();
         rtspClient = new CameraStreamActivity.RtspH264Client(url, previewSurface, new CameraStreamActivity.RtspH264Client.Listener() {
@@ -210,6 +247,11 @@ final class CameraInlinePreviewView extends FrameLayout {
                     @Override
                     public void run() {
                         statusText.setText(message);
+                        /* ★ V59：解码器已启动 = 视频帧即将到来，收起操作条与状态文字 */
+                        if (message != null && message.contains("解码器已启动")) {
+                            failureBar.setVisibility(View.GONE);
+                            statusText.setVisibility(View.GONE);
+                        }
                     }
                 });
             }
@@ -219,6 +261,7 @@ final class CameraInlinePreviewView extends FrameLayout {
                 post(new Runnable() {
                     @Override
                     public void run() {
+                        statusText.setVisibility(View.VISIBLE);   // V59：失败时确保状态文字可见
                         if (!tryNextUrl(message)) {
                             statusText.setText("内嵌预览失败: " + message + "\n当前地址: " + maskPassword(url));
                             showFailureActions();   // V52：全部地址失败 → 露出 重试/重新配置

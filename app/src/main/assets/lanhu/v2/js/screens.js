@@ -1176,9 +1176,11 @@
            保存后关于页「基础信息」同源显示（满足「与主机/关于信息一致」）。 */
         var dp = D.deviceProfile || {};
         var isSvc = (D.accountRole || '') === 'service';
+        /* ★ 2026-10-16 V59：输入框模板与新建样本弹窗一致——.inp 是可见框、内嵌 input 无自身边框背景（不凸显）；
+           容器 width:400px 与语言/时间行对齐（V58 误用 .inp.flex，flex:1 撑满整行导致「太长」） */
         var devRow = function (labelKey, labelFb, attr, v, ph, type) {
           var inner = isSvc
-            ? '<div class="inp flex" style="width:400px"><input type="' + (type || 'text') + '" class="icu-input" ' + attr
+            ? '<div class="inp" style="width:400px;display:flex;align-items:center"><input type="' + (type || 'text') + '" class="icu-input" ' + attr
               + ' maxlength="40" placeholder="' + ph + '" value="' + esc(v || '') + '"></div>'
             : '<div class="inp dis" style="width:400px">' + esc(v || '') + '</div>';
           return frow(T(labelKey, labelFb), inner);
