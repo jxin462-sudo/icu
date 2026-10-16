@@ -1890,7 +1890,8 @@ public class IcuDashboardView extends View {
            （湿度读取与 V20 一致放行；治疗时长说明为本地信息也放行） */
         if (!bleManager.isConnected() && action != null
                 && (action.startsWith("control_temp") || action.startsWith("control_oxygen")
-                    || action.startsWith("control_co2") || action.startsWith("compensation_edit_"))) {
+                    || action.startsWith("control_co2") || action.startsWith("compensation_edit_")
+                    || action.startsWith("compensation_set_"))) {
             Toast.makeText(activity, "主机蓝牙未连接，无法操作主机功能", Toast.LENGTH_SHORT).show();
             return true;
         }
@@ -1962,26 +1963,42 @@ public class IcuDashboardView extends View {
                     .show();
             return true;
         }
-        // ★ 新加:补偿设置页 6 张卡的 +/- 按钮
+        // ★ V56:补偿路径改为"偏移"语义——弹数字框输入补偿偏移量,确认后下发独立 set_*_comp 指令,
+        //   不再复用绝对值设定(旧逻辑会把"温度补偿+1"下成"舱温设成1℃",危险)。
         if ("compensation_edit_temp".equals(action)) {
-            showNumberDialog(0, "温度补偿", "℃", bleManager.getCabinTempValue(), false);
+            showCompensationDialog(0, "温度补偿（偏移）", "℃");
             return true;
         }
         if ("compensation_edit_oxygen".equals(action)) {
-            showNumberDialog(1, "氧浓度补偿", "%", bleManager.getOxygenValue(), false);
+            showCompensationDialog(1, "氧浓度补偿（偏移）", "%");
             return true;
         }
         if ("compensation_edit_humidity".equals(action)) {
-            showNumberDialog(14, "湿度补充", "%", bleManager.getLastSetHumidityValue(), false);
+            showCompensationDialog(2, "湿度补偿（偏移）", "%");
             return true;
         }
         if ("compensation_edit_co2".equals(action)) {
-            showNumberDialog(3, "CO2浓度补偿", "PPM", bleManager.getCo2Value(), false);
+            showCompensationDialog(3, "CO2浓度补偿（偏移）", "PPM");
             return true;
         }
         if ("compensation_edit_infrared".equals(action)) {
-            // ★ 红外体温补偿：直接弹数字输入对话框，调用新加的 setInfraredTemp
-            showInfraredTempCompensationDialog();
+            showCompensationDialog(4, "红外体温补偿（偏移）", "℃");
+            return true;
+        }
+        // ★ V56:调试页 ±1 步进实时下发(参数编码进动作名:compensation_set_<下标>_<值>)
+        if (action.startsWith("compensation_set_")) {
+            String[] parts = action.split("_");
+            if (parts.length >= 4) {
+                try {
+                    int idx = Integer.parseInt(parts[2]);
+                    float val = Float.parseFloat(parts[3]);
+                    boolean sent = bleManager.applyCompensation(idx, val);
+                    showSendResult("补偿设置", sent);
+                } catch (NumberFormatException ex) {
+                    Toast.makeText(activity, "补偿参数解析失败", Toast.LENGTH_SHORT).show();
+                }
+            }
+            invalidate();
             return true;
         }
         if ("compensation_add".equals(action)) {
@@ -1990,9 +2007,9 @@ public class IcuDashboardView extends View {
             return true;
         }
         if ("compensation_save".equals(action)) {
-            // ★ 补偿设置保存：JS 端会先调 evaluateJavascript 把 5 个 input 值传过来
-            //   实际上"每张卡点+/- 已经实时下发 BLE"，这里只做兜底持久化
-            Toast.makeText(activity, "补偿设置已保存", Toast.LENGTH_SHORT).show();
+            // ★ V56:把 5 项已保存的补偿偏移全部重新下发到主控(resync;固件不支持则忽略)
+            bleManager.resyncAllCompensation();
+            Toast.makeText(activity, "补偿设置已保存并下发", Toast.LENGTH_SHORT).show();
             invalidate();
             return true;
         }
@@ -9037,6 +9054,55 @@ public class IcuDashboardView extends View {
                             }
                             boolean sent = bleManager.setInfraredTemp(value);
                             showSendResult("设置红外体温补偿", sent);
+                            invalidate();
+                        } catch (NumberFormatException exception) {
+                            Toast.makeText(activity, "数值格式不正确", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                })
+                .show();
+    }
+
+    /**
+     * ★ V56:补偿偏移输入对话框。与 showNumberDialog 的本质区别:确认后调用 applyCompensation
+     *   下发独立 set_*_comp 指令(偏移语义),绝不走绝对值设定(避免"温度补偿+1"误设舱温为1℃)。
+     */
+    private void showCompensationDialog(final int compIndex, String title, String suffix) {
+        final EditText input = new EditText(activity);
+        input.setSingleLine(true);
+        input.setSelectAllOnFocus(true);
+        input.setHint(suffix + "（偏移量，可负）");
+        input.setInputType(InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL
+                | InputType.TYPE_NUMBER_FLAG_SIGNED);
+        android.widget.LinearLayout container = new android.widget.LinearLayout(activity);
+        container.setOrientation(android.widget.LinearLayout.VERTICAL);
+        int pad = dpInt(16);
+        container.setPadding(pad, pad, pad, 0);
+        TextView hint = new TextView(activity);
+        hint.setText("输入补偿偏移量（相对设备读数，可为正/负）。\n确认后下发独立补偿指令到主控，"
+                + "固件不支持该命令将被忽略，无副作用。");
+        hint.setTextSize(13);
+        hint.setTextColor(0xFF666666);
+        hint.setPadding(0, 0, 0, dpInt(12));
+        hint.setLineSpacing(dpInt(2), 1.0f);
+        container.addView(hint);
+        container.addView(input);
+        new AlertDialog.Builder(activity)
+                .setTitle(title)
+                .setView(container)
+                .setNegativeButton("取消", null)
+                .setPositiveButton("确定", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        String raw = input.getText().toString().trim();
+                        if (TextUtils.isEmpty(raw)) {
+                            Toast.makeText(activity, "请输入数值", Toast.LENGTH_SHORT).show();
+                            return;
+                        }
+                        try {
+                            float value = Float.parseFloat(raw);
+                            boolean sent = bleManager.applyCompensation(compIndex, value);
+                            showSendResult("补偿设置", sent);
                             invalidate();
                         } catch (NumberFormatException exception) {
                             Toast.makeText(activity, "数值格式不正确", Toast.LENGTH_SHORT).show();

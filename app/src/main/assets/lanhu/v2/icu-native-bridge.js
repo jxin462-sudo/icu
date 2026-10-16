@@ -1921,6 +1921,8 @@
       D.compVals[i] = (D.compVals[i] || 0) + delta;
       var val = grid.querySelector('[data-comp-val="' + i + '"]');
       if (val) val.textContent = String(D.compVals[i]);
+      /* ★ V56:把补偿偏移实时下发到主控(独立 set_*_comp 指令,固件不支持则忽略,绝不误设绝对值) */
+      try { act('compensation_set_' + i + '_' + D.compVals[i]); } catch (ex) {}
     });
   }
 

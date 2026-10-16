@@ -272,6 +272,14 @@ public class BleManager {
     private String ctrlVersion = "";
     private String btVersion = "";
     private Integer treatmentMinutes;
+    // ★ V56:补偿(校准)偏移量——与绝对值设定完全分离,通过独立 set_*_comp 命令下发。
+    //   下标与 H5 D.compVals / COMP_TITLES 对齐:0=温度 1=氧浓度 2=湿度 3=CO2 4=红外体温。
+    //   固件若不支持该命令,行为与 set_humidity 一致:本地持久化 + 记日志,下发被忽略,无副作用。
+    private float compTemp = 0f;
+    private float compO2 = 0f;
+    private float compHum = 0f;
+    private float compCo2 = 0f;
+    private float compIr = 0f;
     // ★ 治疗时长自动正计时（按舱隔离）：任一治疗项开启即"治疗中"。
     //   accumulated = 已完结段落的累计；runningSince = 本次连续治疗的起始墙钟时刻（0=未在计时）。
     //   切舱/重启用墙钟续算，不丢已走过的秒数。
@@ -498,6 +506,12 @@ public class BleManager {
         currentZone = "left".equals(savedZone) ? "left" : DEFAULT_ZONE;
         migrateLegacyZoneTargets(controlPreferences);
         loadZoneProjection();
+        // ★ V56:载入已持久化的补偿偏移量(调试页设置过则恢复,设备侧是否生效取决于固件)
+        compTemp = controlPreferences.getFloat("comp_temp", 0f);
+        compO2 = controlPreferences.getFloat("comp_o2", 0f);
+        compHum = controlPreferences.getFloat("comp_hum", 0f);
+        compCo2 = controlPreferences.getFloat("comp_co2", 0f);
+        compIr = controlPreferences.getFloat("comp_ir", 0f);
         BluetoothManager bluetoothManager = (BluetoothManager) appContext.getSystemService(Context.BLUETOOTH_SERVICE);
         bluetoothAdapter = bluetoothManager != null ? bluetoothManager.getAdapter() : null;
     }
@@ -1780,6 +1794,65 @@ public class BleManager {
         editor.apply();
         addLog("CO2 目标浓度已回滚到 " + (rollbackTo == null ? "未设置" : rollbackTo + " PPM"));
     }
+
+    // ★ V56:补偿(校准)偏移下发 —— 与绝对值设定(set_temp 等)彻底分离。
+    //   发送独立 set_*_comp 命令;固件不支持则忽略(同 set_humidity),不会误设绝对值。
+    //   下标:0=温度 1=氧浓度 2=湿度 3=CO2 4=红外体温。返回 true=已尝试下发/本地保存。
+    public boolean applyCompensation(int index, float value) {
+        if (!ensureReady()) {
+            addLog("[V56] applyCompensation:主机蓝牙未连接,仅本地保存补偿偏移 idx=" + index + " val=" + value);
+            persistCompensation(index, value);
+            emit();
+            return true;
+        }
+        String cmd;
+        switch (index) {
+            case 0: cmd = "set_temp_comp"; compTemp = value; break;
+            case 1: cmd = "set_o2_comp";    compO2 = value; break;
+            case 2: cmd = "set_hum_comp";   compHum = value; break;
+            case 3: cmd = "set_co2_comp";   compCo2 = value; break;
+            case 4: cmd = "set_ir_comp";    compIr = value; break;
+            default:
+                addLog("[V56] applyCompensation:未知补偿下标 " + index);
+                return false;
+        }
+        persistCompensation(index, value);
+        String valueStr = (index == 3) ? String.valueOf(Math.round(value)) : formatCommandNumber(value);
+        sendCommand("{\"cmd\":\"" + cmd + "\",\"value\":" + valueStr + ",\"zone\":\"" + currentZone + "\"}");
+        addLog("[V56] 下发补偿指令 " + cmd + " = " + valueStr + " (固件不支持则忽略)");
+        emit();
+        return true;
+    }
+
+    private void persistCompensation(int index, float value) {
+        String key;
+        switch (index) {
+            case 0: key = "comp_temp"; break;
+            case 1: key = "comp_o2"; break;
+            case 2: key = "comp_hum"; break;
+            case 3: key = "comp_co2"; break;
+            case 4: key = "comp_ir"; break;
+            default: return;
+        }
+        appContext.getSharedPreferences("icu_ble_settings", Context.MODE_PRIVATE)
+                .edit().putFloat(key, value).apply();
+    }
+
+    /** ★ V56:把全部已保存的补偿偏移重新下发一遍(调试页"保存"/重连 resync 用)。 */
+    public void resyncAllCompensation() {
+        applyCompensation(0, compTemp);
+        applyCompensation(1, compO2);
+        applyCompensation(2, compHum);
+        applyCompensation(3, compCo2);
+        applyCompensation(4, compIr);
+    }
+
+    // ★ V56:补偿偏移读取(getter),供 H5/调试页回显当前已保存值
+    public float getCompTemp() { return compTemp; }
+    public float getCompO2() { return compO2; }
+    public float getCompHum() { return compHum; }
+    public float getCompCo2() { return compCo2; }
+    public float getCompIr() { return compIr; }
 
     /**
      * 检查 CO2 是否超过固定的自动预警阀值，由 MainActivity 在收到 BLE 状态时调用。
