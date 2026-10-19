@@ -361,6 +361,23 @@
         D.vitals = { hr: '--', bp: '--/--', map: '--', spo2: '--', pr: '--', temp: '--', rr: '--' };
         D.waveLive = null;
       }
+      /* ★ 2026-10-19 V60：视频页「图表」浮层的数据源——体征滚动采样缓存（~1Hz×300 点≈5 分钟），
+         心率/血氧/体温三条趋势线；'--' 占位跳过不入缓存 */
+      try {
+        var __vb = window.__vitalBuf = window.__vitalBuf || { hr: [], spo2: [], temp: [] };
+        var __pushV = function (arr, v) {
+          var f = parseFloat(v);
+          if (!isNaN(f) && isFinite(f)) { arr.push(f); if (arr.length > 300) arr.shift(); }
+        };
+        __pushV(__vb.hr, D.vitals.hr);
+        __pushV(__vb.spo2, D.vitals.spo2);
+        __pushV(__vb.temp, D.vitals.temp);
+      } catch (e) {}
+      /* ★ 2026-10-19 V60：摄像头状态（翻转/遮蔽/录制态）随全量状态下发——视频页按钮态与 REC 计时 */
+      var __cam = S.camera || {};
+      D.cameraFlip = __cam.flip || 0;
+      D.cameraMask = !!__cam.masked;
+      D.cameraRec = __cam.rec || { recording: false, startedAt: 0, elapsedSec: 0 };
       /* ★ 任务38：主机/监护蓝牙连接状态边沿弹窗（"连接上给个弹窗"），断开也提示便于定位掉线
          ★ 2026-10-10 #59：开机动画（splash）期间不弹蓝牙提示 —— 开机自动重连属预期，不该打断动画 */
       var hostNow = !!((S.host && S.host.connected) || (S.ble && S.ble.host && S.ble.host.connected));
@@ -1280,6 +1297,11 @@
           if (va === 'camera_snapshot') { stop(e); act('camera_snapshot'); return; }
           if (va === 'camera_record') { stop(e); act('camera_record'); return; }
           if (va === 'camera_config') { stop(e); act('camera_config'); return; }
+          /* ★ 2026-10-19 V60：翻转/遮蔽/原图走原生；图表为 H5 本地浮层开关（体征趋势，免打扰原生） */
+          if (va === 'camera_flip') { stop(e); act('camera_flip'); return; }
+          if (va === 'camera_mask') { stop(e); act('camera_mask'); return; }
+          if (va === 'camera_orig') { stop(e); act('camera_orig'); return; }
+          if (va === 'video_chart') { stop(e); D.videoChartOn = !D.videoChartOn; if (window.IcuApp) IcuApp.render(); return; }
           return;
         }
       }

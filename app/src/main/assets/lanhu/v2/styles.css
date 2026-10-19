@@ -377,6 +377,14 @@ input.inp::placeholder{color:var(--ink3)}
 .seg button{height:56px;padding:0 42px;border-radius:6px;font-size:24px;color:var(--ink2)}
 .seg button.on{background:var(--accent);color:#fff}
 .vbtn{height:64px;border-radius:8px;background:#eef2f9;color:var(--ink2);display:flex;align-items:center;justify-content:center;gap:12px;font-size:24px}
+/* ★ 2026-10-19 V60：录制中红钮 / 镜头遮蔽盖 / 体征图表浮层 */
+.vbtn.rec{background:#c0392b;color:#fff}
+.mask-cover{position:absolute;inset:0;background:#4d4d4d;display:flex;align-items:center;justify-content:center;color:#cfd6e0;font-size:30px;letter-spacing:6px;z-index:5}
+.vchart{position:absolute;left:0;right:0;bottom:0;height:150px;background:rgba(0,0,0,.55);z-index:4;padding:8px 14px;box-sizing:border-box;color:#fff}
+.vchart svg{width:100%;height:104px;display:block}
+.vchart-lg{display:flex;gap:28px;font-size:19px;margin-bottom:4px}
+.vchart-lg i{display:inline-block;width:18px;height:4px;border-radius:2px;margin-right:6px;vertical-align:middle}
+.vchart-wait{display:flex;align-items:center;justify-content:center;height:100%;color:#cfd6e0;font-size:22px}
 .vbtn svg{width:28px;height:28px}
 .vbtns{display:flex;flex-direction:column;gap:14px;margin-top:6px}
 .vgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:26px}

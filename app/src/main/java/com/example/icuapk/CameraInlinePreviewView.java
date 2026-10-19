@@ -2,6 +2,7 @@ package com.example.icuapk;
 
 import android.graphics.Bitmap;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.SurfaceTexture;
 import android.text.TextUtils;
 import android.view.Gravity;
@@ -13,6 +14,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -37,9 +39,111 @@ final class CameraInlinePreviewView extends FrameLayout {
     interface CancelListener { void onCancel(); }
     private CancelListener cancelListener;
 
+    /* ★ 2026-10-19 V60：画面翻转（纯显示层 TextureView 变换，不需要摄像头支持）——
+       0 正常 / 1 水平镜像 / 2 垂直翻转 / 3 旋转180°（=水平+垂直）；截图/原图同步跟随（WYSIWYG） */
+    private int flipMode;
+
+    /* ★ 2026-10-19 V60：录制状态——绑定当前 RTSP 客户端（预览停止即自动停录保存） */
+    interface RecordingListener {
+        void onAutoSaved(File file, int frames, long durationMs);
+        void onFailed(String reason);
+    }
+    private CameraRecorder cameraRecorder;
+    private long recordingStartedAt;
+    private RecordingListener recordingListener;
+
     void setCancelListener(CancelListener listener) { cancelListener = listener; }
     boolean isCancelledByUser() { return cancelledByUser; }
     void clearCancelledByUser() { cancelledByUser = false; }
+
+    /* ★ 2026-10-19 V60：翻转模式（宿主 MainActivity 统一下发到内嵌+全屏两个实例） */
+    void setFlipMode(int mode) {
+        int normalized = mode < 0 ? 0 : mode % 4;
+        if (flipMode == normalized) {
+            return;
+        }
+        flipMode = normalized;
+        applyFlipTransform();
+    }
+
+    int getFlipMode() { return flipMode; }
+
+    private void applyFlipTransform() {
+        int w = getWidth();
+        int h = getHeight();
+        if (w <= 0 || h <= 0) {
+            return;
+        }
+        float sx = (flipMode == 1 || flipMode == 3) ? -1f : 1f;
+        float sy = (flipMode == 2 || flipMode == 3) ? -1f : 1f;
+        Matrix matrix = new Matrix();
+        matrix.setScale(sx, sy, w / 2f, h / 2f);
+        textureView.setTransform(matrix);
+    }
+
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        applyFlipTransform();   // 变换带中心点，尺寸变化（内嵌↔全屏边界更新）后须重设
+    }
+
+    /* ★ 2026-10-19 V60：截图/原图与显示一致（TextureView.getBitmap 不含 setTransform，需手工翻转） */
+    private Bitmap applyFlipToBitmap(Bitmap src) {
+        if (flipMode == 0 || src == null) {
+            return src;
+        }
+        float sx = (flipMode == 1 || flipMode == 3) ? -1f : 1f;
+        float sy = (flipMode == 2 || flipMode == 3) ? -1f : 1f;
+        Matrix matrix = new Matrix();
+        matrix.setScale(sx, sy, src.getWidth() / 2f, src.getHeight() / 2f);
+        Bitmap out = Bitmap.createBitmap(src, 0, 0, src.getWidth(), src.getHeight(), matrix, false);
+        if (out != src && !src.isRecycled()) {
+            src.recycle();
+        }
+        return out;
+    }
+
+    /* ★ 2026-10-19 V60：录制控制（false=预览未出画面/码流非H264，由调用方提示） */
+    void setRecordingListener(RecordingListener listener) { recordingListener = listener; }
+    boolean isRecording() { return cameraRecorder != null; }
+    long recordingStartedAt() { return recordingStartedAt; }
+
+    boolean startRecording(File outFile) {
+        if (cameraRecorder != null) {
+            return true;
+        }
+        if (rtspClient == null || !rtspClient.supportsRecording()) {
+            return false;
+        }
+        int[] size = rtspClient.recordingSize();
+        cameraRecorder = new CameraRecorder(outFile, size[0], size[1],
+                rtspClient.recordingSps(), rtspClient.recordingPps());
+        recordingStartedAt = System.currentTimeMillis();
+        rtspClient.setRecordingSink(new CameraStreamActivity.RtspH264Client.RecordingSink() {
+            @Override
+            public void onAccessUnit(byte[] sample, boolean keyFrame, long ptsUs) {
+                CameraRecorder recorder = cameraRecorder;
+                if (recorder != null) {
+                    recorder.onAccessUnit(sample, keyFrame, ptsUs);
+                }
+            }
+        });
+        return true;
+    }
+
+    /* 停止录制并封盘；返回的 CameraRecorder 可读取 frames/durationMs/outFile（0 帧时文件已自删） */
+    CameraRecorder stopRecording() {
+        CameraRecorder recorder = cameraRecorder;
+        if (recorder == null) {
+            return null;
+        }
+        cameraRecorder = null;
+        if (rtspClient != null) {
+            rtspClient.setRecordingSink(null);
+        }
+        recorder.stop();
+        return recorder;
+    }
 
     CameraInlinePreviewView(MainActivity activity) {
         super(activity);
@@ -201,10 +305,22 @@ final class CameraInlinePreviewView extends FrameLayout {
             callback.onError("还没有可截图的摄像头画面，请先停留在实况预览几秒");
             return;
         }
-        callback.onFrame(bitmap);
+        callback.onFrame(applyFlipToBitmap(bitmap));   // V60：截图与显示方向一致
     }
 
     void stopPreview() {
+        /* ★ 2026-10-19 V60：预览停止（切页/取消/打印暂停/全屏关闭）时若在录制，
+           自动停录封盘并回调宿主登记元数据——不让录像无声丢失 */
+        if (cameraRecorder != null) {
+            CameraRecorder recorder = stopRecording();
+            if (recordingListener != null && recorder != null) {
+                if (recorder.frames() > 0) {
+                    recordingListener.onAutoSaved(recorder.outFile(), recorder.frames(), recorder.durationMs());
+                } else {
+                    recordingListener.onFailed("未收到视频帧");
+                }
+            }
+        }
         if (rtspClient != null) {
             rtspClient.stop();
             rtspClient = null;

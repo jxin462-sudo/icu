@@ -122,6 +122,8 @@
         videoTalk: '对讲', videoMask: '镜头遮蔽', videoFlip: '画面翻转', videoManual: '手动报警',
         videoOrig: '原图', videoCruise: '巡航', videoParam: '视频参数', videoChart: '图表', videoCustom: '自定义',
         liveView: '实况', playback: '回放', shot: '截图', rec: '录制', full: '全屏',
+        recNow: '录制中', maskedTip: '镜头遮蔽中', chartWait: '等待体征数据…',
+        chartHr: '心率', chartSpo2: '血氧', chartTemp: '体温',
         compTemp: '温度补偿（℃）', compO2: '氧浓度补偿（%）', compHum: '湿度补偿（%）',
         compCo2: '二氧化碳浓度补偿（PPM）', compIr: '红外体温补偿（℃）',
         aboutBasic: '基础信息', aboutVer: '版本信息', verApp: '软件版本', verCode: '内部版本号',
@@ -183,6 +185,8 @@
         videoTalk: 'Intercom', videoMask: 'Lens Mask', videoFlip: 'Flip', videoManual: 'Manual Alarm',
         videoOrig: 'Original', videoCruise: 'Cruise', videoParam: 'Camera', videoChart: 'Chart', videoCustom: 'Custom',
         liveView: 'Live', playback: 'Playback', shot: 'Snapshot', rec: 'Record', full: 'Full',
+        recNow: 'REC', maskedTip: 'Lens masked', chartWait: 'Waiting for vitals…',
+        chartHr: 'HR', chartSpo2: 'SpO2', chartTemp: 'Temp',
         compTemp: 'Temp Comp (℃)', compO2: 'O₂ Comp (%)', compHum: 'Humidity Comp (%)',
         compCo2: 'CO₂ Comp (PPM)', compIr: 'IR Temp Comp (℃)',
         aboutBasic: 'Basic Info', aboutVer: 'Version Info', verApp: 'App Version', verCode: 'Version Code',
@@ -744,20 +748,77 @@
   /* ======================================================================
      p09 视频 · 实况
      ====================================================================== */
+  /* ★ 2026-10-19 V60：视频页「图表」浮层——体征滚动缓存（__vitalBuf，bridge 每秒推）画三条趋势线 */
+  function vitalChartSvg() {
+    var buf = window.__vitalBuf || { hr: [], spo2: [], temp: [] };
+    var series = [
+      { key: 'hr', label: T('chartHr', '心率'), color: '#ff5d5d', data: buf.hr },
+      { key: 'spo2', label: T('chartSpo2', '血氧'), color: '#4da3ff', data: buf.spo2 },
+      { key: 'temp', label: T('chartTemp', '体温'), color: '#5dd49a', data: buf.temp }
+    ];
+    var any = series.some(function (s) { return s.data.length >= 2; });
+    if (!any) {
+      return '<div class="vchart-wait">' + T('chartWait', '等待体征数据…') + '</div>';
+    }
+    var W = 300, H = 100, pad = 4;
+    var paths = '';
+    series.forEach(function (s) {
+      var d = s.data;
+      if (d.length < 2) return;
+      var min = Math.min.apply(null, d), max = Math.max.apply(null, d);
+      if (max - min < 1e-6) { max = min + 1; }
+      var pts = [];
+      for (var i = 0; i < d.length; i++) {
+        var x = pad + (W - pad * 2) * i / (d.length - 1);
+        var y = H - pad - (H - pad * 2) * (d[i] - min) / (max - min);
+        pts.push(x.toFixed(1) + ',' + y.toFixed(1));
+      }
+      paths += '<polyline points="' + pts.join(' ') + '" fill="none" stroke="' + s.color + '" stroke-width="1.6"/>';
+    });
+    var legend = series.map(function (s) {
+      var v = s.data.length ? s.data[s.data.length - 1] : '--';
+      return '<span><i style="background:' + s.color + '"></i>' + s.label + ' ' + v + '</span>';
+    }).join('');
+    return '<div class="vchart-lg">' + legend + '</div>'
+      + '<svg viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' + paths + '</svg>';
+  }
+
   SCREENS['video'] = {
     name: '视频 · 实况', group: '2 会话', render() {
-      const btns = [['ai', '对讲', 'videoTalk'], ['eyeoff', '镜头遮蔽', 'videoMask'], ['flip', '画面翻转', 'videoFlip', 1], ['alarm', '手动报警', 'videoManual'], ['img', '原图', 'videoOrig'], ['cruise', '巡航', 'videoCruise'], ['cam', '视频参数', 'videoParam'], ['chart', '图表', 'videoChart'], ['plus', '自定义', 'videoCustom']];
+      /* ★ 2026-10-19 V60：九个格按钮接线——遮蔽/翻转/原图/图表可用（对讲/报警/巡航/自定义为二期占位） */
+      var recOn = !!(D.cameraRec && D.cameraRec.recording);
+      var recSec = recOn ? Math.max(0, D.cameraRec.elapsedSec || 0) : 0;
+      var recText = recOn
+        ? ('● ' + T('recNow', '录制中') + ' ' + Math.floor(recSec / 60) + ':' + ('0' + (recSec % 60)).slice(-2))
+        : T('rec', '录制');
+      const btns = [
+        ['ai', '对讲', 'videoTalk', 0, ''],
+        ['eyeoff', '镜头遮蔽', 'videoMask', D.cameraMask ? 1 : 0, 'camera_mask'],
+        ['flip', '画面翻转', 'videoFlip', D.cameraFlip ? 1 : 0, 'camera_flip'],
+        ['alarm', '手动报警', 'videoManual', 0, ''],
+        ['img', '原图', 'videoOrig', 0, 'camera_orig'],
+        ['cruise', '巡航', 'videoCruise', 0, ''],
+        ['cam', '视频参数', 'videoParam', 0, 'camera_config'],
+        ['chart', '图表', 'videoChart', D.videoChartOn ? 1 : 0, 'video_chart'],
+        ['plus', '自定义', 'videoCustom', 0, '']
+      ];
+      var maskCover = D.cameraMask
+        ? '<div class="mask-cover">' + T('maskedTip', '镜头遮蔽中') + '</div>' : '';
+      var chartCover = D.videoChartOn
+        ? '<div class="vchart">' + vitalChartSvg() + '</div>' : '';
       return PAGE(P.topbar('care'),
         '<div class="video-wrap">'
-        + '<div class="video-view">' + P.fisheye(D.stamp) + '</div>'
+        + '<div class="video-view">' + P.fisheye(D.stamp) + maskCover + chartCover + '</div>'
         + '<div class="video-side">'
         + '<div class="seg"><button class="on">' + T('liveView', '实况') + '</button><button data-go="video-play">' + T('playback', '回放') + '</button></div>'
         + '<div class="vbtns"><div class="vbtn" style="justify-content:flex-start" data-act="camera_snapshot">' + I.cam + '<span>' + T('shot', '截图') + '</span></div>'
-        + '<div class="vbtn" style="justify-content:flex-start" data-act="camera_record">' + I.rec + '<span>' + T('rec', '录制') + '</span></div>'
+        + '<div class="vbtn' + (recOn ? ' rec' : '') + '" style="justify-content:flex-start" data-act="camera_record">' + I.rec + '<span>' + recText + '</span></div>'
         + '<div class="vbtn" style="justify-content:flex-start" data-act="camera_fullscreen">' + I.full + '<span>' + T('full', '全屏') + '</span></div></div>'
         + '<div class="vgrid">' + btns.map(function (b) {
-          var actAttr = (b[0] === 'cam') ? ' data-act="camera_config"' : '';
-          return '<div class="vbtn' + (b[3] ? ' on' : '') + actAttr + '">' + I[b[0]] + '<span>' + T(b[2], b[1]) + '</span></div>';
+          var actAttr = b[4] ? ' data-act="' + b[4] + '"' : '';
+          /* ★ V60 修复：原模板 class 引号未闭合（`<div class="vbtn data-act="...">`），
+             data-act 被吞进 class 属性——视频参数钮自 V52 起实际从未接上，本次一并根治 */
+          return '<div class="vbtn' + (b[3] ? ' on' : '') + '"' + actAttr + '>' + I[b[0]] + '<span>' + T(b[2], b[1]) + '</span></div>';
         }).join('') + '</div>'
         + '</div></div>', P.sessionBar('video'), false, P.sessionTag());
     }

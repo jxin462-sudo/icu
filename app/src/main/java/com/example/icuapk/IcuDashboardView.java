@@ -99,6 +99,10 @@ public class IcuDashboardView extends View {
     private static final String KEY_CAMERA_STREAM_URL = "camera_stream_url";
     private static final String KEY_CAMERA_STREAM_USER_SET = "camera_stream_url_user_set";
     private static final String KEY_CAMERA_SNAPSHOTS = "camera_snapshots";
+    /* ★ 2026-10-19 V60：录像列表 / 画面翻转模式 / 镜头遮蔽 持久化键 */
+    private static final String KEY_CAMERA_RECORDINGS = "camera_recordings";
+    private static final String KEY_CAMERA_FLIP = "camera_flip_mode";
+    private static final String KEY_CAMERA_MASK = "camera_mask_on";
     private static final String KEY_ORGANIZATIONS = "organizations";
     private static final String KEY_SELECTED_ORGANIZATION = "selected_organization";
     private static final String KEY_SELECTED_HOST_MODE = "selected_host_mode";
@@ -226,6 +230,28 @@ public class IcuDashboardView extends View {
         void captureCameraFrame(CameraFrameCallback callback);
 
         boolean toggleCameraFullscreen();
+
+        /* ★ 2026-10-19 V60：录制（false=预览未出画面/码流非H264）与原图查看器 */
+        boolean startCameraRecording(File outFile);
+
+        CameraRecordingInfo stopCameraRecording();
+
+        boolean isCameraRecording();
+
+        void showCapturedImage(Bitmap bitmap);
+    }
+
+    /* ★ 2026-10-19 V60：一次录制的结果（file/frames/durationMs），frames=0 时文件已自删 */
+    static final class CameraRecordingInfo {
+        final File file;
+        final int frames;
+        final long durationMs;
+
+        CameraRecordingInfo(File file, int frames, long durationMs) {
+            this.file = file;
+            this.frames = frames;
+            this.durationMs = durationMs;
+        }
     }
 
     interface CameraFrameCallback {
@@ -693,6 +719,32 @@ public class IcuDashboardView extends View {
         }
     }
 
+    /* ★ 2026-10-19 V60：本地录像条目（MP4 存 filesDir/camera_recordings，元数据随 SP 持久化，按舱过滤同快照） */
+    private static final class CameraRecording {
+        String fileName;
+        String timeText;
+        long capturedAt;
+        long durationMs;
+        File cacheFile;
+        Uri downloadUri;
+        String patientRecordNo;
+        String patientName;
+        String zone;
+
+        CameraRecording(String fileName, String timeText, long capturedAt, long durationMs, File cacheFile,
+                        Uri downloadUri, String patientRecordNo, String patientName, String zone) {
+            this.fileName = fileName;
+            this.timeText = timeText;
+            this.capturedAt = capturedAt;
+            this.durationMs = durationMs;
+            this.cacheFile = cacheFile;
+            this.downloadUri = downloadUri;
+            this.patientRecordNo = patientRecordNo;
+            this.patientName = patientName;
+            this.zone = EnvironmentProtocol.normalizeZone(zone);
+        }
+    }
+
     private static final class CameraImageAnalysis {
         int width;
         int height;
@@ -760,6 +812,14 @@ public class IcuDashboardView extends View {
     private JSONObject reviewQueryFilter;
     private final ArrayList<PdfRecord> pdfRecords = new ArrayList<>();
     private final ArrayList<CameraSnapshot> cameraSnapshots = new ArrayList<>();
+    /* ★ 2026-10-19 V60：录像列表 + 录制进行态（cameraRecFile 用于自动停录时取文件名） */
+    private final ArrayList<CameraRecording> cameraRecordings = new ArrayList<>();
+    private boolean cameraRecActive;
+    private long cameraRecStartedAt;
+    private File cameraRecFile;
+    /* ★ 2026-10-19 V60：画面翻转（0正常/1水平/2垂直/3旋转180）与镜头遮蔽——SP 持久化，状态下发 H5 */
+    private int cameraFlipMode;
+    private boolean cameraMaskOn;
     private final String[] tabs = {"ICU状态", "主机控制", "实时监护", "摄像监控", "治疗记录", "PDF文件", "使用教程"};
     private static final int MONITOR_TREND_ALL = -1;
     private static final int MONITOR_TREND_HEART = 0;
@@ -965,6 +1025,7 @@ public class IcuDashboardView extends View {
         appendGeneralLog("系统", "应用启动");
         loadCameraSettings();
         loadCameraSnapshotsFromStorage();
+        loadCameraRecordingsFromStorage();   // V60
         setFocusable(true);
         textPaint.setSubpixelText(true);
         // 治疗记录确认弹窗仅在用户已经处于登录态时才自动触发。
@@ -1212,6 +1273,15 @@ public class IcuDashboardView extends View {
         camera.put("streamUrlMasked", TextUtils.isEmpty(cameraStreamUrl) ? "" : maskCameraUrl(cameraStreamUrl));
         camera.put("selectedSnapshotIndex", selectedCameraSnapshotIndex);
         camera.put("snapshots", cameraSnapshotsToJson());
+        /* ★ 2026-10-19 V60：翻转/遮蔽/录制态+录像列表下发 H5（视频页按钮态与 REC 计时） */
+        camera.put("flip", cameraFlipMode);
+        camera.put("masked", cameraMaskOn);
+        JSONObject rec = new JSONObject();
+        rec.put("recording", cameraRecActive);
+        rec.put("startedAt", cameraRecStartedAt);
+        rec.put("elapsedSec", cameraRecActive ? Math.max(0, (System.currentTimeMillis() - cameraRecStartedAt) / 1000) : 0);
+        camera.put("rec", rec);
+        camera.put("recordings", cameraRecordingsToJson());
         return camera;
     }
 
@@ -1699,6 +1769,23 @@ public class IcuDashboardView extends View {
         }
         if ("camera_snapshot".equals(action)) {
             captureCameraSnapshotAction();
+            return true;
+        }
+        /* ★ 2026-10-19 V60：视频页四功能——录制开关/画面翻转/镜头遮蔽/原图查看 */
+        if ("camera_record".equals(action)) {
+            toggleCameraRecordingAction();
+            return true;
+        }
+        if ("camera_flip".equals(action)) {
+            cycleCameraFlipAction();
+            return true;
+        }
+        if ("camera_mask".equals(action)) {
+            toggleCameraMaskAction();
+            return true;
+        }
+        if ("camera_orig".equals(action)) {
+            showCameraOriginalAction();
             return true;
         }
         if ("camera_snapshot_download".equals(action)) {
@@ -3401,6 +3488,8 @@ public class IcuDashboardView extends View {
         treatmentPeriodMode = prefs.getString(KEY_TREATMENT_PERIOD_MODE, PERIOD_ALL);
         monitorPulseBeep = prefs.getBoolean(KEY_MONITOR_PULSE_BEEP, monitorPulseBeep);
         monitorAlarmSound = prefs.getBoolean(KEY_MONITOR_ALARM_SOUND, monitorAlarmSound);
+        cameraFlipMode = Math.abs(prefs.getInt(KEY_CAMERA_FLIP, 0)) % 4;   // V60
+        cameraMaskOn = prefs.getBoolean(KEY_CAMERA_MASK, false);           // V60
         loadMonitorThresholdState();
         loadS5Settings(prefs);
         selectedMonitorLevelColor = normalizeMonitorLevelColor(prefs.getString(KEY_MONITOR_LEVEL_COLOR, selectedMonitorLevelColor));
@@ -3419,6 +3508,8 @@ public class IcuDashboardView extends View {
                 .putString(KEY_TREATMENT_PERIOD_MODE, treatmentPeriodMode)
                 .putBoolean(KEY_MONITOR_PULSE_BEEP, monitorPulseBeep)
                 .putBoolean(KEY_MONITOR_ALARM_SOUND, monitorAlarmSound)
+                .putInt(KEY_CAMERA_FLIP, cameraFlipMode)
+                .putBoolean(KEY_CAMERA_MASK, cameraMaskOn)
                 .putString(KEY_MONITOR_LEVEL_COLOR, selectedMonitorLevelColor)
                 .putString(KEY_DEVICE_PROFILE, deviceProfileToJsonString())
                 .putString(KEY_S5_LANGUAGE, s5Language)
@@ -5537,6 +5628,8 @@ public class IcuDashboardView extends View {
                 .putString(KEY_TREATMENT_PERIOD_MODE, treatmentPeriodMode)
                 .putBoolean(KEY_MONITOR_PULSE_BEEP, monitorPulseBeep)
                 .putBoolean(KEY_MONITOR_ALARM_SOUND, monitorAlarmSound)
+                .putInt(KEY_CAMERA_FLIP, cameraFlipMode)
+                .putBoolean(KEY_CAMERA_MASK, cameraMaskOn)
                 .putString(KEY_MONITOR_LEVEL_COLOR, selectedMonitorLevelColor)
                 .putString(KEY_DEVICE_PROFILE, deviceProfileToJsonString())
                 .commit();
@@ -8610,6 +8703,223 @@ public class IcuDashboardView extends View {
     private String optSnapshotRecordNo(JSONObject item, String fileName) {
         String recordNo = item.optString("recordNo", "");
         return TextUtils.isEmpty(recordNo) ? inferSnapshotRecordNo(fileName) : recordNo;
+    }
+
+    /* ==================== ★ 2026-10-19 V60：摄像头录像（本地 MP4 列表持久化） ==================== */
+
+    private String createCameraRecordingFileName() {
+        PatientCase patient = currentCase();
+        String no = patient == null ? "camera" : sanitizeFileName(patient.recordNo + "_" + patient.petName);
+        String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
+        return "icu_camera_" + no + "_" + stamp + ".mp4";
+    }
+
+    private void saveCameraRecordingsToStorage() {
+        try {
+            JSONArray array = new JSONArray();
+            for (CameraRecording rec : cameraRecordings) {
+                JSONObject item = new JSONObject();
+                item.put("fileName", rec.fileName);
+                item.put("timeText", rec.timeText);
+                item.put("capturedAt", rec.capturedAt);
+                item.put("durationMs", rec.durationMs);
+                item.put("cachePath", rec.cacheFile == null ? "" : rec.cacheFile.getAbsolutePath());
+                item.put("downloadUri", rec.downloadUri == null ? "" : rec.downloadUri.toString());
+                item.put("recordNo", rec.patientRecordNo);
+                item.put("petName", rec.patientName);
+                item.put("zone", rec.zone);
+                array.put(item);
+            }
+            activity.getSharedPreferences(PREFS_NAME, 0)
+                    .edit().putString(KEY_CAMERA_RECORDINGS, array.toString()).apply();
+        } catch (Exception ignored) {
+        }
+    }
+
+    private void loadCameraRecordingsFromStorage() {
+        cameraRecordings.clear();
+        String raw = activity.getSharedPreferences(PREFS_NAME, 0).getString(KEY_CAMERA_RECORDINGS, "");
+        if (TextUtils.isEmpty(raw)) {
+            return;
+        }
+        try {
+            JSONArray array = new JSONArray(raw);
+            for (int i = 0; i < array.length(); i++) {
+                JSONObject item = array.optJSONObject(i);
+                if (item == null) {
+                    continue;
+                }
+                File file = new File(item.optString("cachePath", ""));
+                if (!file.exists()) {
+                    continue;
+                }
+                String uriText = item.optString("downloadUri", "");
+                cameraRecordings.add(new CameraRecording(
+                        item.optString("fileName", file.getName()),
+                        item.optString("timeText", ""),
+                        item.optLong("capturedAt", file.lastModified()),
+                        item.optLong("durationMs", 0),
+                        file,
+                        TextUtils.isEmpty(uriText) ? null : Uri.parse(uriText),
+                        item.optString("recordNo", ""),
+                        item.optString("petName", ""),
+                        item.optString("zone", "")));
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+    private JSONArray cameraRecordingsToJson() throws JSONException {
+        String z = currentZoneNormalized();
+        JSONArray array = new JSONArray();
+        int zoneIndex = 0;
+        for (CameraRecording rec : cameraRecordings) {
+            if (!z.equals(rec.zone)) {
+                continue;
+            }
+            JSONObject item = new JSONObject();
+            item.put("nativeIndex", zoneIndex++);
+            item.put("fileName", rec.fileName);
+            item.put("timeText", rec.timeText);
+            item.put("capturedAt", rec.capturedAt);
+            item.put("durationMs", rec.durationMs);
+            item.put("cacheUrl", rec.cacheFile == null ? "" : Uri.fromFile(rec.cacheFile).toString());
+            item.put("downloaded", rec.downloadUri != null);
+            item.put("recordNo", safeJsonText(rec.patientRecordNo));
+            item.put("petName", safeJsonText(rec.patientName));
+            array.put(item);
+        }
+        return array;
+    }
+
+    /* ★ V60：录制开关（视频页「录制」按钮）。起录失败=预览未出画面/码流非 H264（H265 客户端本就不出图） */
+    private void toggleCameraRecordingAction() {
+        if (cameraPreviewHost == null) {
+            return;
+        }
+        if (cameraRecActive || cameraPreviewHost.isCameraRecording()) {
+            CameraRecordingInfo info = cameraPreviewHost.stopCameraRecording();
+            if (info != null) {
+                registerCameraRecording(info.file, info.frames, info.durationMs, false);
+            } else {
+                cameraRecActive = false;
+                cameraRecFile = null;
+                notifyCameraStateChanged();
+            }
+            return;
+        }
+        if (cameraMaskOn) {
+            Toast.makeText(activity, "镜头遮蔽中，请先关闭遮蔽再录制", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        File dir = new File(activity.getFilesDir(), "camera_recordings");
+        if (!dir.exists() && !dir.mkdirs()) {
+            Toast.makeText(activity, "无法创建录像目录", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        File target = new File(dir, createCameraRecordingFileName());
+        if (!cameraPreviewHost.startCameraRecording(target)) {
+            Toast.makeText(activity, "无法录制：请先确认实况预览已出画面（需 H264 码流）", Toast.LENGTH_LONG).show();
+            return;
+        }
+        cameraRecActive = true;
+        cameraRecStartedAt = System.currentTimeMillis();
+        cameraRecFile = target;
+        appendUserLog("摄像头", "开始录制", target.getName());
+        Toast.makeText(activity, "开始录制", Toast.LENGTH_SHORT).show();
+        notifyCameraStateChanged();
+    }
+
+    /* ★ V60：录制结束统一登记（手动停止 auto=false / 预览中断自动保存 auto=true）；0 帧不入库 */
+    void registerCameraRecording(File file, int frames, long durationMs, boolean auto) {
+        boolean wasActive = cameraRecActive;
+        cameraRecActive = false;
+        cameraRecFile = null;
+        if (file == null || frames <= 0) {
+            Toast.makeText(activity, "录制未保存：未收到视频帧", Toast.LENGTH_LONG).show();
+            notifyCameraStateChanged();
+            return;
+        }
+        long capturedAt = wasActive && cameraRecStartedAt > 0 ? cameraRecStartedAt : System.currentTimeMillis();
+        String timeText = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date(capturedAt));
+        PatientCase patient = currentCase();
+        cameraRecordings.add(0, new CameraRecording(
+                file.getName(),
+                timeText,
+                capturedAt,
+                durationMs,
+                file,
+                null,
+                patient == null ? "" : safeJsonText(patient.recordNo),
+                patient == null ? "" : safeJsonText(patient.petName),
+                patientZoneOrCurrent(patient)));
+        saveCameraRecordingsToStorage();
+        long sec = Math.max(1, durationMs / 1000);
+        appendUserLog("摄像头", auto ? "录制自动保存" : "录制保存", file.getName() + " " + sec + "秒");
+        Toast.makeText(activity, auto ? "预览结束，录制已自动保存（" + sec + "秒）" : "录制已保存（" + sec + "秒）",
+                Toast.LENGTH_SHORT).show();
+        notifyCameraStateChanged();
+    }
+
+    /* ★ V60：画面翻转（0正常→1水平镜像→2垂直翻转→3旋转180° 循环），纯显示层变换 */
+    private void cycleCameraFlipAction() {
+        cameraFlipMode = (cameraFlipMode + 1) % 4;
+        saveUiSettings();
+        if (activity instanceof MainActivity) {
+            ((MainActivity) activity).applyCameraFlipMode(cameraFlipMode);
+        }
+        String[] names = {"正常", "水平镜像", "垂直翻转", "旋转180°"};
+        appendUserLog("摄像头", "画面翻转", names[cameraFlipMode]);
+        Toast.makeText(activity, "画面翻转：" + names[cameraFlipMode], Toast.LENGTH_SHORT).show();
+        notifyCameraStateChanged();
+    }
+
+    /* ★ V60：镜头遮蔽（软件版）——停预览+占位；摄像头级隐私遮蔽需 ONVIF，二期 */
+    private void toggleCameraMaskAction() {
+        cameraMaskOn = !cameraMaskOn;
+        saveUiSettings();
+        if (activity instanceof MainActivity) {
+            ((MainActivity) activity).onCameraMaskChanged(cameraMaskOn);
+        }
+        appendUserLog("摄像头", "镜头遮蔽", cameraMaskOn ? "开启" : "关闭");
+        Toast.makeText(activity, cameraMaskOn ? "镜头遮蔽已开启，实况预览已停止" : "镜头遮蔽已关闭，预览恢复",
+                Toast.LENGTH_SHORT).show();
+        notifyCameraStateChanged();
+    }
+
+    /* ★ V60：原图——当前帧全屏查看（不存盘；截图已随 captureFrame 跟随翻转） */
+    private void showCameraOriginalAction() {
+        if (cameraPreviewHost == null) {
+            return;
+        }
+        cameraPreviewHost.captureCameraFrame(new CameraFrameCallback() {
+            @Override
+            public void onFrame(Bitmap bitmap) {
+                if (activity instanceof MainActivity) {
+                    ((MainActivity) activity).showCapturedImageOverlay(bitmap);
+                }
+            }
+
+            @Override
+            public void onError(String message) {
+                Toast.makeText(activity, message, Toast.LENGTH_LONG).show();
+            }
+        });
+    }
+
+    int getCameraFlipMode() {
+        return cameraFlipMode;
+    }
+
+    boolean isCameraMaskOn() {
+        return cameraMaskOn;
+    }
+
+    private void notifyCameraStateChanged() {
+        if (activity instanceof MainActivity) {
+            ((MainActivity) activity).notifyLanhuStateChanged();
+        }
+        invalidate();
     }
 
     private String optSnapshotPetName(JSONObject item, String fileName) {

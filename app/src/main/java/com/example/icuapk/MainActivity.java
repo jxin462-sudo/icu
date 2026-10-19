@@ -135,6 +135,9 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         dashboardView.setVisibility(View.INVISIBLE);
         rootView = new FrameLayout(this);
         cameraInlinePreviewView = new CameraInlinePreviewView(this);
+        /* ★ 2026-10-19 V60：录制自动保存回调（预览中断时封盘登记）+ 恢复上次翻转模式 */
+        cameraInlinePreviewView.setRecordingListener(inlineRecordingListener());
+        cameraInlinePreviewView.setFlipMode(dashboardView.getCameraFlipMode());
         dashboardView.setCameraPreviewHost(new IcuDashboardView.CameraPreviewHost() {
             @Override
             public void updateCameraPreview(RectF bounds, boolean visible, String[] urls) {
@@ -149,6 +152,40 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
             @Override
             public boolean toggleCameraFullscreen() {
                 return openInlineCameraStream();
+            }
+
+            /* ★ 2026-10-19 V60：录制路由——全屏中录全屏实例，否则内嵌实例 */
+            @Override
+            public boolean startCameraRecording(java.io.File outFile) {
+                CameraInlinePreviewView target = cameraFullscreenVisible && cameraFullscreenPreviewView != null
+                        ? cameraFullscreenPreviewView : cameraInlinePreviewView;
+                return target != null && target.startRecording(outFile);
+            }
+
+            @Override
+            public IcuDashboardView.CameraRecordingInfo stopCameraRecording() {
+                CameraInlinePreviewView[] both = {cameraFullscreenPreviewView, cameraInlinePreviewView};
+                for (CameraInlinePreviewView view : both) {
+                    if (view != null && view.isRecording()) {
+                        CameraRecorder recorder = view.stopRecording();
+                        if (recorder != null) {
+                            return new IcuDashboardView.CameraRecordingInfo(
+                                    recorder.outFile(), recorder.frames(), recorder.durationMs());
+                        }
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public boolean isCameraRecording() {
+                return (cameraInlinePreviewView != null && cameraInlinePreviewView.isRecording())
+                        || (cameraFullscreenPreviewView != null && cameraFullscreenPreviewView.isRecording());
+            }
+
+            @Override
+            public void showCapturedImage(android.graphics.Bitmap bitmap) {
+                showCapturedImageOverlay(bitmap);
             }
         });
         try {
@@ -581,8 +618,10 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         if (!visible) {
             cameraInlinePreviewView.clearCancelledByUser();
         }
+        /* ★ 2026-10-19 V60：镜头遮蔽开启时视同不可见（预览保持停止，H5 灰占位+遮蔽提示露出） */
+        boolean masked = dashboardView != null && dashboardView.isCameraMaskOn();
         lastInlineCameraVisible = visible && bounds != null && bounds.width() > 2 && bounds.height() > 2
-                && cleanedUrls.length > 0 && !cameraInlinePreviewView.isCancelledByUser();
+                && cleanedUrls.length > 0 && !cameraInlinePreviewView.isCancelledByUser() && !masked;
         lastInlineCameraBounds = lastInlineCameraVisible ? new RectF(bounds) : null;
         if (!lastInlineCameraVisible || lastInlineCameraBounds == null) {
             cameraInlinePreviewView.setActive(false);
@@ -635,6 +674,11 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         if (dashboardView == null) {
             return false;
         }
+        /* ★ 2026-10-19 V60：镜头遮蔽中禁止进全屏（先关遮蔽） */
+        if (dashboardView.isCameraMaskOn()) {
+            Toast.makeText(this, "镜头遮蔽中，请先关闭遮蔽", Toast.LENGTH_SHORT).show();
+            return false;
+        }
         String[] urls = sanitizeCameraPreviewUrls(dashboardView.getCameraPreviewUrlsForWeb());
         if (urls == null || urls.length == 0) {
             return false;
@@ -658,6 +702,9 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
                 dismissCameraFullscreenOverlay();
             }
         });
+        /* ★ 2026-10-19 V60：全屏实例同样挂录制自动保存回调 + 同步翻转模式 */
+        cameraFullscreenPreviewView.setRecordingListener(inlineRecordingListener());
+        cameraFullscreenPreviewView.setFlipMode(dashboardView.getCameraFlipMode());
         overlay.addView(cameraFullscreenPreviewView, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
@@ -741,6 +788,11 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
             cameraInlinePreviewView.setActive(false);
             return;
         }
+        /* ★ 2026-10-19 V60：镜头遮蔽中不恢复预览 */
+        if (dashboardView != null && dashboardView.isCameraMaskOn()) {
+            cameraInlinePreviewView.setActive(false);
+            return;
+        }
         if (!lastInlineCameraVisible || lastInlineCameraBounds == null) {
             cameraInlinePreviewView.setActive(false);
             return;
@@ -751,6 +803,109 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         /* ★ 2026-10-15 V55：恢复后立即让 H5 重渲染并重新上报当前画面区域——
            若全屏期间 H5 页面发生过变化，几十毫秒内即按最新视频框自愈矫正 */
         notifyLanhuStateChanged();
+    }
+
+    /* ==================== ★ 2026-10-19 V60：视频页功能（录制/翻转/遮蔽/原图） ==================== */
+
+    /* 录制自动保存回调（内嵌/全屏两个实例共用）：预览中断时封盘并交给 dashboardView 登记元数据 */
+    private CameraInlinePreviewView.RecordingListener inlineRecordingListener() {
+        return new CameraInlinePreviewView.RecordingListener() {
+            @Override
+            public void onAutoSaved(java.io.File file, int frames, long durationMs) {
+                dashboardView.registerCameraRecording(file, frames, durationMs, true);
+            }
+
+            @Override
+            public void onFailed(String reason) {
+                dashboardView.registerCameraRecording(null, 0, 0, true);
+            }
+        };
+    }
+
+    /* 画面翻转：统一下发到内嵌+全屏两个预览实例（0正常/1水平/2垂直/3旋转180°） */
+    void applyCameraFlipMode(int mode) {
+        if (cameraInlinePreviewView != null) {
+            cameraInlinePreviewView.setFlipMode(mode);
+        }
+        if (cameraFullscreenPreviewView != null) {
+            cameraFullscreenPreviewView.setFlipMode(mode);
+        }
+    }
+
+    /* 镜头遮蔽（软件版）：开启=停预览退全屏让 H5 灰占位露出；关闭=按冻结边界恢复内嵌预览 */
+    void onCameraMaskChanged(boolean masked) {
+        if (masked) {
+            if (cameraFullscreenVisible) {
+                dismissCameraFullscreenOverlay();
+            }
+            if (cameraInlinePreviewView != null) {
+                cameraInlinePreviewView.setActive(false);
+                cameraInlinePreviewView.setVisibility(View.GONE);
+            }
+            if (cameraFullscreenPreviewView != null) {
+                cameraFullscreenPreviewView.setActive(false);
+            }
+        } else {
+            restoreInlineCameraPreview();
+        }
+        notifyLanhuStateChanged();
+    }
+
+    /* ★ V60：原图查看器——当前帧全屏显示（点击/返回键关闭，不存盘） */
+    private FrameLayout capturedImageOverlay;
+    private android.graphics.Bitmap capturedImageBitmap;
+
+    void showCapturedImageOverlay(android.graphics.Bitmap bitmap) {
+        if (bitmap == null) {
+            return;
+        }
+        if (capturedImageOverlay == null) {
+            capturedImageOverlay = new FrameLayout(this);
+            capturedImageOverlay.setBackgroundColor(android.graphics.Color.argb(230, 0, 0, 0));
+            capturedImageOverlay.setClickable(true);
+            capturedImageOverlay.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    dismissCapturedImageOverlay();
+                }
+            });
+            android.widget.ImageView imageView = new android.widget.ImageView(this);
+            imageView.setScaleType(android.widget.ImageView.ScaleType.FIT_CENTER);
+            capturedImageOverlay.addView(imageView, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+            android.widget.TextView hint = new android.widget.TextView(this);
+            hint.setText("点击任意处关闭");
+            hint.setTextColor(android.graphics.Color.WHITE);
+            hint.setTextSize(13);
+            hint.setGravity(android.view.Gravity.CENTER);
+            hint.setBackgroundColor(android.graphics.Color.argb(120, 0, 0, 0));
+            hint.setPadding(0, 8, 0, 8);
+            capturedImageOverlay.addView(hint, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                    android.view.Gravity.BOTTOM));
+            rootView.addView(capturedImageOverlay, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        }
+        android.widget.ImageView imageView = (android.widget.ImageView) capturedImageOverlay.getChildAt(0);
+        imageView.setImageBitmap(bitmap);
+        if (capturedImageBitmap != null && !capturedImageBitmap.isRecycled() && capturedImageBitmap != bitmap) {
+            capturedImageBitmap.recycle();
+        }
+        capturedImageBitmap = bitmap;
+        capturedImageOverlay.setVisibility(View.VISIBLE);
+        capturedImageOverlay.bringToFront();
+    }
+
+    boolean dismissCapturedImageOverlay() {
+        if (capturedImageOverlay == null || capturedImageOverlay.getVisibility() != View.VISIBLE) {
+            return false;
+        }
+        capturedImageOverlay.setVisibility(View.GONE);
+        if (capturedImageBitmap != null && !capturedImageBitmap.isRecycled()) {
+            capturedImageBitmap.recycle();
+        }
+        capturedImageBitmap = null;
+        return true;
     }
 
     private void setThermalFullscreenVisible(boolean visible) {
@@ -1552,6 +1707,10 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
     public void onBackPressed() {
         if (updateOverlay != null && updateOverlay.getVisibility() == View.VISIBLE) {
             closeApkUpdatePage();
+            return;
+        }
+        /* ★ 2026-10-19 V60：原图查看器优先响应返回键 */
+        if (dismissCapturedImageOverlay()) {
             return;
         }
         if (dismissCameraFullscreenOverlay()) {

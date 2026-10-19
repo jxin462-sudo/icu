@@ -271,6 +271,34 @@ public class CameraStreamActivity extends Activity {
         private MediaCodec decoder;
         private boolean decoderStarted;
         private long presentationTimeUs;
+        /* ★ 2026-10-19 V60：录制分流 —— queueSample 处把完整 Annex-B access unit 分一路给录像器，
+           不影响解码链路；录制要求解码器已启动（即 H264 且 SPS/PPS 已到） */
+        interface RecordingSink {
+            void onAccessUnit(byte[] sample, boolean keyFrame, long ptsUs);
+        }
+        private volatile RecordingSink recordingSink;
+        private int videoWidth;
+        private int videoHeight;
+
+        void setRecordingSink(RecordingSink sink) {
+            recordingSink = sink;
+        }
+
+        boolean supportsRecording() {
+            return decoderStarted && sps != null && pps != null;
+        }
+
+        int[] recordingSize() {
+            return new int[]{videoWidth, videoHeight};
+        }
+
+        byte[] recordingSps() {
+            return sps;
+        }
+
+        byte[] recordingPps() {
+            return pps;
+        }
         private final ByteArrayOutputStream fuBuffer = new ByteArrayOutputStream(64 * 1024);
         private final ByteArrayOutputStream accessUnitBuffer = new ByteArrayOutputStream(256 * 1024);
         private boolean accessUnitKeyFrame;
@@ -598,6 +626,8 @@ public class CameraStreamActivity extends Activity {
                 return;
             }
             int[] size = parseSpsSize(sps);
+            videoWidth = size[0];   // V60：缓存分辨率供录制器建 MediaFormat
+            videoHeight = size[1];
             MediaFormat format = MediaFormat.createVideoFormat("video/avc", size[0], size[1]);
             format.setByteBuffer("csd-0", ByteBuffer.wrap(annexB(sps, 0, sps.length)));
             format.setByteBuffer("csd-1", ByteBuffer.wrap(annexB(pps, 0, pps.length)));
@@ -617,8 +647,15 @@ public class CameraStreamActivity extends Activity {
                         buffer.clear();
                         buffer.put(sample);
                         int flags = keyFrame ? MediaCodec.BUFFER_FLAG_KEY_FRAME : 0;
-                        decoder.queueInputBuffer(inputIndex, 0, sample.length, presentationTimeUs, flags);
+                        long samplePts = presentationTimeUs;
+                        decoder.queueInputBuffer(inputIndex, 0, sample.length, samplePts, flags);
                         presentationTimeUs += 33333;
+                        /* ★ 2026-10-19 V60：录制分流——解码投喂成功后同步一路给录像器（Annex-B AU，
+                           关键帧已前置 SPS/PPS，MediaMuxer 直封 MP4 免转码） */
+                        RecordingSink sink = recordingSink;
+                        if (sink != null) {
+                            sink.onAccessUnit(sample, keyFrame, samplePts);
+                        }
                     }
                 }
                 MediaCodec.BufferInfo info = new MediaCodec.BufferInfo();
