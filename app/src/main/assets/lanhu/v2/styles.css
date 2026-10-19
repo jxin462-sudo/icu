@@ -198,6 +198,12 @@ input.inp::placeholder{color:var(--ink3)}
 .metric .dots i.on{box-shadow:0 0 0 3px var(--card),0 0 0 6px var(--accent)}
 .status-actions{position:absolute;left:58px;top:898px;width:1090px;display:grid;grid-template-columns:repeat(3,330px);column-gap:50px}
 .wbtn{height:92px;border-radius:10px;background:var(--card-2);color:var(--ink2);display:flex;align-items:center;justify-content:center;gap:14px;font-size:26px}
+/* ★ 2026-10-19 V60：#11 状态页环境功能状态条（紫外/负离子/外循环/冷光 开·关） */
+.status-func-strip{position:absolute;left:58px;top:1006px;width:1090px;display:flex;gap:30px;align-items:stretch}
+.status-func-strip .fchip{flex:1;height:90px;border-radius:10px;background:var(--card);display:flex;align-items:center;justify-content:space-between;padding:0 30px;font-size:26px;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.06)}
+.status-func-strip .fchip .st{font-size:28px;font-weight:600}
+.status-func-strip .fchip.on .st{color:#1fae5a}
+.status-func-strip .fchip.off .st{color:#9aa6b6}
 .wbtn svg{width:42px;height:42px}
 .wbtn:first-child{background:var(--accent);color:#fff}
 .camcol{position:absolute;left:1224px;top:60px;width:650px}
@@ -398,6 +404,14 @@ input.inp::placeholder{color:var(--ink3)}
 .thumb .fk{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:60%;height:72%;background:radial-gradient(circle at 34% 30%,#dfe4e8,#8b959e 60%,#2b3238);border-radius:12px}
 .thumb .th-ts{position:absolute;left:10px;top:8px;color:#fff;font-size:18px;text-shadow:0 1px 2px #000}
 .thumb .th-d{position:absolute;right:10px;top:8px;color:#fff;font-size:18px;text-shadow:0 1px 2px #000}
+/* ★ 2026-10-19 V61：回放页接真实数据——真缩略图铺满/选中框/录像▶角标/时间轴刻度/空态/日期输入 */
+.thumb img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
+.thumb.sel{outline:3px solid var(--accent);outline-offset:-3px}
+.thumb .playb{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:64px;height:64px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;font-size:30px;display:flex;align-items:center;justify-content:center;padding-left:6px;box-sizing:border-box}
+.vp-empty{grid-column:1/-1;height:300px;display:flex;align-items:center;justify-content:center;color:var(--ink3);font-size:24px;background:#f4f6fa;border-radius:8px}
+.tl-tick{position:absolute;top:-2px;width:3px;height:78px;background:var(--accent);border-radius:2px;transform:translateX(-50%)}
+.timeline .rail{position:relative}
+.play-search input[type=date]{border:none;background:transparent;font-size:22px;color:var(--ink2);outline:none;font-family:inherit;width:100%}
 .timeline{margin-top:20px;width:1120px;position:relative}
 .tl-ax{display:flex;justify-content:space-between;font-size:20px;color:var(--ink2);border-bottom:2px solid var(--line);padding-bottom:10px}
 .rail{border-left:2px solid var(--line);height:74px;margin-top:2px}

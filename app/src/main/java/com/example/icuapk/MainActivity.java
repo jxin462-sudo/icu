@@ -908,6 +908,59 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         return true;
     }
 
+    /* ==================== ★ 2026-10-19 V61：本地录像全屏播放器 ==================== */
+
+    private FrameLayout recordingPlayerOverlay;
+    private android.widget.VideoView recordingVideoView;
+
+    /* 回放页点录像 → 全屏播放（VideoView + MediaController 自带进度/暂停；返回键或 ✕ 关闭） */
+    void showCameraRecordingPlayer(java.io.File file) {
+        if (file == null || !file.exists()) {
+            Toast.makeText(this, "录像文件不存在", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (recordingPlayerOverlay == null) {
+            recordingPlayerOverlay = new FrameLayout(this);
+            recordingPlayerOverlay.setBackgroundColor(android.graphics.Color.BLACK);
+            recordingPlayerOverlay.setClickable(true);
+            recordingVideoView = new android.widget.VideoView(this);
+            android.widget.MediaController controller = new android.widget.MediaController(this);
+            controller.setAnchorView(recordingVideoView);
+            recordingVideoView.setMediaController(controller);
+            recordingPlayerOverlay.addView(recordingVideoView, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT,
+                    android.view.Gravity.CENTER));
+            android.widget.Button close = new android.widget.Button(this);
+            close.setText("✕ 关闭");
+            close.setOnClickListener(new View.OnClickListener() {
+                @Override
+                public void onClick(View v) {
+                    dismissCameraRecordingPlayer();
+                }
+            });
+            FrameLayout.LayoutParams closeParams = new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT,
+                    android.view.Gravity.TOP | android.view.Gravity.RIGHT);
+            closeParams.setMargins(0, 12, 12, 0);
+            recordingPlayerOverlay.addView(close, closeParams);
+            rootView.addView(recordingPlayerOverlay, new FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        }
+        recordingVideoView.setVideoPath(file.getAbsolutePath());
+        recordingPlayerOverlay.setVisibility(View.VISIBLE);
+        recordingPlayerOverlay.bringToFront();
+        recordingVideoView.start();
+    }
+
+    boolean dismissCameraRecordingPlayer() {
+        if (recordingPlayerOverlay == null || recordingPlayerOverlay.getVisibility() != View.VISIBLE) {
+            return false;
+        }
+        recordingVideoView.stopPlayback();
+        recordingPlayerOverlay.setVisibility(View.GONE);
+        return true;
+    }
+
     private void setThermalFullscreenVisible(boolean visible) {
         thermalFullscreenVisible = visible;
         if (cameraInlinePreviewView == null) {
@@ -1707,6 +1760,10 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
     public void onBackPressed() {
         if (updateOverlay != null && updateOverlay.getVisibility() == View.VISIBLE) {
             closeApkUpdatePage();
+            return;
+        }
+        /* ★ 2026-10-19 V61：录像播放器优先响应返回键 */
+        if (dismissCameraRecordingPlayer()) {
             return;
         }
         /* ★ 2026-10-19 V60：原图查看器优先响应返回键 */

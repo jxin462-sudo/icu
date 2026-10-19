@@ -339,7 +339,10 @@
       D.status = {
         temp: hostUp ? num(comped(h.temp, 0), '--') : '--', o2: hostUp ? num(comped(h.oxygen, 1), '--') : '--', hum: hostUp ? num(comped(h.humidity, 2), '--') : '--',
         co2: hostUp ? num(comped(h.co2, 3), '--') : '--', irTemp: hostUp ? num(comped(h.infraredTemp, 4), '--') : '--', dur: text(h.treatmentHours, '--'),
-        red: hostUp ? text(c.redTherapy, '--') : '--', blue: hostUp ? text(c.blueTherapy, '--') : '--'
+        red: hostUp ? text(c.redTherapy, '--') : '--', blue: hostUp ? text(c.blueTherapy, '--') : '--',
+        /* ★ 2026-10-19 V60：#11 补齐——状态页环境功能状态（紫外/负离子/外循环/冷光），此前仅主控页 ctrlRow2/3 有 */
+        uvOn: hostUp ? !!c.uvOn : false, anionOn: hostUp ? !!c.anionOn : false,
+        coldOn: hostUp ? !!c.coldLightOn : false, outerOn: hostUp ? !!c.outerCycleOn : false
       };
       /* ★ 任务33：AM4100 监护宝实时体征接入。S.monitor.connected 且有数据时填真实值；
          未连接时保持全 '--'（不造假数据），波形走本地演示滚动动画
@@ -378,6 +381,12 @@
       D.cameraFlip = __cam.flip || 0;
       D.cameraMask = !!__cam.masked;
       D.cameraRec = __cam.rec || { recording: false, startedAt: 0, elapsedSec: 0 };
+      /* ★ 2026-10-19 V61：回放页真实列表——截图/录像（本舱过滤后下发，nativeIndex 为舱内序号）+ 选中态 */
+      D.cameraShots = Array.isArray(__cam.snapshots) ? __cam.snapshots : [];
+      D.cameraRecs = Array.isArray(__cam.recordings) ? __cam.recordings : [];
+      D.cameraSelKind = __cam.selKind || 'shot';
+      D.cameraSelShot = typeof __cam.selectedSnapshotIndex === 'number' ? __cam.selectedSnapshotIndex : -1;
+      D.cameraSelRec = typeof __cam.selectedRecordingIndex === 'number' ? __cam.selectedRecordingIndex : -1;
       /* ★ 任务38：主机/监护蓝牙连接状态边沿弹窗（"连接上给个弹窗"），断开也提示便于定位掉线
          ★ 2026-10-10 #59：开机动画（splash）期间不弹蓝牙提示 —— 开机自动重连属预期，不该打断动画 */
       var hostNow = !!((S.host && S.host.connected) || (S.ble && S.ble.host && S.ble.host.connected));
@@ -1289,6 +1298,37 @@
 
     // 视频页按钮：截图/录制/全屏/视频参数(=摄像头连接配置) + 画面点击全屏
     if (cur === 'video' || cur === 'video-play') {
+      /* ★ 2026-10-19 V61：回放页——快捷段（今天/本周/本月）/云卡二期提示/筛选循环（全部→仅截图→仅录像） */
+      var vpseg = e.target.closest('[data-vpseg]');
+      if (vpseg) {
+        stop(e);
+        D.vpRange = vpseg.dataset.vpseg; D.vpDate = '';
+        if (window.IcuApp) IcuApp.render();
+        return;
+      }
+      var vptab = e.target.closest('[data-vptab]');
+      if (vptab) { stop(e); toast(TT('vpCloudTodo', '云录像/卡录像需摄像头 ONVIF 支持，二期规划')); return; }
+      var vpkind = e.target.closest('[data-vpkind]');
+      if (vpkind) {
+        stop(e);
+        D.vpKind = D.vpKind === '' ? 'shot' : (D.vpKind === 'shot' ? 'rec' : '');
+        if (window.IcuApp) IcuApp.render();
+        return;
+      }
+      /* 回放页缩略图：▶ 角标放录像；其余区域点选（快照/录像各走各的舱内序号） */
+      var th = e.target.closest('.thumb[data-kind]');
+      if (th && cur === 'video-play') {
+        stop(e);
+        var kind = th.dataset.kind, tidx = parseInt(th.dataset.idx || '-1', 10);
+        if (tidx >= 0) {
+          if (kind === 'rec' && e.target.closest('.thumb .playb')) {
+            act('camera_rec_play_' + tidx);
+          } else {
+            act((kind === 'rec' ? 'camera_rec_select_' : 'camera_select_') + tidx);
+          }
+        }
+        return;
+      }
       var vb = e.target.closest('.vbtn');
       if (vb) {
         var va = vb.dataset.act;
@@ -1302,6 +1342,11 @@
           if (va === 'camera_mask') { stop(e); act('camera_mask'); return; }
           if (va === 'camera_orig') { stop(e); act('camera_orig'); return; }
           if (va === 'video_chart') { stop(e); D.videoChartOn = !D.videoChartOn; if (window.IcuApp) IcuApp.render(); return; }
+          /* ★ 2026-10-19 V61：回放页侧栏——AI识图/下载/删除/管理（原生 handler 现成，下载/删除按选中类型分派） */
+          if (va === 'camera_ai') { stop(e); act('camera_ai'); return; }
+          if (va === 'camera_item_download') { stop(e); act('camera_item_download'); return; }
+          if (va === 'camera_item_delete') { stop(e); act('camera_item_delete'); return; }
+          if (va === 'camera_manage') { stop(e); act('camera_manage'); return; }
           return;
         }
       }
@@ -2074,6 +2119,14 @@
       if (vs) D.vhStart = vs.value || '';
       if (ve) D.vhEnd = ve.value || '';
       D.vhPage = 1;
+      IcuApp.render();
+    }, true);
+    /* ★ 2026-10-19 V61：回放页 监控日期筛选（选了日期即覆盖今天/本周/本月快捷段） */
+    document.getElementById('app-root').addEventListener('change', function (e) {
+      var vd = e.target.closest ? e.target.closest('[data-vpdate]') : null;
+      if (!vd) return;
+      D.vpDate = vd.value || '';
+      if (D.vpDate) D.vpRange = '';
       IcuApp.render();
     }, true);
     /* ★ 任务15(#4)：语言选择列表（下拉）的 change 事件 */

@@ -271,6 +271,8 @@
         debugPwdErr: '调试密码错误，请重试', weekdayThu: '星期四',
         playSearchDate: '监控日期', today: '今天', thisWeek: '本周', thisMonth: '本月',
         cloudRec: '云录像', cardRec: '卡录像', filter: '筛选', timeline: '时间轴',
+        vpEmpty: '暂无回放，可到实况页截图或录制', vpAll: '全部', vpShot: '仅截图', vpRec: '仅录像',
+        vpCloudTodo: '云录像/卡录像需摄像头 ONVIF 支持，二期规划', vpPic: '图',
         aiRecog: 'Ai识图', download: '下载', manage: '管理', secUnit: '秒',
         alwaysOn: '常开', uv24h: '24h常开', autoGen: '自动生成',
         qrFail: '二维码生成失败', qrPending: '二维码生成中…', errForm: '表单数据无效',
@@ -329,6 +331,8 @@
         debugPwdErr: 'Incorrect debug password, please retry', weekdayThu: 'Thursday',
         playSearchDate: 'Monitor Date', today: 'Today', thisWeek: 'This Week', thisMonth: 'This Month',
         cloudRec: 'Cloud', cardRec: 'SD Card', filter: 'Filter', timeline: 'Timeline',
+        vpEmpty: 'No playback yet — snapshot or record on Live page', vpAll: 'All', vpShot: 'Snapshots', vpRec: 'Videos',
+        vpCloudTodo: 'Cloud/SD recordings require camera ONVIF support (phase 2)', vpPic: 'IMG',
         aiRecog: 'AI Recognize', download: 'Download', manage: 'Manage', secUnit: 's',
         alwaysOn: 'Always On', uv24h: '24h Always On', autoGen: 'Auto-generated',
         qrFail: 'QR generation failed', qrPending: 'Generating QR...', errForm: 'Invalid form data',
@@ -533,6 +537,12 @@
      - 行2 红外体温 thermo；监护等级（盾牌右上、药丸红/橙/绿）+ 三色点；二氧化碳 co2
      - 行3 治疗时长 clock；红外理疗 rays；蓝光理疗 blueLight
      - 快捷按钮 雾化器(mist) / 暖光灯(sun) / 内循环(loopIn)，图标在文字前 */
+  /* ★ 2026-10-19 V60：#11 状态页环境功能状态条——紫外/负离子/外循环/冷光 开·关 显示（数据来自 D.status.uvOn 等） */
+  function funcChip(name, on) {
+    return '<div class="fchip ' + (on ? 'on' : 'off') + '">'
+      + '<span>' + name + '</span>'
+      + '<span class="st">' + (on ? T('on', '开') : T('off', '关')) + '</span></div>';
+  }
   SCREENS['status'] = {
     name: '状态（实时监控）', group: '2 会话', render() {
       const M = D.status || {};
@@ -557,7 +567,14 @@
       const cam = '<div class="camcol"><div class="cam big">' + P.fisheye(D.stamp) + '</div>'
         + (window.renderThermalArea ? window.renderThermalArea() : '')
         + '</div>';
-      return PAGE(P.topbar('care'), grid + acts + cam, P.sessionBar('status'), false, P.sessionTag());
+      /* ★ 2026-10-19 V60：#11 状态页环境功能状态条（紫外/负离子/外循环/冷光 开·关） */
+      const funcStrip = '<div class="status-func-strip">'
+        + funcChip(T('ctrlUv', '紫外消毒'), !!M.uvOn)
+        + funcChip(T('ctrlAnion', '负离子'), !!M.anionOn)
+        + funcChip(T('ctrlOuter', '外循环'), !!M.outerOn)
+        + funcChip(T('ctrlCold', '冷光照明'), !!M.coldOn)
+        + '</div>';
+      return PAGE(P.topbar('care'), grid + acts + funcStrip + cam, P.sessionBar('status'), false, P.sessionTag());
     }
   };
 
@@ -827,25 +844,103 @@
   /* ======================================================================
      p10 视频 · 回放
      ====================================================================== */
+  /* ★ 2026-10-19 V61：回放页接真实数据——截图/录像合并列表（按时间倒序）+ 日期/快捷段/类型筛选
+     + 时间轴刻度；点选走 camera_select_/camera_rec_select_，▶ 角标放录像（camera_rec_play_）。
+     云录像/卡录像 RTSP 拿不到（需 ONVIF 二期），点击给提示。 */
+  function playbackItems() {
+    var items = [];
+    (D.cameraShots || []).forEach(function (s) {
+      items.push({ kind: 'shot', idx: s.nativeIndex, url: s.cacheUrl || '', ts: s.capturedAt || 0,
+        time: s.timeText || '', pet: s.petName || '', dur: T('vpPic', '图') });
+    });
+    (D.cameraRecs || []).forEach(function (r) {
+      var sec = Math.max(1, Math.round((r.durationMs || 0) / 1000));
+      items.push({ kind: 'rec', idx: r.nativeIndex, url: r.thumbUrl || '', ts: r.capturedAt || 0,
+        time: r.timeText || '', pet: r.petName || '', dur: sec + T('secUnit', '秒') });
+    });
+    items.sort(function (a, b) { return b.ts - a.ts; });
+    /* 类型筛选：'' 全部 / shot 仅截图 / rec 仅录像 */
+    if (D.vpKind === 'shot' || D.vpKind === 'rec') {
+      items = items.filter(function (it) { return it.kind === D.vpKind; });
+    }
+    /* 日期筛选：选了具体日期优先；否则快捷段 今天/本周(近7天)/本月 */
+    var now = new Date();
+    var sameDay = function (t, y, m, d) { var x = new Date(t); return x.getFullYear() === y && x.getMonth() === m && x.getDate() === d; };
+    if (D.vpDate) {
+      var p = D.vpDate.split('-');
+      if (p.length === 3) {
+        var yy = +p[0], mm = +p[1] - 1, dd = +p[2];
+        items = items.filter(function (it) { return sameDay(it.ts, yy, mm, dd); });
+      }
+    } else if (D.vpRange === 'today') {
+      items = items.filter(function (it) { return sameDay(it.ts, now.getFullYear(), now.getMonth(), now.getDate()); });
+    } else if (D.vpRange === 'week') {
+      var w0 = now.getTime() - 7 * 86400000;
+      items = items.filter(function (it) { return it.ts >= w0; });
+    } else if (D.vpRange === 'month') {
+      items = items.filter(function (it) { var x = new Date(it.ts); return x.getFullYear() === now.getFullYear() && x.getMonth() === now.getMonth(); });
+    }
+    return items;
+  }
+
   SCREENS['video-play'] = {
     name: '视频 · 回放', group: '2 会话', render() {
-      let thumbs = '';
-      for (let i = 0; i < 9; i++) thumbs += '<div class="thumb"><span class="th-ts">11:12</span><span class="th-d">19' + T('secUnit', '秒') + '</span><div class="fk"></div></div>';
-      const side = [['img', 'aiRecog', 'Ai识图'], ['scissors', 'shot', '截图'], ['download', 'download', '下载'], ['trash', 'del', '删除'], ['manage', 'manage', '管理']];
+      var items = playbackItems();
+      var selKind = D.cameraSelKind || 'shot';
+      var selIdx = selKind === 'rec' ? D.cameraSelRec : D.cameraSelShot;
+      var fmtHm = function (ts) {
+        var x = new Date(ts);
+        return ('0' + x.getHours()).slice(-2) + ':' + ('0' + x.getMinutes()).slice(-2);
+      };
+      var thumbs = items.map(function (it) {
+        var sel = (it.kind === selKind && it.idx === selIdx) ? ' sel' : '';
+        var img = it.url
+          ? '<img src="' + it.url + '" alt="">' : '<div class="fk"></div>';
+        var playb = it.kind === 'rec' ? '<div class="playb">▶</div>' : '';
+        return '<div class="thumb' + sel + '" data-kind="' + it.kind + '" data-idx="' + it.idx + '">'
+          + img + playb
+          + '<span class="th-ts">' + fmtHm(it.ts) + '</span>'
+          + '<span class="th-d">' + it.dur + '</span></div>';
+      }).join('');
+      if (!items.length) {
+        thumbs = '<div class="vp-empty">' + T('vpEmpty', '暂无回放，可到实况页截图或录制') + '</div>';
+      }
+      /* 时间轴：当天（或筛选结果）各条目按小时在 0~24 刻度上打点儿；底部显示选中项时间 */
+      var ticks = '';
+      items.forEach(function (it) {
+        var x = new Date(it.ts);
+        var pct = ((x.getHours() * 60 + x.getMinutes()) / 1440 * 100).toFixed(1);
+        ticks += '<i class="tl-tick" style="left:' + pct + '%"></i>';
+      });
+      var selItem = null;
+      for (var i = 0; i < items.length; i++) {
+        if (items[i].kind === selKind && items[i].idx === selIdx) { selItem = items[i]; break; }
+      }
+      var tlTime = selItem ? selItem.time : (items.length ? items[0].time : '--:--:--');
+      var side = [
+        ['img', 'aiRecog', 'Ai识图', 'camera_ai'], ['scissors', 'shot', '截图', 'camera_snapshot'],
+        ['download', 'download', '下载', 'camera_item_download'], ['trash', 'del', '删除', 'camera_item_delete'],
+        ['manage', 'manage', '管理', 'camera_manage']
+      ];
+      var kindLabel = D.vpKind === 'shot' ? T('vpShot', '仅截图') : (D.vpKind === 'rec' ? T('vpRec', '仅录像') : T('vpAll', '全部'));
       return PAGE(P.topbar('care'),
         '<div class="video-wrap" style="padding-top:12px">'
         + '<div><div class="play-top">'
-        + '<div class="play-search">' + I.search + '<span>' + T('playSearchDate', '监控日期') + '</span></div>'
-        + '<div class="seg"><button>' + T('today', '今天') + '</button><button>' + T('thisWeek', '本周') + '</button><button>' + T('thisMonth', '本月') + '</button></div>'
-        + '<div class="seg"><button class="on">' + T('cloudRec', '云录像') + '</button><button>' + T('cardRec', '卡录像') + '</button><button>' + T('filter', '筛选') + '</button></div></div>'
+        + '<div class="play-search">' + I.search + '<input type="date" data-vpdate value="' + (D.vpDate || '') + '"></div>'
+        + '<div class="seg">'
+        + '<button' + (D.vpRange === 'today' ? ' class="on"' : '') + ' data-vpseg="today">' + T('today', '今天') + '</button>'
+        + '<button' + (D.vpRange === 'week' ? ' class="on"' : '') + ' data-vpseg="week">' + T('thisWeek', '本周') + '</button>'
+        + '<button' + (D.vpRange === 'month' ? ' class="on"' : '') + ' data-vpseg="month">' + T('thisMonth', '本月') + '</button></div>'
+        + '<div class="seg"><button data-vptab="cloud">' + T('cloudRec', '云录像') + '</button><button data-vptab="card">' + T('cardRec', '卡录像') + '</button>'
+        + '<button data-vpkind="1">' + T('filter', '筛选') + '·' + kindLabel + '</button></div></div>'
         + '<div class="play-grid">' + thumbs + '</div>'
         + '<div class="timeline"><div style="font-size:20px;color:#575f6b;margin-bottom:6px">' + T('timeline', '时间轴') + '</div>'
         + '<div class="tl-ax"><span>0</span><span>5</span><span>10</span><span>15</span><span>20</span><span>24</span></div>'
-        + '<div class="rail"></div>'
-        + '<div style="text-align:center;font-size:20px;color:#575f6b">11:01:00</div></div></div>'
+        + '<div class="rail">' + ticks + '</div>'
+        + '<div style="text-align:center;font-size:20px;color:#575f6b">' + tlTime + '</div></div></div>'
         + '<div class="play-side">'
         + '<div class="seg"><button data-go="video">' + T('liveView', '实况') + '</button><button class="on">' + T('playback', '回放') + '</button></div>'
-        + side.map(function (b) { return '<div class="vbtn" style="justify-content:flex-start;padding-left:28px">' + I[b[0]] + '<span>' + T(b[1], b[2]) + '</span></div>'; }).join('')
+        + side.map(function (b) { return '<div class="vbtn" style="justify-content:flex-start;padding-left:28px" data-act="' + b[3] + '">' + I[b[0]] + '<span>' + T(b[1], b[2]) + '</span></div>'; }).join('')
         + '</div></div>', P.sessionBar('video'), false, P.sessionTag());
     }
   };

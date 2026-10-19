@@ -719,25 +719,28 @@ public class IcuDashboardView extends View {
         }
     }
 
-    /* ★ 2026-10-19 V60：本地录像条目（MP4 存 filesDir/camera_recordings，元数据随 SP 持久化，按舱过滤同快照） */
+    /* ★ 2026-10-19 V60：本地录像条目（MP4 存 filesDir/camera_recordings，元数据随 SP 持久化，按舱过滤同快照）
+       ★ V61：补 thumbFile——MediaMetadataRetriever 抽首帧 JPEG 缩略图（回放页格子用） */
     private static final class CameraRecording {
         String fileName;
         String timeText;
         long capturedAt;
         long durationMs;
         File cacheFile;
+        File thumbFile;
         Uri downloadUri;
         String patientRecordNo;
         String patientName;
         String zone;
 
         CameraRecording(String fileName, String timeText, long capturedAt, long durationMs, File cacheFile,
-                        Uri downloadUri, String patientRecordNo, String patientName, String zone) {
+                        File thumbFile, Uri downloadUri, String patientRecordNo, String patientName, String zone) {
             this.fileName = fileName;
             this.timeText = timeText;
             this.capturedAt = capturedAt;
             this.durationMs = durationMs;
             this.cacheFile = cacheFile;
+            this.thumbFile = thumbFile;
             this.downloadUri = downloadUri;
             this.patientRecordNo = patientRecordNo;
             this.patientName = patientName;
@@ -817,6 +820,9 @@ public class IcuDashboardView extends View {
     private boolean cameraRecActive;
     private long cameraRecStartedAt;
     private File cameraRecFile;
+    /* ★ 2026-10-19 V61：回放页混合列表选中态——录像舱内序号 + 最后选中类型（shot/rec，下载/删除按其分派） */
+    private int selectedCameraRecordingIndex = -1;
+    private String cameraSelKind = "shot";
     /* ★ 2026-10-19 V60：画面翻转（0正常/1水平/2垂直/3旋转180）与镜头遮蔽——SP 持久化，状态下发 H5 */
     private int cameraFlipMode;
     private boolean cameraMaskOn;
@@ -1276,6 +1282,9 @@ public class IcuDashboardView extends View {
         /* ★ 2026-10-19 V60：翻转/遮蔽/录制态+录像列表下发 H5（视频页按钮态与 REC 计时） */
         camera.put("flip", cameraFlipMode);
         camera.put("masked", cameraMaskOn);
+        /* ★ 2026-10-19 V61：回放页混合列表选中态（shot/rec + 各自舱内序号） */
+        camera.put("selKind", cameraSelKind);
+        camera.put("selectedRecordingIndex", selectedCameraRecordingIndex);
         JSONObject rec = new JSONObject();
         rec.put("recording", cameraRecActive);
         rec.put("startedAt", cameraRecStartedAt);
@@ -1761,11 +1770,53 @@ public class IcuDashboardView extends View {
                 int index = Integer.parseInt(action.substring("camera_select_".length()));
                 if (index >= 0 && index < activeCameraSnapshotCount()) {
                     selectedCameraSnapshotIndex = index;
+                    cameraSelKind = "shot";   // V61：混合列表选中态
                     invalidate();
+                    notifyCameraStateChanged();   // V61：同步 H5 回放页选中框
                     return true;
                 }
             } catch (NumberFormatException ignored) {
             }
+        }
+        /* ★ 2026-10-19 V61：录像选择/播放 + 回放页统一下载/删除（按 cameraSelKind 分派） */
+        if (action.startsWith("camera_rec_select_")) {
+            try {
+                int index = Integer.parseInt(action.substring("camera_rec_select_".length()));
+                if (index >= 0 && index < activeCameraRecordingCount()) {
+                    selectedCameraRecordingIndex = index;
+                    cameraSelKind = "rec";
+                    invalidate();
+                    notifyCameraStateChanged();
+                    return true;
+                }
+            } catch (NumberFormatException ignored) {
+            }
+            return true;
+        }
+        if (action.startsWith("camera_rec_play_")) {
+            try {
+                int index = Integer.parseInt(action.substring("camera_rec_play_".length()));
+                CameraRecording rec = getActiveCameraRecording(index);
+                if (rec != null && rec.cacheFile != null && rec.cacheFile.exists()
+                        && activity instanceof MainActivity) {
+                    selectedCameraRecordingIndex = index;
+                    cameraSelKind = "rec";
+                    ((MainActivity) activity).showCameraRecordingPlayer(rec.cacheFile);
+                    notifyCameraStateChanged();
+                } else {
+                    Toast.makeText(activity, "录像文件不存在", Toast.LENGTH_SHORT).show();
+                }
+            } catch (NumberFormatException ignored) {
+            }
+            return true;
+        }
+        if ("camera_item_download".equals(action)) {
+            downloadSelectedCameraItem();
+            return true;
+        }
+        if ("camera_item_delete".equals(action)) {
+            deleteSelectedCameraItem();
+            return true;
         }
         if ("camera_snapshot".equals(action)) {
             captureCameraSnapshotAction();
@@ -8724,6 +8775,7 @@ public class IcuDashboardView extends View {
                 item.put("capturedAt", rec.capturedAt);
                 item.put("durationMs", rec.durationMs);
                 item.put("cachePath", rec.cacheFile == null ? "" : rec.cacheFile.getAbsolutePath());
+                item.put("thumbPath", rec.thumbFile == null ? "" : rec.thumbFile.getAbsolutePath());
                 item.put("downloadUri", rec.downloadUri == null ? "" : rec.downloadUri.toString());
                 item.put("recordNo", rec.patientRecordNo);
                 item.put("petName", rec.patientName);
@@ -8733,6 +8785,48 @@ public class IcuDashboardView extends View {
             activity.getSharedPreferences(PREFS_NAME, 0)
                     .edit().putString(KEY_CAMERA_RECORDINGS, array.toString()).apply();
         } catch (Exception ignored) {
+        }
+    }
+
+    /* ★ 2026-10-19 V61：MediaMetadataRetriever 抽录像首帧存 JPEG 缩略图（camera_recordings/thumbs/），失败返回 null */
+    private File generateCameraRecordingThumb(File mp4) {
+        if (mp4 == null || !mp4.exists()) {
+            return null;
+        }
+        android.media.MediaMetadataRetriever retriever = new android.media.MediaMetadataRetriever();
+        Bitmap frame = null;
+        try {
+            retriever.setDataSource(mp4.getAbsolutePath());
+            frame = retriever.getFrameAtTime(0);
+        } catch (Exception ignored) {
+        } finally {
+            try {
+                retriever.release();
+            } catch (Exception ignored) {
+            }
+        }
+        if (frame == null) {
+            return null;
+        }
+        try {
+            File dir = new File(activity.getFilesDir(), "camera_recordings/thumbs");
+            if (!dir.exists() && !dir.mkdirs()) {
+                return null;
+            }
+            File thumb = new File(dir, mp4.getName().replaceFirst("\\.mp4$", "") + ".jpg");
+            FileOutputStream out = new FileOutputStream(thumb);
+            try {
+                frame.compress(Bitmap.CompressFormat.JPEG, 85, out);
+            } finally {
+                out.close();
+            }
+            return thumb;
+        } catch (Exception exception) {
+            return null;
+        } finally {
+            if (!frame.isRecycled()) {
+                frame.recycle();
+            }
         }
     }
 
@@ -8754,12 +8848,17 @@ public class IcuDashboardView extends View {
                     continue;
                 }
                 String uriText = item.optString("downloadUri", "");
+                File thumb = new File(item.optString("thumbPath", ""));
+                if (!thumb.exists()) {
+                    thumb = generateCameraRecordingThumb(file);   // V61：旧条目缺缩略图时补抽
+                }
                 cameraRecordings.add(new CameraRecording(
                         item.optString("fileName", file.getName()),
                         item.optString("timeText", ""),
                         item.optLong("capturedAt", file.lastModified()),
                         item.optLong("durationMs", 0),
                         file,
+                        thumb != null && thumb.exists() ? thumb : null,
                         TextUtils.isEmpty(uriText) ? null : Uri.parse(uriText),
                         item.optString("recordNo", ""),
                         item.optString("petName", ""),
@@ -8784,12 +8883,142 @@ public class IcuDashboardView extends View {
             item.put("capturedAt", rec.capturedAt);
             item.put("durationMs", rec.durationMs);
             item.put("cacheUrl", rec.cacheFile == null ? "" : Uri.fromFile(rec.cacheFile).toString());
+            item.put("thumbUrl", rec.thumbFile != null && rec.thumbFile.exists()
+                    ? Uri.fromFile(rec.thumbFile).toString() : "");
             item.put("downloaded", rec.downloadUri != null);
             item.put("recordNo", safeJsonText(rec.patientRecordNo));
             item.put("petName", safeJsonText(rec.patientName));
             array.put(item);
         }
         return array;
+    }
+
+    /* ==================== ★ 2026-10-19 V61：回放页录像 选择/播放/下载/删除 ==================== */
+
+    private int activeCameraRecordingCount() {
+        String z = currentZoneNormalized();
+        int n = 0;
+        for (CameraRecording r : cameraRecordings) {
+            if (z.equals(r.zone)) n++;
+        }
+        return n;
+    }
+
+    private CameraRecording getActiveCameraRecording(int index) {
+        String z = currentZoneNormalized();
+        int seen = 0;
+        for (CameraRecording r : cameraRecordings) {
+            if (z.equals(r.zone)) {
+                if (seen == index) return r;
+                seen++;
+            }
+        }
+        return null;
+    }
+
+    private CameraRecording selectedCameraRecording() {
+        int count = activeCameraRecordingCount();
+        if (count <= 0) {
+            selectedCameraRecordingIndex = -1;
+            return null;
+        }
+        if (selectedCameraRecordingIndex < 0 || selectedCameraRecordingIndex >= count) {
+            selectedCameraRecordingIndex = 0;
+        }
+        return getActiveCameraRecording(selectedCameraRecordingIndex);
+    }
+
+    /* 回放页下载：按最后选中类型分派（快照走相册 ICUCamera，录像走影片 ICUCamera） */
+    private void downloadSelectedCameraItem() {
+        if ("rec".equals(cameraSelKind)) {
+            downloadSelectedCameraRecording();
+        } else {
+            downloadSelectedCameraSnapshot();
+        }
+    }
+
+    private void downloadSelectedCameraRecording() {
+        CameraRecording rec = selectedCameraRecording();
+        if (rec == null || rec.cacheFile == null || !rec.cacheFile.exists()) {
+            Toast.makeText(activity, "请先选择一段录像", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            Uri uri = copyVideoToMovies(rec.cacheFile, rec.fileName);
+            rec.downloadUri = uri;
+            saveCameraRecordingsToStorage();
+            Toast.makeText(activity, "录像已导出到相册: " + uri.toString(), Toast.LENGTH_LONG).show();
+            invalidate();
+        } catch (IOException exception) {
+            Toast.makeText(activity, "导出录像失败: " + exception.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    private Uri copyVideoToMovies(File source, String fileName) throws IOException {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+            values.put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4");
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_MOVIES + "/ICUCamera");
+            Uri uri = activity.getContentResolver().insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) {
+                throw new IOException("无法创建视频文件");
+            }
+            OutputStream output = activity.getContentResolver().openOutputStream(uri);
+            if (output == null) {
+                throw new IOException("无法打开视频文件");
+            }
+            copyFile(source, output);
+            return uri;
+        }
+        File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MOVIES), "ICUCamera");
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new IOException("无法创建视频目录");
+        }
+        File target = new File(dir, fileName);
+        FileOutputStream output = new FileOutputStream(target);
+        copyFile(source, output);
+        return Uri.fromFile(target);
+    }
+
+    private void deleteSelectedCameraItem() {
+        if ("rec".equals(cameraSelKind)) {
+            deleteSelectedCameraRecording();
+        } else {
+            deleteSelectedCameraSnapshot();
+        }
+    }
+
+    private void deleteSelectedCameraRecording() {
+        final CameraRecording rec = selectedCameraRecording();
+        if (rec == null) {
+            Toast.makeText(activity, "请先选择一段录像", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        new AlertDialog.Builder(activity)
+                .setTitle("删除录像")
+                .setMessage("确定删除这段摄像头录像吗？")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("删除", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        if (rec.cacheFile != null && rec.cacheFile.exists()) {
+                            rec.cacheFile.delete();
+                        }
+                        if (rec.thumbFile != null && rec.thumbFile.exists()) {
+                            rec.thumbFile.delete();
+                        }
+                        cameraRecordings.remove(rec);
+                        int remaining = activeCameraRecordingCount();
+                        selectedCameraRecordingIndex = remaining <= 0
+                                ? -1
+                                : Math.min(selectedCameraRecordingIndex, remaining - 1);
+                        saveCameraRecordingsToStorage();
+                        Toast.makeText(activity, "录像已删除", Toast.LENGTH_SHORT).show();
+                        notifyCameraStateChanged();
+                    }
+                })
+                .show();
     }
 
     /* ★ V60：录制开关（视频页「录制」按钮）。起录失败=预览未出画面/码流非 H264（H265 客户端本就不出图） */
@@ -8843,16 +9072,20 @@ public class IcuDashboardView extends View {
         long capturedAt = wasActive && cameraRecStartedAt > 0 ? cameraRecStartedAt : System.currentTimeMillis();
         String timeText = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date(capturedAt));
         PatientCase patient = currentCase();
+        File thumb = generateCameraRecordingThumb(file);   // V61：抽首帧做回放页缩略图
         cameraRecordings.add(0, new CameraRecording(
                 file.getName(),
                 timeText,
                 capturedAt,
                 durationMs,
                 file,
+                thumb,
                 null,
                 patient == null ? "" : safeJsonText(patient.recordNo),
                 patient == null ? "" : safeJsonText(patient.petName),
                 patientZoneOrCurrent(patient)));
+        selectedCameraRecordingIndex = 0;
+        cameraSelKind = "rec";
         saveCameraRecordingsToStorage();
         long sec = Math.max(1, durationMs / 1000);
         appendUserLog("摄像头", auto ? "录制自动保存" : "录制保存", file.getName() + " " + sec + "秒");
@@ -10697,6 +10930,7 @@ public class IcuDashboardView extends View {
             saveCameraSnapshotsToStorage();
             Toast.makeText(activity, "已从回放图片保存一张截图", Toast.LENGTH_SHORT).show();
             invalidate();
+            notifyCameraStateChanged();   // V61
             return true;
         } catch (IOException exception) {
             Toast.makeText(activity, "回放截图失败: " + exception.getMessage(), Toast.LENGTH_LONG).show();
@@ -10735,6 +10969,7 @@ public class IcuDashboardView extends View {
         selectedCameraSnapshotIndex = 0;
         trimCameraSnapshotsForZone(zone);
         saveCameraSnapshotsToStorage();
+        notifyCameraStateChanged();   // V61：截图入库即刷新 H5 回放页
     }
 
     private void downloadSelectedCameraSnapshot() {
@@ -10749,6 +10984,7 @@ public class IcuDashboardView extends View {
             saveCameraSnapshotsToStorage();
             Toast.makeText(activity, "截图已下载: " + uri.toString(), Toast.LENGTH_LONG).show();
             invalidate();
+            notifyCameraStateChanged();   // V61：H5 回放页刷新「已下载」态
         } catch (IOException exception) {
             Toast.makeText(activity, "下载截图失败: " + exception.getMessage(), Toast.LENGTH_LONG).show();
         }
@@ -10778,12 +11014,18 @@ public class IcuDashboardView extends View {
                         saveCameraSnapshotsToStorage();
                         Toast.makeText(activity, "截图已删除", Toast.LENGTH_SHORT).show();
                         invalidate();
+                        notifyCameraStateChanged();   // V61：H5 回放页刷新列表
                     }
                 })
                 .show();
     }
 
     private void showCameraAiDialog() {
+        /* ★ 2026-10-19 V61：回放页为快照/录像混合列表——选中录像时提示改选截图 */
+        if ("rec".equals(cameraSelKind)) {
+            Toast.makeText(activity, "AI识图仅支持截图，请先选择一张截图", Toast.LENGTH_SHORT).show();
+            return;
+        }
         CameraSnapshot snapshot = selectedCameraSnapshot();
         if (snapshot == null || snapshot.cacheFile == null || !snapshot.cacheFile.exists()) {
             Toast.makeText(activity, "请先选择一张截图", Toast.LENGTH_SHORT).show();
@@ -10903,6 +11145,8 @@ public class IcuDashboardView extends View {
         final CameraSnapshot selected = selectedCameraSnapshot();
         StringBuilder message = new StringBuilder();
         message.append("当前回放总数：").append(activeCameraSnapshotCount());
+        /* ★ 2026-10-19 V61：回放页含录像——管理弹窗统计与清空项同步扩展 */
+        message.append("，录像：").append(activeCameraRecordingCount());
         if (patient != null) {
             message.append("\n当前宠物：").append(safeJsonText(patient.petName));
             message.append("\n当前宠物回放：").append(patientCount);
@@ -10917,6 +11161,9 @@ public class IcuDashboardView extends View {
         }
         if (activeCameraSnapshotCount() > 0) {
             actions.add("清空" + zoneText(currentZoneNormalized()) + "全部回放");
+        }
+        if (activeCameraRecordingCount() > 0) {
+            actions.add("清空" + zoneText(currentZoneNormalized()) + "全部录像");
         }
         final String[] items = actions.toArray(new String[0]);
         new AlertDialog.Builder(activity)
@@ -10937,6 +11184,11 @@ public class IcuDashboardView extends View {
                         }
                         if (choice != null && choice.startsWith("清空") && choice.endsWith("全部回放")) {
                             confirmDeleteAllCameraSnapshots();
+                            return;
+                        }
+                        /* ★ 2026-10-19 V61 */
+                        if (choice != null && choice.startsWith("清空") && choice.endsWith("全部录像")) {
+                            confirmDeleteAllCameraRecordings();
                         }
                     }
                 })
@@ -11038,6 +11290,43 @@ public class IcuDashboardView extends View {
         saveCameraSnapshotsToStorage();
         Toast.makeText(activity, zoneText(z) + "全部回放已清空", Toast.LENGTH_SHORT).show();
         invalidate();
+    }
+
+    /* ★ 2026-10-19 V61：清空当前舱全部录像（含缩略图），回放管理弹窗用 */
+    private void clearAllCameraRecordings() {
+        String z = currentZoneNormalized();
+        for (int i = cameraRecordings.size() - 1; i >= 0; i--) {
+            CameraRecording rec = cameraRecordings.get(i);
+            if (!z.equals(rec.zone)) {
+                continue;
+            }
+            if (rec.cacheFile != null && rec.cacheFile.exists()) {
+                rec.cacheFile.delete();
+            }
+            if (rec.thumbFile != null && rec.thumbFile.exists()) {
+                rec.thumbFile.delete();
+            }
+            cameraRecordings.remove(i);
+        }
+        selectedCameraRecordingIndex = -1;
+        saveCameraRecordingsToStorage();
+        Toast.makeText(activity, zoneText(z) + "全部录像已清空", Toast.LENGTH_SHORT).show();
+        notifyCameraStateChanged();
+    }
+
+    private void confirmDeleteAllCameraRecordings() {
+        final String zone = currentZoneNormalized();
+        new AlertDialog.Builder(activity)
+                .setTitle("清空" + zoneText(zone) + "全部录像")
+                .setMessage("确定清空" + zoneText(zone) + "的所有摄像头录像吗？（另一舱不受影响）")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("清空", new DialogInterface.OnClickListener() {
+                    @Override
+                    public void onClick(DialogInterface dialog, int which) {
+                        clearAllCameraRecordings();
+                    }
+                })
+                .show();
     }
 
     /**
