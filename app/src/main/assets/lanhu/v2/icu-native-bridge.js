@@ -1433,7 +1433,11 @@
         if (!sendingCard) { D.sendMenuHide = !D.sendMenuHide; if (window.IcuApp) { IcuApp.render(); setTimeout(positionSendMenu, 0); } }
         return;
       }
-      if (cur === 'care' || cur === 'care-data' || cur === 'care-record' || (cur === 'sending' && D.sendFrom === 'care') /* ★ #84 护疗来源的发送页也走护疗分支 */) {
+      /* ★ 2026-10-20 V62：record-data（治疗记录数据表）页也走护疗分支——根治该页底栏「打印」死链
+         （此前不命中任何分支，落 app.js 默认 data-go='printing'，跳「正在打印」页且永不退出；
+         新建/开始护疗/编辑/删除/数据发送同理全部无守卫直跳）。打印与护疗页一致：开记录单预览，
+         真实打印由记录单页执行（#53 设计） */
+      if (cur === 'care' || cur === 'care-data' || cur === 'care-record' || cur === 'record-data' || (cur === 'sending' && D.sendFrom === 'care') /* ★ #84 护疗来源的发送页也走护疗分支 */) {
         if (key === 'newSample') { stop(e); openNewSampleDraft(); return; }
         if (key === 'startCare') {
           stop(e);

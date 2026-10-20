@@ -7526,20 +7526,19 @@ public class IcuDashboardView extends View {
         // 右侧 LOGO：优先页脚 LOGO，医院 LOGO 兜底，垂直居中
         String logoUri = pdfIsBlankValue(footerLogoUri) ? (org == null ? null : org.logoUri) : footerLogoUri;
         if (!pdfIsBlankValue(logoUri)) {
-            try {
-                Bitmap bmp = BitmapFactory.decodeFile(logoUri);
-                if (bmp != null) {
-                    float maxH = 30f;
-                    float h = maxH;
-                    float w = h * bmp.getWidth() / bmp.getHeight();
-                    if (w > 120f) { w = 120f; h = w * bmp.getHeight() / bmp.getWidth(); }
-                    float top = 802 + (40 - h) / 2f + 2;
-                    pdfPaint.setShader(null);
-                    pdfPaint.setStyle(Paint.Style.FILL);
-                    canvas.drawBitmap(bmp, null, new RectF(567 - w, top, 567, top + h), pdfPaint);
-                    bmp.recycle();
-                }
-            } catch (Exception ignored) {
+            /* ★ 2026-10-20 V62：decodeFile 读 content:// 必然返回 null（打印件页脚 Logo 一直出不来），
+               改走 ContentResolver 解码，兼容 content:// 与文件路径 */
+            Bitmap bmp = pdfLoadLogoBitmap(logoUri);
+            if (bmp != null) {
+                float maxH = 30f;
+                float h = maxH;
+                float w = h * bmp.getWidth() / bmp.getHeight();
+                if (w > 120f) { w = 120f; h = w * bmp.getHeight() / bmp.getWidth(); }
+                float top = 802 + (40 - h) / 2f + 2;
+                pdfPaint.setShader(null);
+                pdfPaint.setStyle(Paint.Style.FILL);
+                canvas.drawBitmap(bmp, null, new RectF(567 - w, top, 567, top + h), pdfPaint);
+                bmp.recycle();
             }
         }
     }
@@ -7575,9 +7574,54 @@ public class IcuDashboardView extends View {
         if (pdfIsBlankValue(hospitalName)) {
             hospitalName = "\u533b\u9662\u540d\u79f0";
         }
-        pdfText(canvas, pdfPaint, "LOGO", 16, 38, 18, strongText, true);
+        /* \u2605 2026-10-20 V62\uff1a\u9875\u7709\u753b\u771f\u533b\u9662 LOGO\uff08\u6b64\u524d\u53ea\u753b\u6587\u5b57"LOGO"\u5360\u4f4d\uff0c\u6253\u5370\u4ef6\u51fa\u4e0d\u6765\uff09\uff1b
+           \u65e0\u56fe/\u89e3\u7801\u5931\u8d25\u65f6\u56de\u9000\u539f\u6587\u5b57\u5360\u4f4d\u3002LOGO \u533a\u9650\u5236\u5728 x16~86 \u907f\u514d\u538b\u533b\u9662\u540d\uff08x89 \u8d77\uff09 */
+        Bitmap headerLogo = pdfLoadLogoBitmap(org == null ? null : org.logoUri);
+        if (headerLogo != null) {
+            float maxH = 34f;
+            float lh = maxH;
+            float lw = lh * headerLogo.getWidth() / headerLogo.getHeight();
+            if (lw > 70f) { lw = 70f; lh = lw * headerLogo.getHeight() / headerLogo.getWidth(); }
+            float ltop = 13 + (39 - lh) / 2f;
+            pdfPaint.setShader(null);
+            pdfPaint.setStyle(Paint.Style.FILL);
+            canvas.drawBitmap(headerLogo, null, new RectF(16, ltop, 16 + lw, ltop + lh), pdfPaint);
+            headerLogo.recycle();
+        } else {
+            pdfText(canvas, pdfPaint, "LOGO", 16, 38, 18, strongText, true);
+        }
         pdfTextFit(canvas, pdfPaint, hospitalName, 89, 36, 230, 15, strongText, false);
         pdfTextCenter(canvas, pdfPaint, pdfIsBlankValue(reportTitle) ? "ICU\u52a8\u7269\u8231\u6cbb\u7597\u8bb0\u5f55\u5355" : reportTitle, new RectF(360, 0, 590, 52), 18, Color.WHITE, true);
+    }
+
+    /* \u2605 2026-10-20 V62\uff1aPDF \u7528 LOGO \u89e3\u7801\u2014\u2014\u4e0a\u4f20\u7684 LOGO \u5b58\u7684\u662f content:// URI \u5b57\u7b26\u4e32
+       \uff08onOrganizationLogoSelected/onFooterLogoSelected \u91cc Uri.toString()\uff09\uff0c
+       BitmapFactory.decodeFile \u53ea\u80fd\u8bfb\u6587\u4ef6\u8def\u5f84\uff0c\u5bf9 content:// \u6052\u8fd4\u56de null\u3002
+       \u7edf\u4e00\u5728\u6b64\u6309 scheme \u5206\u6d3e\uff1acontent/android.resource \u8d70 ContentResolver\uff0cfile/\u88f8\u8def\u5f84\u8d70 decodeFile\u3002 */
+    private Bitmap pdfLoadLogoBitmap(String uriOrPath) {
+        if (pdfIsBlankValue(uriOrPath) || activity == null) {
+            return null;
+        }
+        try {
+            if (uriOrPath.startsWith("content://") || uriOrPath.startsWith("android.resource://")) {
+                InputStream in = activity.getContentResolver().openInputStream(Uri.parse(uriOrPath));
+                if (in == null) {
+                    return null;
+                }
+                try {
+                    return BitmapFactory.decodeStream(in);
+                } finally {
+                    in.close();
+                }
+            }
+            if (uriOrPath.startsWith("file://")) {
+                String path = Uri.parse(uriOrPath).getPath();
+                return TextUtils.isEmpty(path) ? null : BitmapFactory.decodeFile(path);
+            }
+            return BitmapFactory.decodeFile(uriOrPath);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     /** 舱位的中文名，用于报告与文件名。 */
