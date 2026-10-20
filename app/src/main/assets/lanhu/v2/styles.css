@@ -152,7 +152,8 @@ input.inp::placeholder{color:var(--ink3)}
 
 /* 列表页卡片化（对齐设计图 13.png / 5.png）：浅灰蓝底 + 每行白色圆角卡片，行间留缝；
    仅作用于回顾/护理数据列表（.tbl.list），治疗记录单/用户管理等表格不受影响 */
-.listwrap{height:100%;box-sizing:border-box;background:#eef1f6;padding:10px 18px 0}
+/* ★ 2026-10-20 V63（V1.02 R5/R33）：列表区纵向可滚——此前无 overflow，长列表被裁切 */
+.listwrap{height:100%;box-sizing:border-box;background:#eef1f6;padding:10px 18px 0;overflow-y:auto;-webkit-overflow-scrolling:touch}
 .tbl.list{border-collapse:separate;border-spacing:0 12px}
 /* ★ 2026-10-10 #75 表头浅蓝灰/选中中蓝；#78 数据行统一浅蓝底（去掉白蓝相间，旧斑马纹被误认为只有一行有底色） */
 .tbl.list th{background:#dbe7f5;color:#1c2430;font-weight:700;padding:12px 26px}

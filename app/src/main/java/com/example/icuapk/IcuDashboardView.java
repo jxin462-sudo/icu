@@ -6335,6 +6335,24 @@ public class IcuDashboardView extends View {
         }
         String now = currentTimeText();
         closeTreatmentRecord(patient, now);
+        /* ★ 2026-10-20 V63（V1.02 R31）：结束护疗同步下发 BLE 关闭全部会话可控物理开关——
+           此前只收尾数据层（条目/计时/冻结），设备上的红外/蓝光/雾化等功能仍在运行；
+           开关集合与开始护疗的清场逻辑一致（{3..13}，含护理模式会开的 CO2/冷光/暖光/外/内循环）。 */
+        int[] sessionControls = {3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13};
+        boolean anyOffFailed = false;
+        for (int ci : sessionControls) {
+            if (bleManager.isControlOn(ci) && !bleManager.setControlEnabled(ci, false)) {
+                anyOffFailed = true;
+            }
+        }
+        if (anyOffFailed) {
+            Toast.makeText(activity, "主机蓝牙未连接，设备上的治疗功能未能关闭，请连接主机后手动关闭", Toast.LENGTH_LONG).show();
+        }
+        /* 护理模式卡片开启态随护疗结束复位（与开始护疗的复位一致） */
+        if (hostModeActive) {
+            hostModeActive = false;
+            saveUiSettings();
+        }
         appendUserLog("护疗", "结束护疗", "住院号 " + patient.caseNo + " / " + patient.petName);
         /* ★ 2026-10-08 日志页·常规信息 */
         appendGeneralLog("护疗", "结束护疗 " + patient.caseNo + " / " + patient.petName);
@@ -7425,6 +7443,12 @@ public class IcuDashboardView extends View {
         drawTemplatePdf(pdfCanvas, pdfPaint, patient, currentOrganization(), createdAt, s5ReportTitle, s5ReportDeclaration, s5FooterLogoUri);
         document.finishPage(page);
 
+        /* ★ 2026-10-20 V63（V1.02 Sheet3 / R24 / R41）：第二页 = 18 行治疗记录表，
+           与 H5 治疗记录数据表（record-data）同源同义，打印件从此包含治疗记录表本体 */
+        PdfDocument.Page sheetPage = document.startPage(new PdfDocument.PageInfo.Builder(595, 842, 2).create());
+        drawPdfTreatmentSheetPage(sheetPage.getCanvas(), pdfPaint, patient);
+        document.finishPage(sheetPage);
+
         boolean useLegacyPdfTemplate = false;
         if (useLegacyPdfTemplate) {
         drawPdfHeader(pdfCanvas, pdfPaint, "动物ICU重症监护报告", "生成时间: " + createdAt);
@@ -7521,7 +7545,7 @@ public class IcuDashboardView extends View {
         String labDoc = patient == null ? "" : pdfFirstValue(patient.labDoctor, patient.doctor, accountStore.getCurrentAccount());
         pdfText(canvas, pdfPaint, "检验医师: " + pdfFooterValue(labDoc), 300, 816, 8.4f, gray, false);
         pdfText(canvas, pdfPaint, "检验时间: " + pdfFooterValue(createdAt), 300, 828, 8.4f, gray, false);
-        pdfText(canvas, pdfPaint, "页码 1/1", 300, 840, 8.4f, gray, false);
+        pdfText(canvas, pdfPaint, "页码 1/2", 300, 840, 8.4f, gray, false);
 
         // 右侧 LOGO：优先页脚 LOGO，医院 LOGO 兜底，垂直居中
         String logoUri = pdfIsBlankValue(footerLogoUri) ? (org == null ? null : org.logoUri) : footerLogoUri;
@@ -7622,6 +7646,84 @@ public class IcuDashboardView extends View {
         } catch (Exception e) {
             return null;
         }
+    }
+
+    /* ★ 2026-10-20 V63（V1.02 Sheet3）：PDF 第二页——18 行治疗记录表。
+       列：序号/项目/是否打开/报告录入/选取时段/平均值/最高/最低（与 H5 record-data 页同源同义）；
+       波形三行（序号16~18）「是否打开」按 H5 约定显 "—"；勾选画矢量方框（与第一页治疗项目同款，
+       不依赖字体 √ 字形）。版式：x28~568 共 540，行高 32，19 行（表头+18）总高 608，一页放下。 */
+    private void drawPdfTreatmentSheetPage(Canvas canvas, Paint pdfPaint, PatientCase patient) {
+        pdfFill(canvas, pdfPaint, 0, 0, 595, 842, Color.WHITE);
+        int ink = Color.rgb(58, 62, 68);
+        int gray = Color.rgb(96, 101, 108);
+        int grid = Color.rgb(154, 166, 178);
+        drawPdfSectionTitle(canvas, pdfPaint, "【治疗记录表】", 28, 40, 106, 568);
+        String startT = patient == null ? "" : pdfCleanValue(patient.treatmentStartTime);
+        String endT = patient == null ? "" : pdfCleanValue(patient.treatmentEndTime);
+        pdfText(canvas, pdfPaint, "开始治疗时间: " + startT, 28, 66, 9.5f, gray, false);
+        pdfText(canvas, pdfPaint, "结束治疗时间: " + endT, 300, 66, 9.5f, gray, false);
+
+        final float left = 28, top = 80, rowH = 32;
+        final float[] widths = {34, 130, 62, 62, 76, 62, 57, 57}; // 合计 540，右界 568
+        final String[] headers = {"序号", "项目", "是否打开", "报告录入", "选取时段", "平均值", "最高", "最低"};
+        final int rows = 18;
+        final float tableBottom = top + rowH * (rows + 1);
+
+        // 表头
+        pdfFill(canvas, pdfPaint, left, top, left + 540, top + rowH, Color.rgb(228, 241, 252));
+        float x = left;
+        for (int i = 0; i < headers.length; i++) {
+            pdfTextCenter(canvas, pdfPaint, headers[i], new RectF(x, top, x + widths[i], top + rowH), 9.5f, ink, true);
+            x += widths[i];
+        }
+        // 数据行（18 行固定；legacy 病例缺条目时留空行，保证表结构完整）
+        java.util.List<TreatmentEntry> entries = patient == null ? null : patient.treatmentEntries;
+        int count = entries == null ? 0 : entries.size();
+        float y = top;
+        for (int r = 0; r < rows; r++) {
+            y += rowH;
+            TreatmentEntry e = r < count ? entries.get(r) : null;
+            x = left;
+            for (int c = 0; c < headers.length; c++) {
+                RectF cell = new RectF(x, y, x + widths[c], y + rowH);
+                if (c == 2 || c == 3) {
+                    if (c == 2 && r >= 15) {
+                        pdfTextCenter(canvas, pdfPaint, "—", cell, 9.5f, gray, false); // 波形三行无「是否打开」
+                    } else if (e != null) {
+                        boolean on = c == 2 ? e.enabled : e.includeInReport;
+                        drawPdfCheckbox(canvas, pdfPaint, x + (widths[c] - 8) / 2f, y + (rowH - 8) / 2f, on);
+                    }
+                } else {
+                    String v;
+                    if (e == null) { v = ""; }
+                    else if (c == 0) { v = String.format(Locale.getDefault(), "%02d", r + 1); }
+                    else if (c == 1) { v = e.itemName; }
+                    else if (c == 4) { v = treatmentPeriodDisplayText(e); }
+                    else if (c == 5) { v = treatmentAverageText(e); }
+                    else if (c == 6) { v = treatmentHighText(e); }
+                    else { v = treatmentLowText(e); }
+                    if (v == null) { v = ""; }
+                    if (c >= 4 && TextUtils.isEmpty(v)) { v = "--"; }
+                    if (c == 1) {
+                        pdfTextFit(canvas, pdfPaint, v, x + 6, y + rowH / 2f + 3.2f, widths[c] - 10, 9.5f, ink, false);
+                    } else {
+                        pdfTextCenter(canvas, pdfPaint, v, cell, 9.5f, ink, false);
+                    }
+                }
+                x += widths[c];
+            }
+        }
+        // 网格线：外框 + 行线 + 列线
+        pdfStrokeRect(canvas, pdfPaint, left, top, left + 540, tableBottom, grid, 0.8f);
+        for (int r = 1; r <= rows; r++) {
+            pdfLine(canvas, pdfPaint, left, top + rowH * r, left + 540, top + rowH * r, grid, 0.5f);
+        }
+        x = left;
+        for (int i = 0; i <= headers.length; i++) {
+            pdfLine(canvas, pdfPaint, x, top, x, tableBottom, grid, 0.5f);
+            if (i < headers.length) { x += widths[i]; }
+        }
+        pdfTextCenter(canvas, pdfPaint, "页码 2/2", new RectF(28, 812, 568, 830), 8.4f, gray, false);
     }
 
     /** 舱位的中文名，用于报告与文件名。 */

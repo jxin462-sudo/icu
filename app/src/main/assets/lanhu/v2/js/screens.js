@@ -151,6 +151,7 @@
         /* ★ 任务15 */
         curLogo: '当前LOGO', footerLogo: '页脚LOGO', factoryConfirmBody: '确认恢复出厂设置？所有自定义设置将恢复默认。',
         reviewNoData: '暂无样本数据，无法执行该操作', reviewNoSel: '请先选择一个样本',
+        tblEmpty: '暂无数据',
         careEndedNoRestart: '该记录已结束，不能重复开始护疗',
         careNeedDisease: '请先填写病症再开始护疗', careNotEndedPrint: '该样本治疗未结束，不能打印', careNotEndedSend: '该样本治疗未结束，不能发送数据',
         careNoSample: '暂无样本数据，无法开始治疗',
@@ -214,6 +215,7 @@
         /* ★ 任务15 */
         curLogo: 'Current Logo', footerLogo: 'Footer Logo', factoryConfirmBody: 'Restore factory settings? All custom settings will be reset.',
         reviewNoData: 'No sample data; this action is unavailable', reviewNoSel: 'Please select a sample first',
+        tblEmpty: 'No data',
         careEndedNoRestart: 'This record has ended and cannot be restarted',
         careNeedDisease: 'Enter the diagnosis before starting treatment', careNotEndedPrint: 'Treatment not finished; printing is unavailable', careNotEndedSend: 'Treatment not finished; sending is unavailable',
         /* ★ 任务14：打印页 */
@@ -422,6 +424,10 @@
         + '<td>' + stTxt(r.st) + '</td>'
         + '<td>' + fmtDT(r.time) + '</td></tr>';
     });
+    /* ★ 2026-10-20 V63（V1.02 R5）：护疗列表空状态占位（不再只有光表头） */
+    if (!rows.length) {
+      h += '<tr><td colspan="9" style="text-align:center;color:#8b95a6;padding:30px 0;font-size:20px">' + T('tblEmpty', '暂无数据') + '</td></tr>';
+    }
     return h + '</table>';
   }
   const CARE_BAR = [
@@ -1145,6 +1151,10 @@
         + '<td>' + stTxt(r.st) + '</td>'
         + '<td>' + fmtDT(r.time) + '</td></tr>';
     });
+    /* ★ 2026-10-20 V63（V1.02 R33）：回顾列表空状态占位（不再只有光表头） */
+    if (!D.reviewRows.length) {
+      t += '<tr><td colspan="10" style="text-align:center;color:#8b95a6;padding:30px 0;font-size:20px">' + T('tblEmpty', '暂无数据') + '</td></tr>';
+    }
     return t + '</table>';
   }
   SCREENS['review'] = {
