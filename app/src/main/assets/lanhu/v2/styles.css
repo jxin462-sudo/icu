@@ -892,4 +892,7 @@ body.notes .annot.dz{display:flex}
 .tut-empty{height:100%;display:flex;align-items:center;justify-content:center;font-size:26px;color:var(--ink3);border:2px dashed var(--line);border-radius:12px;margin:0}
 .tut-name{position:absolute;left:0;right:0;bottom:0;padding:10px 14px;font-size:20px;color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.55));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .tut-tools{position:absolute;right:10px;top:10px;z-index:2;display:flex;gap:10px}
+/* ★ 2026-10-20 V64：固定教程位——内嵌视频播放器 / 整页可滚（固定4+自定义6 共10卡） */
+.tut-media{width:100%;height:100%;object-fit:contain;background:#000;display:block}
+.tut-wrap{overflow-y:auto;max-height:100%}
 .tut-btn{font-size:18px;color:#fff;background:rgba(15,62,134,.75);border-radius:6px;padding:4px 12px}

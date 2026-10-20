@@ -1409,6 +1409,7 @@ public class IcuDashboardView extends View {
             patient.doctor = optNonEmpty(json, "doctor", patient.doctor);
             /* ★ 2026-10-11：住院号自动生成（A=左舱 / B=右舱前缀区分舱位），不允许手工修改——
                H5 传回的 caseNo/recordNo 一律忽略；仅 pendingInitialEntry 初次落号时按原生生成的编号固化。 */
+            final boolean wasPendingInitialEntry = patient.pendingInitialEntry; // ★ V64：日志措辞用（复位前捕获）
             if (patient.pendingInitialEntry) {
                 String initNo = optNonEmpty(json, "recordNo", optNonEmpty(json, "caseNo", patient.recordNo));
                 if (TextUtils.isEmpty(initNo)) {
@@ -1439,6 +1440,13 @@ public class IcuDashboardView extends View {
             patient.treatmentEndTime = optNonEmpty(json, "treatmentEndTime", patient.treatmentEndTime);
             if (json.has("currentTreatment")) {
                 patient.currentTreatment = json.optBoolean("currentTreatment", patient.currentTreatment);
+            }
+            /* ★ 2026-10-20 V64（V1.02 R21）：编辑样本「操作记录日志」——弹窗整表保存才记（payload 带 petName），
+               列表行内「病症」即时同步（payload 仅 caseId+disease）不刷屏；
+               pendingInitialEntry 初次落号 = 新建录入，与编辑区分措辞 */
+            if (json.has("petName")) {
+                appendUserLog("护疗", wasPendingInitialEntry ? "新建样本录入" : "编辑样本",
+                        "住院号 " + patient.caseNo + " / " + patient.petName);
             }
             lastGeneratedPdf = null;
             saveTreatmentRecordsToStorage(true);
@@ -1926,8 +1934,19 @@ public class IcuDashboardView extends View {
             activity.openApkUpdatePage();
             return true;
         }
+        // ★ 2026-10-20 V64（V1.02 R84/R85）：日志导出——按 H5 当前类别写 txt 到 下载/ICULogs
+        if (action.startsWith("log_export_")) {
+            exportLogCategory(action.substring("log_export_".length()));
+            invalidate();
+            return true;
+        }
         if (action.startsWith("tutorial_")) {
             /* ★ 2026-10-09 教程槽位绑定：pick/play/clear 先于旧 showTutorialAction 处理 */
+            // ★ 2026-10-20 V64（V1.02 R92）：内置固定教程——打开随包使用手册 PDF
+            if ("tutorial_open_manual".equals(action)) {
+                openTutorialManual();
+                return true;
+            }
             if (action.startsWith("tutorial_slot_pick_")) {
                 try {
                     activity.pickTutorialMedia(Integer.parseInt(action.substring("tutorial_slot_pick_".length())));
@@ -3772,6 +3791,70 @@ public class IcuDashboardView extends View {
             arr.put(slot);
         }
         return arr;
+    }
+
+    /* ★ 2026-10-20 V64（V1.02 R92）：内置固定教程资源探测——装机/操作指南视频与临床应用手册 PDF
+       是否随包携带（assets/lanhu/v2/tutorial/）。H5 教程页据此渲染「固定教程」区。 */
+    String tutorialFixedStateJson() {
+        JSONObject obj = new JSONObject();
+        try {
+            obj.put("install", assetFileExists("lanhu/v2/tutorial/install.mp4"));
+            obj.put("guide", assetFileExists("lanhu/v2/tutorial/guide.mp4"));
+            obj.put("manual", assetFileExists("lanhu/v2/tutorial/manual.pdf"));
+        } catch (JSONException ignored) {
+        }
+        return obj.toString();
+    }
+
+    private boolean assetFileExists(String path) {
+        if (activity == null) {
+            return false;
+        }
+        java.io.InputStream in = null;
+        try {
+            in = activity.getAssets().open(path);
+            return true;
+        } catch (Exception e) {
+            return false;
+        } finally {
+            if (in != null) {
+                try { in.close(); } catch (Exception ignored) { }
+            }
+        }
+    }
+
+    /** 打开随包使用手册 PDF：assets 不能被外部应用直读，先落缓存再复制到下载目录，用系统查看器打开。 */
+    void openTutorialManual() {
+        if (activity == null) {
+            return;
+        }
+        if (!assetFileExists("lanhu/v2/tutorial/manual.pdf")) {
+            Toast.makeText(activity, "使用手册暂未随包内置，请联系厂家获取", Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            File cache = new File(activity.getCacheDir(), "tutorial_manual.pdf");
+            java.io.InputStream in = activity.getAssets().open("lanhu/v2/tutorial/manual.pdf");
+            FileOutputStream out = new FileOutputStream(cache);
+            try {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) >= 0) {
+                    out.write(buf, 0, n);
+                }
+            } finally {
+                in.close();
+                out.close();
+            }
+            Uri uri = copyPdfToDownloads(cache, "ICU临床应用手册.pdf");
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(uri, "application/pdf");
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            activity.startActivity(Intent.createChooser(intent, "打开临床应用手册"));
+            appendUserLog("教程", "打开临床应用手册", "内置 manual.pdf");
+        } catch (Exception e) {
+            Toast.makeText(activity, "打开手册失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
     }
 
     private File tutorialThumbFile(int slot) {
@@ -7119,11 +7202,28 @@ public class IcuDashboardView extends View {
                     Toast.makeText(activity, "未找到可用的蓝牙发送方式", Toast.LENGTH_LONG).show();
                 }
             }
-            if (launched) appendUserLog("导出", "蓝牙发送", "住院号 " + (currentCase() == null ? "-" : currentCase().caseNo));
+            if (launched) {
+                // ★ 2026-10-20 V64（V1.02 R26/R43）：OPP 发送无结果回调，置标记待 onResume 提示自查
+                pendingBtShare = true;
+                appendUserLog("导出", "蓝牙发送", "住院号 " + (currentCase() == null ? "-" : currentCase().caseNo));
+            }
         } catch (Exception e) {
             /* ★ 2026-10-15 V48：catch 从 IOException 放宽——PDF 生成/URI 解析的运行时异常也要有提示 */
             Toast.makeText(activity, "蓝牙发送失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
+    }
+
+    /* ★ 2026-10-20 V64（V1.02 R26/R43）：蓝牙 ACTION_SEND 无结果回调——发起后置标记，
+       MainActivity.onResume（从蓝牙发送界面返回）时提示用户以系统通知栏/对端设备为准，避免失败无感知。 */
+    private boolean pendingBtShare;
+
+    /** 从蓝牙发送界面返回时调用：一次性提示传输结果自查。 */
+    public void consumeBtShareReturn() {
+        if (!pendingBtShare || activity == null) {
+            return;
+        }
+        pendingBtShare = false;
+        Toast.makeText(activity, "蓝牙发送结果请以系统通知栏为准，失败请重试", Toast.LENGTH_LONG).show();
     }
 
     // ★ 任务28：文件助手二维码状态（firstPhaseState.shareQr 回推给 H5 渲染二维码）
@@ -7221,25 +7321,271 @@ public class IcuDashboardView extends View {
                 pushPrintStatus(false, "当前环境不支持打印");
                 return;
             }
-            Object pm = activity.getSystemService(Context.PRINT_SERVICE);
-            if (!(pm instanceof PrintManager)) {
-                pushPrintStatus(false, "当前设备不支持打印");
+            /* ★ 2026-10-20 V64（V1.02 R58）：S5 设置了打印机地址 → 优先直连该打印机
+               （IPP 631 → 连接失败回退 RAW 9100 → 再失败回退系统打印对话框）；
+               未设置地址维持原系统对话框路径。 */
+            if (!TextUtils.isEmpty(s5PrinterAddress)) {
+                printPdfToConfiguredPrinter(pdf);
                 return;
             }
-            PrintManager printManager = (PrintManager) pm;
-            int copies = s5PrintCopies < 1 ? 1 : s5PrintCopies;
-            java.util.List<PrintJob> jobs = new java.util.ArrayList<>();
-            for (int i = 1; i <= copies; i++) {
-                String jobName = "动物ICU监护报告_" + pdf.getName() + (copies > 1 ? "_" + i : "");
-                PrintJob job = printManager.print(jobName, new PdfPrintAdapter(pdf), null);
-                if (job != null) {
-                    jobs.add(job);
-                }
-            }
-            appendUserLog("打印", "打印报告", "住院号 " + (currentCase() == null ? "-" : currentCase().caseNo) + " 份数=" + copies);
-            watchPrintJobs(jobs);
+            printPdfViaSystemDialog(pdf);
         } catch (IOException e) {
             pushPrintStatus(false, "打印失败: " + e.getMessage());
+        }
+    }
+
+    /* 系统打印对话框路径（原 printReportViaSystem 主体）：PrintManager + PdfPrintAdapter，份数按 S5 设置。 */
+    private void printPdfViaSystemDialog(File pdf) {
+        Object pm = activity.getSystemService(Context.PRINT_SERVICE);
+        if (!(pm instanceof PrintManager)) {
+            pushPrintStatus(false, "当前设备不支持打印");
+            return;
+        }
+        PrintManager printManager = (PrintManager) pm;
+        int copies = s5PrintCopies < 1 ? 1 : s5PrintCopies;
+        java.util.List<PrintJob> jobs = new java.util.ArrayList<>();
+        for (int i = 1; i <= copies; i++) {
+            String jobName = "动物ICU监护报告_" + pdf.getName() + (copies > 1 ? "_" + i : "");
+            PrintJob job = printManager.print(jobName, new PdfPrintAdapter(pdf), null);
+            if (job != null) {
+                jobs.add(job);
+            }
+        }
+        appendUserLog("打印", "打印报告(系统对话框)", "住院号 " + (currentCase() == null ? "-" : currentCase().caseNo) + " 份数=" + copies);
+        watchPrintJobs(jobs);
+    }
+
+    /* ★ 2026-10-20 V64（R58）：直连 S5 设置的打印机地址——后台线程先 IPP（默认 631/ipp/print，
+       document-format=application/pdf）；仅「连接级失败」回退 RAW 9100（打印机在线但拒绝 IPP
+       时不发 RAW，防直接打 PDF 源码乱码页）；两者皆败回退系统打印对话框。
+       地址写法支持 "192.168.1.10" / "192.168.1.10:9100" / "ipp://host:631/ipp/print"。 */
+    private void printPdfToConfiguredPrinter(final File pdf) {
+        final String addr = s5PrinterAddress.trim();
+        Toast.makeText(activity, "正在直连打印机 " + addr + " …", Toast.LENGTH_SHORT).show();
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    tryIppPrint(pdf, addr);
+                    finishDirectPrint(true, "IPP 任务已发送到打印机 " + addr);
+                    return;
+                } catch (IppRefusedException refused) {
+                    fallbackToSystemDialog(pdf, "打印机拒绝 IPP 打印（" + refused.getMessage() + "），已改用系统打印对话框");
+                    return;
+                } catch (Exception connErr) {
+                    try {
+                        tryRaw9100(pdf, addr);
+                        finishDirectPrint(true, "RAW 任务已发送到打印机 " + addr);
+                        return;
+                    } catch (Exception rawErr) {
+                        fallbackToSystemDialog(pdf, "直连打印机失败（IPP: " + safeErrText(connErr)
+                                + " / RAW: " + safeErrText(rawErr) + "），已改用系统打印对话框");
+                    }
+                }
+            }
+        }, "icu-direct-print").start();
+    }
+
+    private String safeErrText(Exception e) {
+        String m = e.getMessage();
+        return e.getClass().getSimpleName() + (TextUtils.isEmpty(m) ? "" : ": " + m);
+    }
+
+    private void finishDirectPrint(final boolean ok, final String msg) {
+        if (activity == null) {
+            return;
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                pushPrintStatus(ok, msg);
+            }
+        });
+    }
+
+    private void fallbackToSystemDialog(final File pdf, final String msg) {
+        if (activity == null) {
+            return;
+        }
+        activity.runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Toast.makeText(activity, msg, Toast.LENGTH_LONG).show();
+                appendUserLog("打印", "直连打印机失败", msg);
+                printPdfViaSystemDialog(pdf);
+            }
+        });
+    }
+
+    /** IPP 被在线拒绝（打印机可达但返回 HTTP/IPP 错误）——区别于连接级失败，用于决定是否回退 RAW。 */
+    private static class IppRefusedException extends Exception {
+        IppRefusedException(String msg) {
+            super(msg);
+        }
+    }
+
+    /** 解析打印机地址："ip" / "ip:port" / "ipp://host:port/path" → [host, portStr, path] */
+    private String[] parsePrinterAddr(String addr, int defaultPort, String defaultPath) {
+        String a = addr == null ? "" : addr.trim();
+        if (a.startsWith("ipp://")) {
+            a = a.substring(6);
+        } else if (a.startsWith("http://")) {
+            a = a.substring(7);
+        }
+        String path = defaultPath;
+        int slash = a.indexOf('/');
+        if (slash >= 0) {
+            path = a.substring(slash);
+            a = a.substring(0, slash);
+        }
+        String host = a;
+        int port = defaultPort;
+        int colon = a.lastIndexOf(':');
+        if (colon > 0) {
+            host = a.substring(0, colon);
+            try {
+                port = Integer.parseInt(a.substring(colon + 1));
+            } catch (NumberFormatException ignored) {
+            }
+        }
+        return new String[]{host, String.valueOf(port), path};
+    }
+
+    /* IPP 1.1 Print-Job：POST application/ipp 到 host:631/ipp/print。
+       成功=任务已受理；IppRefusedException=打印机在线但拒绝（HTTP 非 2xx）；
+       其他 IOException=连接级失败（调用方可回退 RAW 9100）。 */
+    private void tryIppPrint(File pdf, String addr) throws Exception {
+        String[] hp = parsePrinterAddr(addr, 631, "/ipp/print");
+        String host = hp[0];
+        int port = Integer.parseInt(hp[1]);
+        String path = hp[2];
+        String printerUri = "ipp://" + host + ":" + port + path;
+        byte[] pdfBytes = readFileBytes(pdf);
+        java.io.ByteArrayOutputStream headBuf = new java.io.ByteArrayOutputStream();
+        java.io.DataOutputStream d = new java.io.DataOutputStream(headBuf);
+        d.writeByte(1);
+        d.writeByte(1);              // IPP version 1.1
+        d.writeShort(0x0002);        // operation-id = Print-Job
+        d.writeInt(1);               // request-id
+        d.writeByte(0x01);           // operation-attributes-tag
+        writeIppAttr(d, 0x47, "attributes-charset", "utf-8");
+        writeIppAttr(d, 0x48, "attributes-natural-language", "zh-cn");
+        writeIppAttr(d, 0x45, "printer-uri", printerUri);
+        writeIppAttr(d, 0x42, "job-name", pdf.getName());
+        writeIppAttr(d, 0x49, "document-format", "application/pdf");
+        d.writeByte(0x03);           // end-of-attributes-tag
+        d.flush();
+        byte[] ippHead = headBuf.toByteArray();
+        java.net.Socket socket = new java.net.Socket();
+        socket.connect(new java.net.InetSocketAddress(host, port), 8000);
+        socket.setSoTimeout(15000);
+        try {
+            OutputStream out = socket.getOutputStream();
+            String reqHead = "POST " + path + " HTTP/1.1\r\n"
+                    + "Host: " + host + ":" + port + "\r\n"
+                    + "Content-Type: application/ipp\r\n"
+                    + "Content-Length: " + (ippHead.length + pdfBytes.length) + "\r\n"
+                    + "Connection: close\r\n\r\n";
+            out.write(reqHead.getBytes("US-ASCII"));
+            out.write(ippHead);
+            out.write(pdfBytes);
+            out.flush();
+            java.io.InputStream in = socket.getInputStream();
+            String statusLine = readHttpStatusLine(in);
+            if (statusLine == null || !statusLine.startsWith("HTTP/")) {
+                throw new IOException("IPP 响应无法解析");
+            }
+            String[] parts = statusLine.split(" ");
+            int code = parts.length > 1 ? Integer.parseInt(parts[1].trim()) : 0;
+            if (code < 200 || code >= 300) {
+                throw new IppRefusedException("HTTP " + code);
+            }
+            // HTTP 2xx 即视为受理（IPP status-code 在响应体内，successful 一般随 200 返回）
+        } finally {
+            try {
+                socket.close();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private void writeIppAttr(java.io.DataOutputStream d, int tag, String name, String value) throws IOException {
+        byte[] nb = name.getBytes("UTF-8");
+        byte[] vb = value.getBytes("UTF-8");
+        d.writeByte(tag);
+        d.writeShort(nb.length);
+        d.write(nb);
+        d.writeShort(vb.length);
+        d.write(vb);
+    }
+
+    private String readHttpStatusLine(java.io.InputStream in) throws IOException {
+        StringBuilder sb = new StringBuilder();
+        int c;
+        boolean gotAny = false;
+        while ((c = in.read()) >= 0) {
+            if (c == '\n') {
+                break;
+            }
+            gotAny = true;
+            if (c != '\r') {
+                sb.append((char) c);
+            }
+            if (sb.length() > 200) {
+                break;
+            }
+        }
+        if (!gotAny && c < 0) {
+            return null;
+        }
+        return sb.toString();
+    }
+
+    private byte[] readFileBytes(File f) throws IOException {
+        FileInputStream in = new FileInputStream(f);
+        try {
+            java.io.ByteArrayOutputStream bos = new java.io.ByteArrayOutputStream();
+            byte[] buf = new byte[8192];
+            int n;
+            while ((n = in.read(buf)) >= 0) {
+                bos.write(buf, 0, n);
+            }
+            return bos.toByteArray();
+        } finally {
+            in.close();
+        }
+    }
+
+    /* RAW 9100：PDF 原样写入打印机 9100 端口（多数网口激光打印机可直接解析 PDF/PS）；
+       地址中带的是 IPP 端口 631 时自动改用 9100。 */
+    private void tryRaw9100(File pdf, String addr) throws IOException {
+        String[] hp = parsePrinterAddr(addr, 9100, "/");
+        String host = hp[0];
+        int port = Integer.parseInt(hp[1]);
+        if (port == 631) {
+            port = 9100;
+        }
+        java.net.Socket socket = new java.net.Socket();
+        socket.connect(new java.net.InetSocketAddress(host, port), 8000);
+        socket.setSoTimeout(15000);
+        try {
+            OutputStream out = socket.getOutputStream();
+            FileInputStream in = new FileInputStream(pdf);
+            try {
+                byte[] buf = new byte[8192];
+                int n;
+                while ((n = in.read(buf)) >= 0) {
+                    out.write(buf, 0, n);
+                }
+            } finally {
+                in.close();
+            }
+            out.flush();
+        } finally {
+            try {
+                socket.close();
+            } catch (Exception ignored) {
+            }
         }
     }
 
@@ -9374,6 +9720,114 @@ public class IcuDashboardView extends View {
             input.close();
             output.close();
         }
+    }
+
+    /* ★ 2026-10-20 V64（V1.02 R84/R85）：日志导出——按 H5 日志页当前类别把内存日志
+       （新→旧）写成 UTF-8 txt 到 下载/ICULogs；前端调试日志在 WebView 侧，提示用「复制」。 */
+    private void exportLogCategory(String cat) {
+        if (activity == null) {
+            return;
+        }
+        if (TextUtils.isEmpty(cat)) {
+            cat = "用户日志";
+        }
+        if ("前端调试".equals(cat)) {
+            Toast.makeText(activity, "前端调试日志在平板页面内，请用「复制」按钮粘贴导出", Toast.LENGTH_LONG).show();
+            return;
+        }
+        JSONArray store;
+        String tag;
+        if ("用户日志".equals(cat)) { store = userOpLog; tag = "user"; }
+        else if ("常规信息".equals(cat)) { store = generalLog; tag = "general"; }
+        else if ("后端调试".equals(cat)) { store = debugLog; tag = "debug"; }
+        else if ("错误记录".equals(cat)) { store = errorLog; tag = "error"; }
+        else if ("堆栈信息".equals(cat)) { store = stackLog; tag = "stack"; }
+        else if ("通信记录".equals(cat)) { store = commLog; tag = "comm"; }
+        else {
+            Toast.makeText(activity, "未知日志类别: " + cat, Toast.LENGTH_SHORT).show();
+            return;
+        }
+        if (store.length() == 0) {
+            Toast.makeText(activity, cat + "暂无记录，无需导出", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        try {
+            StringBuilder sb = new StringBuilder();
+            sb.append("动物ICU ").append(cat).append(" 导出  ")
+                    .append(new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).format(new Date()))
+                    .append("  共").append(store.length()).append("条\n\n");
+            for (int i = store.length() - 1; i >= 0; i -= 1) {
+                JSONObject it = store.optJSONObject(i);
+                if (it == null) {
+                    continue;
+                }
+                sb.append('[').append(it.optString("time", "")).append("] ");
+                if (it.has("account")) {
+                    sb.append(it.optString("account")).append('/').append(it.optString("zone")).append(' ');
+                }
+                if (it.has("level")) {
+                    sb.append(it.optString("level")).append(' ');
+                }
+                if (it.has("dir")) {
+                    sb.append(it.optString("dir")).append(' ').append(it.optString("type")).append(' ');
+                }
+                if (it.has("source")) {
+                    sb.append('(').append(it.optString("source")).append(") ");
+                }
+                if (it.has("module")) {
+                    sb.append(it.optString("module")).append('-').append(it.optString("action"))
+                            .append(": ").append(it.optString("detail"))
+                            .append(" => ").append(it.optString("result"));
+                } else {
+                    sb.append(it.optString("msg"));
+                }
+                sb.append('\n');
+            }
+            String stamp = new SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(new Date());
+            String fileName = "ICU日志_" + tag + "_" + stamp + ".txt";
+            writeTextToDownloads(sb.toString(), fileName);
+            Toast.makeText(activity, cat + "已导出: 下载/ICULogs/" + fileName, Toast.LENGTH_LONG).show();
+            appendUserLog("日志", "导出" + cat, store.length() + "条 -> " + fileName);
+        } catch (Exception e) {
+            Toast.makeText(activity, "日志导出失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /** 写文本到 下载/ICULogs（Q+ 走 MediaStore，旧版直写公共目录），与 copyPdfToDownloads 同模式。 */
+    private Uri writeTextToDownloads(String text, String fileName) throws IOException {
+        byte[] data = text.getBytes("UTF-8");
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            ContentValues values = new ContentValues();
+            values.put(MediaStore.MediaColumns.DISPLAY_NAME, fileName);
+            values.put(MediaStore.MediaColumns.MIME_TYPE, "text/plain");
+            values.put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS + "/ICULogs");
+            Uri uri = activity.getContentResolver().insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values);
+            if (uri == null) {
+                throw new IOException("无法创建日志文件");
+            }
+            OutputStream output = activity.getContentResolver().openOutputStream(uri);
+            if (output == null) {
+                throw new IOException("无法打开日志文件");
+            }
+            try {
+                output.write(data);
+            } finally {
+                output.close();
+            }
+            return uri;
+        }
+        File dir = new File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), "ICULogs");
+        if (!dir.exists() && !dir.mkdirs()) {
+            throw new IOException("无法创建日志目录");
+        }
+        File target = new File(dir, fileName);
+        FileOutputStream output = new FileOutputStream(target);
+        try {
+            output.write(data);
+        } finally {
+            output.close();
+        }
+        return Uri.fromFile(target);
     }
 
     private int dpInt(float value) {

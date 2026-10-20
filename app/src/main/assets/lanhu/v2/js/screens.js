@@ -152,6 +152,10 @@
         curLogo: '当前LOGO', footerLogo: '页脚LOGO', factoryConfirmBody: '确认恢复出厂设置？所有自定义设置将恢复默认。',
         reviewNoData: '暂无样本数据，无法执行该操作', reviewNoSel: '请先选择一个样本',
         tblEmpty: '暂无数据',
+        logCopy: '复制', logExport: '导出', logCopied: '已复制到剪贴板', logCopyFail: '复制失败，请长按选择复制',
+        tuFixed: '固定教程', tuCustom: '自定义教程', tuInstall: '装机教程', tuGuide: '使用操作指南',
+        tuManual: '临床应用手册', tuOther: '其他教程', tuMissing: '固定资源缺失，请联系厂家导入',
+        tuOpenDoc: '打开文件', tuNetTodo: '网络更新通道待云平台二期开通',
         careEndedNoRestart: '该记录已结束，不能重复开始护疗',
         careNeedDisease: '请先填写病症再开始护疗', careNotEndedPrint: '该样本治疗未结束，不能打印', careNotEndedSend: '该样本治疗未结束，不能发送数据',
         careNoSample: '暂无样本数据，无法开始治疗',
@@ -216,6 +220,10 @@
         curLogo: 'Current Logo', footerLogo: 'Footer Logo', factoryConfirmBody: 'Restore factory settings? All custom settings will be reset.',
         reviewNoData: 'No sample data; this action is unavailable', reviewNoSel: 'Please select a sample first',
         tblEmpty: 'No data',
+        logCopy: 'Copy', logExport: 'Export', logCopied: 'Copied to clipboard', logCopyFail: 'Copy failed — long-press to copy',
+        tuFixed: 'Built-in Tutorials', tuCustom: 'Custom Tutorials', tuInstall: 'Installation', tuGuide: 'Operation Guide',
+        tuManual: 'Clinical Manual', tuOther: 'More Tutorials', tuMissing: 'Bundled resource missing — contact vendor',
+        tuOpenDoc: 'Open', tuNetTodo: 'Online update channel planned for cloud phase 2',
         careEndedNoRestart: 'This record has ended and cannot be restarted',
         careNeedDisease: 'Enter the diagnosis before starting treatment', careNotEndedPrint: 'Treatment not finished; printing is unavailable', careNotEndedSend: 'Treatment not finished; sending is unavailable',
         /* ★ 任务14：打印页 */
@@ -1395,7 +1403,10 @@
       var host = st.host || (st.ble && st.ble.host) || {};
       var mon = (st.ble && st.ble.monitor) || {};
       var wifi = st.wifi || {};
-      var hostName = host.deviceName || host.deviceId || '';
+      /* ★ 2026-10-20 V64（V1.02 R52）：主机名称栏优先显示真实 SN（设置-常规 deviceProfile.serialNo，
+         工程师录入），未录入才回退蓝牙设备名 */
+      var dpConn = D.deviceProfile || {};
+      var hostName = dpConn.serialNo || host.deviceName || host.deviceId || '';
       var wifiOn = !!wifi.enabled;
       /* ★ 2026-10-08：连接上显示对端名称（wifi=SSID，蓝牙=设备名），不再显示「已连接」；
          SSID 读不到时区分原因提示：系统定位未开 / 缺定位权限 */
@@ -1718,6 +1729,32 @@
      数据 D.tutorialSlots 由 icu-native-bridge 从 IcuNative.tutorialState().slots 注入。 */
   SCREENS['tutorial'] = {
     name: '使用教程', group: '1 主流程', render() {
+      /* ★ 2026-10-20 V64（V1.02 R92 / V1.01 R57-R60）：4 个固定教程位——装机教程/使用操作指南（固定视频
+         assets/lanhu/v2/tutorial/install.mp4、guide.mp4，原生 tutorialFixedState 探活后内嵌播放）、
+         临床应用手册（固定文件 tutorial/manual.pdf，点打开走原生系统查看器）、其他教程（网络更新，占位提示）。
+         资源未打包时显示缺失提示（不崩溃）。下方保留 6 个自定义槽位（本地相册绑定）。 */
+      var tf = D.tutorialFixed || {};
+      var fx = [
+        { k: 'install', lab: T('tuInstall', '装机教程'), typ: 'video', src: 'tutorial/install.mp4' },
+        { k: 'guide', lab: T('tuGuide', '使用操作指南'), typ: 'video', src: 'tutorial/guide.mp4' },
+        { k: 'manual', lab: T('tuManual', '临床应用手册'), typ: 'pdf' },
+        { k: 'other', lab: T('tuOther', '其他教程'), typ: 'net' }
+      ];
+      var fcards = fx.map(function (f) {
+        var inner;
+        if (f.typ === 'video') {
+          inner = tf[f.k]
+            ? '<video class="tut-media" src="' + f.src + '" controls preload="metadata"></video>'
+            : '<div class="tut-empty">' + T('tuMissing', '固定资源缺失，请联系厂家导入') + '</div>';
+        } else if (f.typ === 'pdf') {
+          inner = tf.manual
+            ? '<div class="tut-empty">📄</div><div class="tut-tools"><span class="tut-btn" data-tfixed-open="manual">' + T('tuOpenDoc', '打开文件') + '</span></div>'
+            : '<div class="tut-empty">' + T('tuMissing', '固定资源缺失，请联系厂家导入') + '</div>';
+        } else {
+          inner = '<div class="tut-empty" data-tfixed-other="1" style="cursor:pointer">🌐<br><span style="font-size:16px">' + T('tuNetTodo', '网络更新通道待云平台二期开通') + '</span></div>';
+        }
+        return '<div class="tut-slot bound">' + '<div class="tut-tag">' + f.lab + '</div>' + inner + '</div>';
+      }).join('');
       const slots = (D.tutorialSlots && D.tutorialSlots.length) ? D.tutorialSlots : [];
       let cards = '';
       for (let i = 0; i < 6; i++) {
@@ -1741,7 +1778,9 @@
           + body + tools + '</div>';
       }
       return PAGE(P.topbarBack('care'),
-        '<div class="tut-wrap"><div class="tut-hint">' + T('tuHint', '点击空位从相册选择照片或视频；点击已绑定的内容可播放/查看。') + '</div>'
+        '<div class="tut-wrap"><div class="tut-hint">' + T('tuFixed', '固定教程') + '</div>'
+        + '<div class="tut-grid">' + fcards + '</div>'
+        + '<div class="tut-hint">' + T('tuCustom', '自定义教程') + ' · ' + T('tuHint', '点击空位从相册选择照片或视频；点击已绑定的内容可播放/查看。') + '</div>'
         + '<div class="tut-grid">' + cards + '</div></div>', null, true);
     }
   };
@@ -1860,6 +1899,9 @@
         + '<div class="grow"></div>'
         + footMid
         + '<div class="grow"></div>'
+        /* ★ 2026-10-20 V64（V1.02 R84/R85）：日志支持复制（当前页所见内容进剪贴板）与导出（原生写 txt 到下载目录） */
+        + '<div class="btn" data-logcopy>' + T('logCopy', '复制') + '</div>'
+        + '<div class="btn" data-logexport>' + T('logExport', '导出') + '</div>'
         + '<div class="btn" data-logrefresh>' + T('update', '更新') + '</div>'
         + '</div>'
         + '</div></div>'

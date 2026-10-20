@@ -1139,6 +1139,35 @@
     if (tPick) { stop(e); act('tutorial_slot_pick_' + tPick.dataset.tslotPick); return; }
     var tPlay = e.target.closest('[data-tslot-play]');
     if (tPlay) { stop(e); act('tutorial_slot_play_' + tPlay.dataset.tslotPlay); return; }
+    /* ★ 2026-10-20 V64：固定教程位——手册打开（原生系统查看器）/ 其他教程网络更新占位提示 */
+    var tfOpen = e.target.closest('[data-tfixed-open]');
+    if (tfOpen) { stop(e); act('tutorial_open_manual'); return; }
+    if (e.target.closest('[data-tfixed-other]')) { stop(e); toast(TT('tuNetTodo', '网络更新通道待云平台二期开通')); return; }
+    /* ★ 2026-10-20 V64（R84/R85）：日志 复制（当前页所见进剪贴板）/ 导出（原生写 txt） */
+    if (e.target.closest('[data-logcopy]')) {
+      stop(e);
+      var lb = document.querySelector('.logbox');
+      var txt = lb ? lb.innerText : '';
+      if (!txt) { toast(TT('tblEmpty', '暂无数据')); return; }
+      var doneOk = function () { toast(TT('logCopied', '已复制到剪贴板')); };
+      var doneFail = function () {
+        try {
+          var ta = document.createElement('textarea');
+          ta.value = txt; ta.style.cssText = 'position:fixed;left:-9999px';
+          document.body.appendChild(ta); ta.select();
+          var ok = document.execCommand('copy');
+          document.body.removeChild(ta);
+          toast(ok ? TT('logCopied', '已复制到剪贴板') : TT('logCopyFail', '复制失败，请长按选择复制'));
+        } catch (e2) { toast(TT('logCopyFail', '复制失败，请长按选择复制')); }
+      };
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(txt).then(doneOk, doneFail);
+        } else { doneFail(); }
+      } catch (e1) { doneFail(); }
+      return;
+    }
+    if (e.target.closest('[data-logexport]')) { stop(e); act('log_export_' + (D.logCat || '用户日志')); return; }
 
     /* ★ 2026-10-09 升级·软件页「选择文件」：打开微信文件传输助手覆盖层 */
     if (e.target.closest('[data-apk-update]')) { stop(e); act('apk_update_open'); return; }
@@ -2208,6 +2237,15 @@
         lastTutorialSlotsJson = json;
         D.tutorialSlots = slots;
         IcuApp.render();
+      }
+      /* ★ 2026-10-20 V64：固定教程资源探活（APK assets 内 install.mp4/guide.mp4/manual.pdf 是否打包） */
+      if (n.tutorialFixedState) {
+        var fx = JSON.parse(n.tutorialFixedState() || '{}');
+        var fxJson = JSON.stringify(fx);
+        if (fxJson !== JSON.stringify(D.tutorialFixed || {})) {
+          D.tutorialFixed = fx;
+          IcuApp.render();
+        }
       }
     } catch (e) { /* noop */ }
   }

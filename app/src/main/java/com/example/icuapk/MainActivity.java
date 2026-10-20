@@ -247,6 +247,8 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
             rootView.addView(bootOverlay); // 最后添加 = 最上层覆盖 WebView
         } catch (Throwable t) {
             // 视频异常绝不影响主流程
+            // ★ 2026-10-20 V64（V1.02 R3）：开机动画失败给出明确提示（此前静默跳过）
+            Toast.makeText(this, "开机动画初始化失败，已跳过进入系统", Toast.LENGTH_LONG).show();
         }
     }
 
@@ -264,7 +266,12 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
             });
             bootPlayer.setOnErrorListener(new MediaPlayer.OnErrorListener() {
                 @Override
-                public boolean onError(MediaPlayer mp, int what, int extra) { finishBootVideo(); return true; }
+                public boolean onError(MediaPlayer mp, int what, int extra) {
+                    // ★ 2026-10-20 V64（V1.02 R3）：解码失败明确提示（此前静默跳过）
+                    Toast.makeText(MainActivity.this, "开机动画播放失败（资源损坏？），已跳过进入系统", Toast.LENGTH_LONG).show();
+                    finishBootVideo();
+                    return true;
+                }
             });
             bootPlayer.setOnPreparedListener(new MediaPlayer.OnPreparedListener() {
                 @Override
@@ -272,6 +279,8 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
             });
             bootPlayer.prepareAsync();
         } catch (Throwable t) {
+            // ★ 2026-10-20 V64（V1.02 R3）：资源缺失/读取失败明确提示（此前静默跳过）
+            Toast.makeText(this, "开机动画资源缺失或损坏，已跳过进入系统", Toast.LENGTH_LONG).show();
             finishBootVideo();
         }
     }
@@ -1141,6 +1150,8 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         }
         if (dashboardView != null) {
             dashboardView.syncCurrentTreatmentEntryStatesFromDevice();
+            // ★ 2026-10-20 V64（V1.02 R26/R43）：从蓝牙发送界面返回 → 回执提示
+            dashboardView.consumeBtShareReturn();
             dashboardView.invalidate();
         }
         if (cameraFullscreenVisible) {
@@ -2297,6 +2308,15 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
                 android.util.Log.e("ICU-Native", "tutorialState failed", exception);
                 return "{}";
             }
+        }
+
+        /**
+         * ★ 2026-10-20 V64（V1.02 R92）：内置固定教程资源探测 JSON {install, guide, manual}，
+         * H5 教程页据此渲染「固定教程」区（存在→可播/可开，缺失→占位提示）。
+         */
+        @JavascriptInterface
+        public String tutorialFixedState() {
+            return dashboardView.tutorialFixedStateJson();
         }
 
         /**
