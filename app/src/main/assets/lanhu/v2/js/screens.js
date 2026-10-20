@@ -568,7 +568,7 @@
         + metric(T('statusIr', '红外体温 ℃'), M.irTemp || '--', 'thermo', M.irP, 0, 'data-ir')
         + metric('', '', '', null, 1)
         + metric(T('statusCo2', '二氧化碳（PPM）'), M.co2 || '--', 'co2', M.co2P)
-        + metric(T('statusDur', '治疗时长（h）'), M.dur || '--', 'clock', M.durP)
+        + metric(T('statusDur', '治疗时长（h）'), M.dur || '--', 'clock', M.durP, 0, 'data-treat-dur="h"')
         + metric(T('statusRed', '红外理疗（m）'), M.red || '--', 'pulseC', M.redP)
         + metric(T('statusBlue', '蓝光理疗（m）'), M.blue || '--', 'lamp', M.blueP)
         + '</div>';
@@ -581,14 +581,15 @@
       const cam = '<div class="camcol"><div class="cam big">' + P.fisheye(D.stamp) + '</div>'
         + (window.renderThermalArea ? window.renderThermalArea() : '')
         + '</div>';
-      /* ★ 2026-10-19 V60：#11 状态页环境功能状态条（紫外/负离子/外循环/冷光 开·关） */
-      const funcStrip = '<div class="status-func-strip">'
+      /* ★ 2026-10-20 V65（用户要求）：状态页环境功能状态条（紫外消毒/负离子/外循环/冷光照明）
+         注释掉不显示——主控页 ctrlRow2/3 仍有这些开关；代码保留便于日后恢复（V61 #11） */
+      /* const funcStrip = '<div class="status-func-strip">'
         + funcChip(T('ctrlUv', '紫外消毒'), !!M.uvOn)
         + funcChip(T('ctrlAnion', '负离子'), !!M.anionOn)
         + funcChip(T('ctrlOuter', '外循环'), !!M.outerOn)
         + funcChip(T('ctrlCold', '冷光照明'), !!M.coldOn)
-        + '</div>';
-      return PAGE(P.topbar('care'), grid + acts + funcStrip + cam, P.sessionBar('status'), false, P.sessionTag());
+        + '</div>'; */
+      return PAGE(P.topbar('care'), grid + acts + cam, P.sessionBar('status'), false, P.sessionTag());
     }
   };
 
@@ -638,10 +639,11 @@
       const tkOp = [1, .45, .62, .62, .58, .58, .85, 1];
       let ticks = '';
       for (let i = 0; i < 8; i++) ticks += '<i style="transform:rotate(' + (i * 45) + 'deg);opacity:' + tkOp[i] + '"></i>';
+      /* ★ 2026-10-20 V65：ctime 补 data-treat-dur="clock"，bridge 每秒原地刷新（不整页重渲染） */
       return '<div class="ctrl tall' + (c.on ? ' on' : '') + '" data-tkey="' + tk + '">'
         + '<div class="ct">' + T(tk, c.t) + '</div>'
         + '<div class="gauge"><span class="ticks">' + ticks + '</span></div>'
-        + '<div class="ctime">' + c.v + '</div>'
+        + '<div class="ctime" data-treat-dur="clock">' + c.v + '</div>'
         + '<div class="setbtn tr">' + T('ctrlSetting', '设置') + '</div></div>';
     }
     if (c.v) {

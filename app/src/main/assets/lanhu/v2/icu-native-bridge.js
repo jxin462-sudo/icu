@@ -2221,7 +2221,47 @@
       els.forEach(function (el) { if (el.textContent !== txt) el.textContent = txt; });
     }
     window.__tickSysClock = tickSysClock; /* ★ V40：供 scheduleRender 重渲染后立即回填，消除时间闪烁 */
-    setInterval(tickSysClock, 1000);
+    /* ★ 2026-10-20 V65：治疗时长每秒原地刷新（用户反馈：此前只在整页重渲染时更新——原生状态
+       推送是事件驱动，BLE 无帧/未连接时主控与状态页的时长文本会冻结到切页才动）。
+       只更新 [data-treat-dur] 文本节点，不触发整页重渲染、不打扰输入框。
+       语义镜像原生 IcuDashboardView.currentCaseTreatmentElapsedMs：
+       未开始护疗/无开始时间 → 不动（保持原生渲染的 '--'）；进行中=now-start；已结束=end-start 冻结。 */
+    function __parseTp(s) {
+      var m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/.exec(String(s || ''));
+      if (!m) return -1;
+      return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)).getTime();
+    }
+    function __treatElapsedMs() {
+      var p = (window.S && S.patient) || {};
+      if (!p.treatmentStarted || !p.treatmentStartTime) return -1;
+      var start = __parseTp(p.treatmentStartTime);
+      if (start < 0) return -1;
+      var end = Date.now();
+      if (p.treatmentEndTime && p.treatmentEndTime !== '进行中') {
+        var pe = __parseTp(p.treatmentEndTime);
+        if (pe > 0) end = pe;
+      }
+      return Math.max(0, end - start);
+    }
+    function tickTreatDur() {
+      var els = document.querySelectorAll('[data-treat-dur]');
+      if (!els.length) return;
+      var ms = __treatElapsedMs();
+      if (ms < 0) return; /* 未在护疗：保持原生渲染值（'--'），不覆盖 */
+      var sec = Math.floor(ms / 1000);
+      var hh = Math.floor(sec / 3600), mm = Math.floor((sec % 3600) / 60), ss = sec % 60;
+      var clock = (hh < 10 ? '0' : '') + hh + ':' + (mm < 10 ? '0' : '') + mm + ':' + (ss < 10 ? '0' : '') + ss;
+      var hours = (ms / 3600000).toFixed(1);
+      els.forEach(function (el) {
+        var fmt = el.getAttribute('data-treat-dur');
+        /* 状态页 metric 卡：attr 在外层 .metric，值在 .mv 子节点；主控大卡：attr 直接在 .ctime 值节点 */
+        var target = el.classList && el.classList.contains('metric') ? el.querySelector('.mv') : el;
+        if (!target) return;
+        var txt = fmt === 'h' ? hours : clock;
+        if (target.textContent !== txt) target.textContent = txt;
+      });
+    }
+    setInterval(function () { tickSysClock(); tickTreatDur(); }, 1000);
   }
 
   /* ★ 2026-10-09 教程页：渲染后拉取原生槽位绑定，内容变化才重渲染（防循环） */
