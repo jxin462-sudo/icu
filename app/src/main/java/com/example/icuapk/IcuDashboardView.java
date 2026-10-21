@@ -4697,6 +4697,10 @@ public class IcuDashboardView extends View {
         if (activity == null) {
             return;
         }
+        // ★ 2026-10-21 用户要求：操作日志不记录工程师(Service)账号的操作
+        if (accountStore.isCurrentService()) {
+            return;
+        }
         try {
             JSONObject item = new JSONObject();
             item.put("time", currentTimeText());
@@ -4741,8 +4745,20 @@ public class IcuDashboardView extends View {
             String raw = prefs.getString(KEY_USER_OP_LOG, "");
             if (!TextUtils.isEmpty(raw)) {
                 JSONArray loaded = new JSONArray(raw);
+                boolean purged = false;
                 for (int i = 0; i < loaded.length(); i++) {
+                    JSONObject item = loaded.optJSONObject(i);
+                    // ★ 2026-10-21 用户要求：加载时清掉工程师(Service)账号的历史操作记录；
+                    // 账号已删除无法判定角色的条目保留
+                    if (item != null && LocalAccountStore.ROLE_SERVICE.equals(
+                            accountStore.getRoleFor(item.optString("account", "")))) {
+                        purged = true;
+                        continue;
+                    }
                     userOpLog.put(loaded.get(i));
+                }
+                if (purged) {
+                    saveUserOpLog();
                 }
             }
         } catch (Exception ignored) {
