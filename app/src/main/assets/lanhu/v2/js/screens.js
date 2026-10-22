@@ -453,8 +453,9 @@
     { id: 'pr', label: '打印', key: 'print', icon: 'print', go: 'printing' },
     { id: 'tu', label: '教程', key: 'tutorial', icon: 'cap', go: 'tutorial' },
   ];
-  /* 设计图 5.png（有数据态）底栏不含「教程」，仅空态（3.png）显示 —— 故有数据态过滤掉 */
-  const CARE_BAR_FULL = CARE_BAR.slice(0, -1);
+  /* ★ 2026-10-22 V76：用户要求「教程」按钮一直显示在底部导航栏——有数据态不再过滤
+     （旧逻辑按设计图 5.png 有数据态去掉教程、仅空态 3.png 显示） */
+  const CARE_BAR_FULL = CARE_BAR;
   const CARE_NOTE = A(150, 470, '（注：该页面，仅显示当天新建信息列表,若在当天结束的护理，会在凌晨0点过后消失，转入【回顾】列表里。<br>若连续多日护疗的，以结束护疗后，过凌晨0点为基准转入【回顾】列表）', 'plain');
 
   /* ★ 任务15(#10)：进入护理页仅顶栏「护理」高亮，底栏按钮默认不高亮（active 传空） */
