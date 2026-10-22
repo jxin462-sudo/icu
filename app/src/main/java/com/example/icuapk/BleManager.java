@@ -3289,6 +3289,11 @@ public class BleManager {
                 protocolReady = false;
                 serviceDiscoveryAttempts = 0;
                 notifyEnableAttempts = 0;
+                /* ★ 2026-10-22 V67：新连接建立即清空设备版本——上一连接读到的版本属于
+                   上一台设备/旧固件，不能留着冒充当前值；通道就绪后 readAllStatus 会重新查询。 */
+                mainVersion = "";
+                ctrlVersion = "";
+                btVersion = "";
                 connectionStateText = "发现服务中";
                 addLog("GATT 连接成功");
                 emit();
@@ -4087,20 +4092,34 @@ public class BleManager {
                 setTimedControlEnabledLocally(timedIndex, enabled);
                 return;
             }
+            /* ★ 2026-10-22 V67：三个版本查询统一走 versionValueFromResponse，兼容
+               value/version 两种键名及 data 嵌套（此前主板/控制板只认根级 value，固件
+               键名不一致时永远读不进、旧值冒充当前值）；取不到值记原始帧日志供真机排查。 */
             if ("get_main_version".equals(cmd)) {
-                mainVersion = validVersion(parsed.optString("value", "")) ? parsed.optString("value", "") : mainVersion;
+                String main = versionValueFromResponse(parsed);
+                if (validVersion(main)) {
+                    mainVersion = main;
+                } else {
+                    addLog("[版本] get_main_version 回包未取到版本号，原文: " + message);
+                }
                 return;
             }
             if ("get_ctrl_version".equals(cmd)) {
-                ctrlVersion = validVersion(parsed.optString("value", "")) ? parsed.optString("value", "") : ctrlVersion;
+                String ctrl = versionValueFromResponse(parsed);
+                if (validVersion(ctrl)) {
+                    ctrlVersion = ctrl;
+                } else {
+                    addLog("[版本] get_ctrl_version 回包未取到版本号，原文: " + message);
+                }
                 return;
             }
             if ("get_bt_ver".equals(cmd)) {
-                String bt = parsed.optString("value", "");
-                if (!validVersion(bt)) {
-                    bt = parsed.optString("version", "");
+                String bt = versionValueFromResponse(parsed);
+                if (validVersion(bt)) {
+                    btVersion = bt;
+                } else {
+                    addLog("[版本] get_bt_ver 回包未取到版本号，原文: " + message);
                 }
-                btVersion = validVersion(bt) ? bt : btVersion;
                 return;
             }
             // ★ P0-6:5 个 set_*_time 与 set_infrared_temp 之前只 recordSetPending 却从不
@@ -4615,6 +4634,26 @@ public class BleManager {
 
     private void updateOxygenFromZone(String zone, Float value) {
         updateEnvironmentOxygen(zone, value);
+    }
+
+    /* ★ 2026-10-22 V67：版本号取值。协议文档写的是根级 "value"，但 get_bt_ver 早期
+       已按 value→version 双键兜底（4740 parsedVersionValue 同源），说明真机固件键名
+       与文档可能不一致；这里再兼容 data 嵌套，三个版本查询共用。 */
+    private String versionValueFromResponse(JSONObject parsed) {
+        String value = parsed.optString("value", "");
+        if (!validVersion(value)) {
+            value = parsed.optString("version", "");
+        }
+        if (!validVersion(value)) {
+            JSONObject data = parsed.optJSONObject("data");
+            if (data != null) {
+                value = data.optString("value", "");
+                if (!validVersion(value)) {
+                    value = data.optString("version", "");
+                }
+            }
+        }
+        return value;
     }
 
     private boolean validVersion(String value) {
