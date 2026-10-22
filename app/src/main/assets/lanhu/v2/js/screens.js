@@ -573,16 +573,13 @@
         + metric(T('statusBlue', '蓝光理疗（m）'), M.blue || '--', 'lamp', M.blueP)
         + '</div>';
       /* ★ 2026-10-22 V69：快捷按钮随真实开关态高亮（.on），与主控页开关同步；
-         此前按钮无任何状态显示（.wbtn:first-child 常驻高亮仅为装饰，已改为 .on 语义） */
-      /* ★ 2026-10-22 V70：加第 4 个快捷钮「蓝牙」= 主机蓝牙连接（与监护页蓝牙按钮同逻辑：
-         已连接→点击断开；未连接→弹「选择主机设备」选机；on 态=主机蓝牙已连接） */
-      var hstSt = window.S || {};
-      var hostBleOn = !!((hstSt.host && hstSt.host.connected) || (hstSt.ble && hstSt.ble.host && hstSt.ble.host.connected));
+         此前按钮无任何状态显示（.wbtn:first-child 常驻高亮仅为装饰，已改为 .on 语义）
+         ★ V70→V71 位置修正：蓝牙钮按用户图示移至底部导航栏（会话信息与「状态」之间），
+            不再占用快捷按钮区（core.js sessionBar status 分支） */
       const acts = '<div class="status-actions">'
         + '<div class="wbtn' + (M.nebOn ? ' on' : '') + '" data-act="control_nebulizer">' + I.mist + '<span>' + T('ctrlNeb', '雾化器') + '</span></div>'
         + '<div class="wbtn' + (M.warmOn ? ' on' : '') + '" data-act="control_warm_light">' + I.sun + '<span>' + T('statusWarm', '暖光灯') + '</span></div>'
-        + '<div class="wbtn' + (M.innerOn ? ' on' : '') + '" data-act="control_inner">' + I.loopIn + '<span>' + T('ctrlInner', '内循环') + '</span></div>'
-        + '<div class="wbtn' + (hostBleOn ? ' on' : '') + '" data-act="host_ble">' + I.bluetooth + '<span>' + T('monBle', '蓝牙') + '</span></div></div>';
+        + '<div class="wbtn' + (M.innerOn ? ' on' : '') + '" data-act="control_inner">' + I.loopIn + '<span>' + T('ctrlInner', '内循环') + '</span></div></div>';
       /* ★ 2026-10-13：摄像头下方原装饰块（.cam.small，只有一个空 .glow，无数据无原生绑定）
          改为红外热图区：画面 + 最高/最低温 + 帧率 + 连接/断开，数据由 js/thermal.js 驱动 */
       const cam = '<div class="camcol"><div class="cam big">' + P.fisheye(D.stamp) + '</div>'

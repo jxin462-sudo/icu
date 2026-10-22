@@ -300,7 +300,18 @@
       ['video', '视频', 'cam', 1074, 145, 'video'],
       ['care', '结束', 'power', 1252, 145, 'finish']
     ];
+    /* ★ 2026-10-22 V71：状态页底栏加主机「蓝牙」按钮（用户图示指定位置：会话信息与「状态」
+       之间，left:408）。功能同监护页蓝牙钮：未连→弹「选择主机设备」选机，已连→断开；
+       on 态=主机蓝牙已连接（bridge 已对 status 屏放行 host_ble 处理） */
+    let bleBtn = '';
+    if (active === 'status') {
+      const hst = window.S || {};
+      const hostConn = !!((hst.host && hst.host.connected) || (hst.ble && hst.ble.host && hst.ble.host.connected));
+      bleBtn = '<div class="bbtn sble' + (hostConn ? ' on' : '') + '" data-act="host_ble" style="left:408px;width:130px">'
+        + I.bluetooth + '<span>' + T('monBle', '蓝牙') + '</span></div>';
+    }
     return '<div class="bottombar sessbar">'
+      + bleBtn
       + items.map(function (it) {
         return '<div class="bbtn' + (it[0] === active ? ' on' : '') + '" data-go="' + it[0]
           + '" data-key="' + it[5] + '" style="left:' + it[3] + 'px;width:' + it[4] + 'px">' + I[it[2]] + '<span>' + T(it[5], it[1]) + '</span></div>';
