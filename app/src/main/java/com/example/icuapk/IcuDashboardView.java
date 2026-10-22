@@ -1964,6 +1964,11 @@ public class IcuDashboardView extends View {
             /* ★ 2026-10-22 V75：固定教程位本机绑定——装机/指南=视频、手册=文档、其他=任意（在线更新二期不做，
                用户要求从平板选图片/视频/文档展示）；本地绑定优先于随包资源 */
             if (action.startsWith("tutorial_fixed_pick_")) {
+                /* ★ 2026-10-22 V77：教程文件增删改仅工程师（原生兜底；H5 侧入口已按角色隐藏） */
+                if (!accountStore.isCurrentService()) {
+                    Toast.makeText(activity, "无权限：教程文件仅工程师可增删改", Toast.LENGTH_SHORT).show();
+                    return true;
+                }
                 String key = action.substring("tutorial_fixed_pick_".length());
                 activity.pickTutorialFixed(key, tutorialFixedPickMimes(key));
                 return true;
@@ -1973,6 +1978,10 @@ public class IcuDashboardView extends View {
                 return true;
             }
             if (action.startsWith("tutorial_fixed_clear_")) {
+                if (!accountStore.isCurrentService()) {
+                    Toast.makeText(activity, "无权限：教程文件仅工程师可增删改", Toast.LENGTH_SHORT).show();
+                    return true;
+                }
                 clearTutorialFixed(action.substring("tutorial_fixed_clear_".length()));
                 if (activity instanceof MainActivity) {
                     ((MainActivity) activity).notifyLanhuStateChanged();
@@ -1980,6 +1989,11 @@ public class IcuDashboardView extends View {
                 return true;
             }
             if (action.startsWith("tutorial_slot_pick_")) {
+                /* ★ 2026-10-22 V77：自定义教程位增删改仅工程师（原生兜底） */
+                if (!accountStore.isCurrentService()) {
+                    Toast.makeText(activity, "无权限：教程文件仅工程师可增删改", Toast.LENGTH_SHORT).show();
+                    return true;
+                }
                 try {
                     activity.pickTutorialMedia(Integer.parseInt(action.substring("tutorial_slot_pick_".length())));
                 } catch (NumberFormatException ignored) {
@@ -1994,6 +2008,10 @@ public class IcuDashboardView extends View {
                 return true;
             }
             if (action.startsWith("tutorial_slot_clear_")) {
+                if (!accountStore.isCurrentService()) {
+                    Toast.makeText(activity, "无权限：教程文件仅工程师可增删改", Toast.LENGTH_SHORT).show();
+                    return true;
+                }
                 try {
                     clearTutorialSlot(Integer.parseInt(action.substring("tutorial_slot_clear_".length())));
                 } catch (NumberFormatException ignored) {

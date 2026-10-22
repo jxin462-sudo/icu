@@ -134,7 +134,8 @@
         vhModApp: 'APP', vhModMain: '主控', vhModCtrl: '监护', vhModBt: '蓝牙',
         tuTitle: '使用教程', tuPick: '＋ 选择照片/视频/文档', tuChange: '重选', tuClear: '移除',
         tuSlot: '教程位', tuHint: '点击空位从平板选择照片、视频或文档；点击已绑定的内容可播放/查看。',
-        tuPickFixed: '＋ 选择文件',
+        tuPickFixed: '＋ 选择文件', tuNeedEng: '仅工程师可绑定',
+        tuHintView: '点击已绑定的内容可播放/查看；教程文件仅工程师可增删改。',
         logFront: '前端调试', logBack: '后端调试', logErr: '错误记录', logComm: '通信记录',
         logStack: '堆栈信息', logNormal: '常规信息', logUser: '用户日志',
         /* ★ 任务13：用户管理 / 舱区 / 连接 */
@@ -203,7 +204,8 @@
         vhModApp: 'APP', vhModMain: 'Main', vhModCtrl: 'Monitor', vhModBt: 'BT',
         tuTitle: 'Tutorial', tuPick: '＋ Pick photo/video/doc', tuChange: 'Change', tuClear: 'Remove',
         tuSlot: 'Slot', tuHint: 'Tap an empty slot to pick a photo, video or document from the tablet; tap a bound item to play/view it.',
-        tuPickFixed: '＋ Pick file',
+        tuPickFixed: '＋ Pick file', tuNeedEng: 'Engineer only',
+        tuHintView: 'Tap a bound item to play/view it. Tutorial files are managed by engineer only.',
         logFront: 'Frontend', logBack: 'Backend', logErr: 'Errors', logComm: 'Comm',
         logStack: 'Stack', logNormal: 'General', logUser: 'User Log',
         /* ★ 任务13：用户管理 / 舱区 / 连接 */
@@ -1750,7 +1752,10 @@
       /* ★ 2026-10-20 V64（V1.02 R92 / V1.01 R57-R60）：4 个固定教程位。
          ★ 2026-10-22 V75（用户要求）：固定位支持从平板本机选择文件绑定——装机/指南=视频、
          手册=文档（PDF/Word/TXT）、其他教程=图片/视频/文档（在线更新二期不做）；
-         本机绑定优先于随包资源（assets/lanhu/v2/tutorial/）展示，可重选/移除。 */
+         本机绑定优先于随包资源（assets/lanhu/v2/tutorial/）展示，可重选/移除。
+         ★ 2026-10-22 V77（用户要求）：教程文件的增/删/改仅工程师可用——非工程师不渲染
+         选择入口与重选/移除按钮（查看/播放全员保留），原生 action 侧同步门禁兜底。 */
+      var isEng = (D.accountRole || '') === 'service';
       var tf = D.tutorialFixed || {};
       var fx = [
         { k: 'install', lab: T('tuInstall', '装机教程'), src: 'tutorial/install.mp4' },
@@ -1760,13 +1765,17 @@
       ];
       var fcards = fx.map(function (f) {
         var st = tf[f.k] || {};
-        /* ① 本机已绑定：图标按类型 + 文件名 + 重选/移除；点卡片打开（系统查看器/播放器） */
+        /* ① 本机已绑定：图标按类型 + 文件名；点卡片打开（系统查看器/播放器）；
+           重选/移除按钮仅工程师可见（V77） */
         if (st.uri) {
           var ico = st.mime && st.mime.indexOf('video/') === 0 ? '🎬' : (st.mime && st.mime.indexOf('image/') === 0 ? '🖼' : '📄');
           return '<div class="tut-slot bound" data-tfixed-open="' + f.k + '"><div class="tut-tag">' + f.lab + '</div>'
             + '<div class="tut-empty">' + ico + '</div><div class="tut-name">' + esc(st.name || '') + '</div>'
-            + '<div class="tut-tools"><span class="tut-btn" data-tfixed-pick="' + f.k + '">' + T('tuChange', '重选') + '</span>'
-            + '<span class="tut-btn" data-tfixed-clear="' + f.k + '">' + T('tuClear', '移除') + '</span></div></div>';
+            + (isEng
+              ? '<div class="tut-tools"><span class="tut-btn" data-tfixed-pick="' + f.k + '">' + T('tuChange', '重选') + '</span>'
+                + '<span class="tut-btn" data-tfixed-clear="' + f.k + '">' + T('tuClear', '移除') + '</span></div>'
+              : '')
+            + '</div>';
         }
         /* ② 随包资源：视频内嵌播放、手册走系统查看器 */
         if (st.bundled && f.src) {
@@ -1777,7 +1786,11 @@
           return '<div class="tut-slot bound"><div class="tut-tag">' + f.lab + '</div>'
             + '<div class="tut-empty">📄</div><div class="tut-tools"><span class="tut-btn" data-tfixed-open="manual">' + T('tuOpenDoc', '打开文件') + '</span></div></div>';
         }
-        /* ③ 空位：点击从平板选择文件 */
+        /* ③ 空位：工程师可点击从平板选择文件；非工程师只读占位（V77） */
+        if (!isEng) {
+          return '<div class="tut-slot"><div class="tut-tag">' + f.lab + '</div>'
+            + '<div class="tut-empty" style="color:#9aa6b6">' + T('tuNeedEng', '仅工程师可绑定') + '</div></div>';
+        }
         return '<div class="tut-slot" data-tfixed-pick="' + f.k + '" style="cursor:pointer"><div class="tut-tag">' + f.lab + '</div>'
           + '<div class="tut-empty">' + T('tuPickFixed', '＋ 选择文件') + '</div></div>';
       }).join('');
@@ -1786,27 +1799,28 @@
       for (let i = 0; i < 6; i++) {
         const s = slots[i] || {};
         const bound = !!(s.uri);
+        /* ★ 2026-10-22 V77：非工程师不渲染选择入口与重选/移除（查看/播放全员保留） */
         const body = bound
           ? (s.thumb
             ? '<img class="tut-thumb" src="' + s.thumb + '">'
             : '<div class="tut-empty">' + (s.mime && s.mime.indexOf('video/') === 0 ? '🎬' : (s.mime && s.mime.indexOf('image/') === 0 ? '🖼' : '📄')) + '</div>')
             + '<div class="tut-name">' + (s.name || '') + '</div>'
-          : '<div class="tut-empty">' + T('tuPick', '＋ 选择照片/视频') + '</div>';
-        const tools = bound
+          : '<div class="tut-empty"' + (isEng ? '' : ' style="color:#9aa6b6"') + '>' + (isEng ? T('tuPick', '＋ 选择照片/视频/文档') : T('tuNeedEng', '仅工程师可绑定')) + '</div>';
+        const tools = (bound && isEng)
           ? '<div class="tut-tools">'
             + '<span class="tut-btn" data-tslot-pick="' + i + '">' + T('tuChange', '重选') + '</span>'
             + '<span class="tut-btn" data-tslot-clear="' + i + '">' + T('tuClear', '移除') + '</span>'
             + '</div>'
           : '';
         cards += '<div class="tut-slot' + (bound ? ' bound' : '') + '" '
-          + (bound ? 'data-tslot-play="' + i + '"' : 'data-tslot-pick="' + i + '"') + '>'
+          + (bound ? 'data-tslot-play="' + i + '"' : (isEng ? 'data-tslot-pick="' + i + '"' : '')) + '>'
           + '<div class="tut-tag">' + T('tuSlot', '教程位') + ' ' + (i + 1) + '</div>'
           + body + tools + '</div>';
       }
       return PAGE(P.topbarBack('care'),
         '<div class="tut-wrap"><div class="tut-hint">' + T('tuFixed', '固定教程') + '</div>'
         + '<div class="tut-grid">' + fcards + '</div>'
-        + '<div class="tut-hint">' + T('tuCustom', '自定义教程') + ' · ' + T('tuHint', '点击空位从相册选择照片或视频；点击已绑定的内容可播放/查看。') + '</div>'
+        + '<div class="tut-hint">' + T('tuCustom', '自定义教程') + ' · ' + (isEng ? T('tuHint', '点击空位从平板选择照片、视频或文档；点击已绑定的内容可播放/查看。') : T('tuHintView', '点击已绑定的内容可播放/查看；教程文件仅工程师可增删改。')) + '</div>'
         + '<div class="tut-grid">' + cards + '</div></div>', null, true);
     }
   };
