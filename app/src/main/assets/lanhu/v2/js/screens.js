@@ -128,7 +128,7 @@
         compCo2: '二氧化碳浓度补偿（PPM）', compIr: '红外体温补偿（℃）',
         aboutBasic: '基础信息', aboutVer: '版本信息', verApp: '软件版本', verCode: '内部版本号',
         /* ★ 2026-10-15 V50：版本信息扩展——设备版本 + 更新记录（时间查询/翻页/刷新） */
-        verMain: '主控版本', verCtrl: '监护版本', verBt: '蓝牙版本',
+        verMain: '主控版本', verCtrlBoard: '控制板版本', verCtrl: '监护版本', verBt: '蓝牙版本',
         verHist: '更新记录', vhTime: '时间', vhModule: '模块', vhChange: '版本变化', vhContent: '更新内容',
         vhAll: '全部', vhRefresh: '刷新', vhEmpty: '暂无更新记录', vhStart: '开始日期', vhEnd: '结束日期',
         vhModApp: 'APP', vhModMain: '主控', vhModCtrl: '监护', vhModBt: '蓝牙',
@@ -196,7 +196,7 @@
         compCo2: 'CO₂ Comp (PPM)', compIr: 'IR Temp Comp (℃)',
         aboutBasic: 'Basic Info', aboutVer: 'Version Info', verApp: 'App Version', verCode: 'Version Code',
         /* ★ 2026-10-15 V50: device versions + update history */
-        verMain: 'Main Control', verCtrl: 'Monitor', verBt: 'Bluetooth',
+        verMain: 'Main Control', verCtrlBoard: 'Control Board', verCtrl: 'Monitor', verBt: 'Bluetooth',
         verHist: 'Update History', vhTime: 'Time', vhModule: 'Module', vhChange: 'Version', vhContent: 'Changes',
         vhAll: 'All', vhRefresh: 'Refresh', vhEmpty: 'No update records', vhStart: 'Start date', vhEnd: 'End date',
         vhModApp: 'APP', vhModMain: 'Main', vhModCtrl: 'Monitor', vhModBt: 'BT',

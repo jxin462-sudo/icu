@@ -298,7 +298,10 @@
         [TT('verApp', '软件版本'), String(av.name)],
         [TT('verCode', '内部版本号'), String(av.code == null ? '-' : av.code)],
         [TT('verMain', '主控版本'), vhVal(vhHost.mainVersion)],
-        [TT('verCtrl', '监护版本'), vhVal(vhHost.ctrlVersion)],
+        /* ★ 2026-10-22 V68：新增「控制板版本」行接管 get_ctrl_version（此前错挂在「监护版本」名下）；
+           监护板版本协议文档无查询命令，暂无数据源恒显 --，待固件/监护仪侧协议补充后接线 */
+        [TT('verCtrlBoard', '控制板版本'), vhVal(vhHost.ctrlVersion)],
+        [TT('verCtrl', '监护版本'), '--'],
         [TT('verBt', '蓝牙版本'), vhVal(vhHost.btVersion)]
       ] : [];
       D.verHist = Array.isArray(S.versionHistory) ? S.versionHistory : [];

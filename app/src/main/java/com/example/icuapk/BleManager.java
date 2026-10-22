@@ -1500,6 +1500,8 @@ public class BleManager {
         if (!isConnected()) {
             return;
         }
+        // ★ 2026-10-22 V68：下发也记日志，与回包日志配对，真机排查"查询没发出去还是设备没回"
+        addLog("已下发版本查询 get_main_version / get_ctrl_version / get_bt_ver");
         sendCommand("{\"cmd\":\"get_main_version\"}");
         sendCommand("{\"cmd\":\"get_ctrl_version\"}");
         sendCommand("{\"cmd\":\"get_bt_ver\"}");
@@ -4120,6 +4122,13 @@ public class BleManager {
                 } else {
                     addLog("[版本] get_bt_ver 回包未取到版本号，原文: " + message);
                 }
+                return;
+            }
+            /* ★ 2026-10-22 V68：版本类回包兜底诊断——cmd 含 version/_ver 但未匹配已知版本命令
+               （如固件用了别的命令名回主板版本），显式记原始帧日志，日志页可直接看到。 */
+            String cmdLower = cmd == null ? "" : cmd.toLowerCase(Locale.US);
+            if (cmdLower.contains("version") || cmdLower.contains("_ver")) {
+                addLog("[版本] 未匹配的版本类回包 cmd=" + cmd + "，原文: " + message);
                 return;
             }
             // ★ P0-6:5 个 set_*_time 与 set_infrared_temp 之前只 recordSetPending 却从不
