@@ -1849,17 +1849,16 @@
           if (!addr) { toast(T2('errPrinterAddr', '请输入打印机地址')); return; }
           /* ★ 任务32：打印机地址格式校验（IPv4，可带端口） */
           if (!/^(\d{1,3}\.){3}\d{1,3}(:\d{1,5})?$/.test(addr)) { toast(T2('errPrinterAddrFmt', '打印机地址格式不正确，示例 192.168.1.10:9100')); return; }
-          /* ★ 2026-10-22 V73：名称优先级=名称输入框 > 扫描结果同地址真名 > 自动联网查询（IPP/PJL）。
-             用户明确：输入 IP 添加后可用打印机列表显示打印机真实名称，不要求手动输名称；
+          /* ★ 2026-10-22 V74：名称输入框已删除（用户要求）——名称优先级=扫描结果同地址真名 > 自动联网查询（IPP/PJL）。
+             用户明确：输入 IP 添加后可用打印机列表显示打印机真实名称，不需要名称输入框；
              查询期间显示「正在获取名称…」，查询失败显示「未知打印机」；
-             名称输入框保留为手动改名通道（同地址重复添加且带了名称 = 改名更新） */
-          var pnameInput = val('input[data-print-name]');
+             同地址重复添加且扫描结果带了新名称 = 改名更新 */
           var scanned = (D.printerScan && D.printerScan.printers) || [];
           var hitName = '';
           for (var si = 0; si < scanned.length; si++) {
             if (scanned[si] && scanned[si].addr === addr && scanned[si].name) { hitName = scanned[si].name; break; }
           }
-          var pname = pnameInput || hitName;
+          var pname = hitName;
           var plist2 = []; try { var _pa = JSON.parse(localStorage.getItem('icu_printer_list') || '[]'); if (Array.isArray(_pa)) plist2 = _pa; } catch (e) {}
           var dupIdx = -1;
           for (var di = 0; di < plist2.length; di++) { if (plist2[di] && plist2[di].addr === addr) { dupIdx = di; break; } }
