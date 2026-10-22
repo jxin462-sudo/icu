@@ -169,7 +169,7 @@
         scanUnsupported: '暂不支持自动扫描，请手动填写打印机地址后添加',
         /* ★ 2026-10-10 #53-#57 */
         scanningPrinters: '正在扫描打印机…', noPrinterFound: '未发现打印机，请点「扫描」或手动输入地址',
-        printerAdded: '已添加打印机', printOk: '打印成功', printFail: '打印失败',
+        printerAdded: '已添加打印机', printerRenamed: '已更新打印机名称', printOk: '打印成功', printFail: '打印失败',
         /* ★ 2026-10-15 V48 */
         printerSelected: '已选择该打印机', colStatus: '状态', stTreating: '护疗中', stEnded: '已结束',
         errAgeReq: '年龄不能为空', errSexReq: '请选择性别',
@@ -235,7 +235,7 @@
         scanUnsupported: 'Auto-scan not supported; please enter the printer address manually',
         /* ★ 2026-10-10 #53-#57 */
         scanningPrinters: 'Scanning for printers…', noPrinterFound: 'No printer found; tap "Scan" or enter the address manually',
-        printerAdded: 'Printer added', printOk: 'Print succeeded', printFail: 'Print failed',
+        printerAdded: 'Printer added', printerRenamed: 'Printer name updated', printOk: 'Print succeeded', printFail: 'Print failed',
         /* ★ 2026-10-15 V48 */
         printerSelected: 'Printer selected', colStatus: 'Status', stTreating: 'Treating', stEnded: 'Ended',
         errAgeReq: 'Age is required', errSexReq: 'Please select sex',
@@ -296,6 +296,7 @@
         factoryNoPerm: '无权限：恢复出厂设置仅工程师可用',
         zoneNoPerm: '无权限：仅工程师可切换左/右舱', exitNoPerm: '无权限：关闭软件仅管理员/工程师可用',
         errPrinterAddr: '请输入打印机地址', errPrinterAddrFmt: '打印机地址格式不正确，示例 192.168.1.10:9100',
+        errPrinterName: '请输入打印机名称', printerNamePh: '打印机名称（如 前台HP）',
         errHospPhone: '医院电话格式不正确',
         errUserName: '请输入用户名', errPwdReq: '密码必填', errPwdLen: '密码至少 4 位', errRoleReq: '权限必选',
         userNoPerm: '无权限：账号管理仅工程师/管理员可用',
@@ -356,6 +357,7 @@
         factoryNoPerm: 'No permission: factory reset is engineer-only',
         zoneNoPerm: 'No permission: only engineers can switch cabins', exitNoPerm: 'No permission: only admin/engineer can exit the app',
         errPrinterAddr: 'Please enter printer address', errPrinterAddrFmt: 'Invalid printer address, e.g. 192.168.1.10:9100',
+        errPrinterName: 'Please enter printer name', printerNamePh: 'Printer name (e.g. Front-desk HP)',
         errHospPhone: 'Invalid hospital phone format',
         errUserName: 'Please enter username', errPwdReq: 'Password is required', errPwdLen: 'Password must be at least 4 characters', errRoleReq: 'Role is required',
         userNoPerm: 'No permission: account management is engineer/admin only',
@@ -1509,6 +1511,9 @@
         + frow(T('printerAvail', '可用打印机'), plist + '<div class="btn sm" data-print="scan">' + T('scanPrinter', '扫描') + '</div>')
         + frow(T('printerAddr', '打印机地址'), '<div class="inp flex"><input class="icu-input" data-print-addr maxlength="30" data-addr="1" placeholder="' + T('printerAddrPh', '如 192.168.1.10:9100') + '" value="'
           + ((D.settings && D.settings.printerAddress) ? esc(D.settings.printerAddress) : '') + '"></div>'
+          /* ★ 2026-10-22 V72：加名称输入——可用打印机列表显示真实名称（用户要求，不再用
+             「打印机 N」占位或 IP）；同地址重复添加 = 改名 */
+          + '<div class="inp flex"><input class="icu-input" data-print-name maxlength="30" placeholder="' + T('printerNamePh', '打印机名称（如 前台HP）') + '"></div>'
           + '<div class="btn sm" data-print="addPrinter">' + T('addPrinter', '添加打印机') + '</div><div class="btn sm" data-print="test">' + T('printTest', '打印测试页') + '</div>')
         + frow(T('hospitalName', '医院名称'), pf('name', org.name) + setBtn)
         + frow(T('hospitalPhone', '医院电话'), pf('phone', org.phone) + setBtn)

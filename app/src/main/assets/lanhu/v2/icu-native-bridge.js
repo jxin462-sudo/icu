@@ -1836,23 +1836,36 @@
           if (!addr) { toast(T2('errPrinterAddr', '请输入打印机地址')); return; }
           /* ★ 任务32：打印机地址格式校验（IPv4，可带端口） */
           if (!/^(\d{1,3}\.){3}\d{1,3}(:\d{1,5})?$/.test(addr)) { toast(T2('errPrinterAddrFmt', '打印机地址格式不正确，示例 192.168.1.10:9100')); return; }
-          /* ★ 2026-10-15 V48：加入本机地址簿（去重），添加成功后出现在「可用打印机」列表可被选择 */
+          /* ★ 2026-10-22 V70/V72：名称优先级=名称输入框 > 扫描结果同地址真名；都没有则要求输入
+             （用户明确：显示打印机具体名称，不要 IP、不要「打印机 N」占位）；
+             同地址重复添加且带了名称 = 改名更新（地址簿无删除/改名入口的补救） */
+          var pnameInput = val('input[data-print-name]');
+          var scanned = (D.printerScan && D.printerScan.printers) || [];
+          var hitName = '';
+          for (var si = 0; si < scanned.length; si++) {
+            if (scanned[si] && scanned[si].addr === addr && scanned[si].name) { hitName = scanned[si].name; break; }
+          }
+          var pname = pnameInput || hitName;
           var plist2 = []; try { var _pa = JSON.parse(localStorage.getItem('icu_printer_list') || '[]'); if (Array.isArray(_pa)) plist2 = _pa; } catch (e) {}
-          var dup = plist2.some(function (x) { return x && x.addr === addr; });
-          if (!dup) {
-            /* ★ 2026-10-22 V70：手动添加的打印机不再把 IP 当名字——地址与扫描结果匹配时
-               用真实名称，否则自动编号「打印机 N」；IP 只存 addr 字段用于连接 */
-            var scanned = (D.printerScan && D.printerScan.printers) || [];
-            var hitName = '';
-            for (var si = 0; si < scanned.length; si++) {
-              if (scanned[si] && scanned[si].addr === addr && scanned[si].name) { hitName = scanned[si].name; break; }
+          var dupIdx = -1;
+          for (var di = 0; di < plist2.length; di++) { if (plist2[di] && plist2[di].addr === addr) { dupIdx = di; break; } }
+          if (dupIdx >= 0) {
+            if (pname && plist2[dupIdx].name !== pname) {
+              plist2[dupIdx].name = pname;
+              try { localStorage.setItem('icu_printer_list', JSON.stringify(plist2)); } catch (e) {}
+              D.printerSaved = plist2;
+              toast(T2('printerRenamed', '已更新打印机名称'));
+            } else {
+              toast(T2('printerSelected', '已选择该打印机'));
             }
-            plist2.push({ addr: addr, name: hitName || (T2('printerAutoName', '打印机') + ' ' + (plist2.length + 1)) });
+          } else {
+            if (!pname) { toast(T2('errPrinterName', '请输入打印机名称')); return; }
+            plist2.push({ addr: addr, name: pname });
             try { localStorage.setItem('icu_printer_list', JSON.stringify(plist2)); } catch (e) {}
             D.printerSaved = plist2;
+            toast(T2('printerAdded', '已添加打印机'));
           }
           act('settings_save', JSON.stringify({ printerAddress: addr }));
-          toast(dup ? T2('printerSelected', '已选择该打印机') : T2('printerAdded', '已添加打印机'));
           IcuApp.render();
           return;
         }
