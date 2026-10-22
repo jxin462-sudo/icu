@@ -144,7 +144,7 @@
         zoneTitle: '当前舱区', zoneLeft: '左舱', zoneRight: '右舱', zoneNoPerm: '无权限（仅工程师可切换）',
         connHost: '主机名称', connWifi: 'wifi连接', connHostBle: '主机蓝牙', connMonitorBle: '监护蓝牙',
         connNotConn: '未连接', connConnected: '已连接',
-        blePickHost: '选择主机蓝牙', blePickMon: '选择监护设备', bleScanning: '正在搜索附近设备…', bleRescan: '重新搜索',
+        blePickHost: '选择主机设备', blePickMon: '选择监护设备', bleScanning: '正在搜索附近设备…', bleRescan: '重新搜索',
         bleHostConnOk: '主机蓝牙已连接', bleHostConnLost: '主机蓝牙已断开', bleMonConnOk: '监护蓝牙已连接', bleMonConnLost: '监护蓝牙已断开',
         wifiLocOff: '请开启系统定位后重试', wifiNeedPerm: '请授予定位权限',
         delUserTitle: '删除用户', delUserBody: '确认删除该用户？删除后不可恢复。',
@@ -160,7 +160,7 @@
         careNeedDisease: '请先填写病症再开始护疗', careNotEndedPrint: '该样本治疗未结束，不能打印', careNotEndedSend: '该样本治疗未结束，不能发送数据',
         careNoSample: '暂无样本数据，无法开始治疗',
         /* ★ 任务14：打印页 */
-        printerAvail: '可用打印机', printerAddr: '打印机地址', scanPrinter: '扫描',
+        printerAvail: '可用打印机', printerAddr: '打印机地址', scanPrinter: '扫描', printerAutoName: '打印机',
         addPrinter: '添加打印机', printTest: '打印测试页', uploadLogo: '上传LOGO',
         hospitalName: '医院名称', hospitalPhone: '医院电话', hospitalAddr: '医院地址', hospitalLogo: '医院LOGO',
         reportTitle: '报告标题', reportDecl: '报告声明', setBtn: '设置', noLogo: '暂无\nLOGO',
@@ -212,7 +212,7 @@
         zoneTitle: 'Current Cabin', zoneLeft: 'Left', zoneRight: 'Right', zoneNoPerm: 'No permission (Engineer only)',
         connHost: 'Host Name', connWifi: 'WiFi', connHostBle: 'Host BLE', connMonitorBle: 'Monitor BLE',
         connNotConn: 'Disconnected', connConnected: 'Connected',
-        blePickHost: 'Select host Bluetooth', blePickMon: 'Select monitor device', bleScanning: 'Searching nearby devices…', bleRescan: 'Rescan',
+        blePickHost: 'Select host device', blePickMon: 'Select monitor device', bleScanning: 'Searching nearby devices…', bleRescan: 'Rescan',
         bleHostConnOk: 'Host Bluetooth connected', bleHostConnLost: 'Host Bluetooth disconnected', bleMonConnOk: 'Monitor Bluetooth connected', bleMonConnLost: 'Monitor Bluetooth disconnected',
         wifiLocOff: 'Enable system location, then retry', wifiNeedPerm: 'Location permission required',
         delUserTitle: 'Delete User', delUserBody: 'Delete this user? This cannot be undone.',
@@ -227,7 +227,7 @@
         careEndedNoRestart: 'This record has ended and cannot be restarted',
         careNeedDisease: 'Enter the diagnosis before starting treatment', careNotEndedPrint: 'Treatment not finished; printing is unavailable', careNotEndedSend: 'Treatment not finished; sending is unavailable',
         /* ★ 任务14：打印页 */
-        printerAvail: 'Available Printers', printerAddr: 'Printer Address', scanPrinter: 'Scan',
+        printerAvail: 'Available Printers', printerAddr: 'Printer Address', scanPrinter: 'Scan', printerAutoName: 'Printer',
         addPrinter: 'Add Printer', printTest: 'Print Test Page', uploadLogo: 'Upload Logo',
         hospitalName: 'Hospital Name', hospitalPhone: 'Hospital Phone', hospitalAddr: 'Hospital Address', hospitalLogo: 'Hospital Logo',
         reportTitle: 'Report Title', reportDecl: 'Report Declaration', setBtn: 'Set',
@@ -574,10 +574,15 @@
         + '</div>';
       /* ★ 2026-10-22 V69：快捷按钮随真实开关态高亮（.on），与主控页开关同步；
          此前按钮无任何状态显示（.wbtn:first-child 常驻高亮仅为装饰，已改为 .on 语义） */
+      /* ★ 2026-10-22 V70：加第 4 个快捷钮「蓝牙」= 主机蓝牙连接（与监护页蓝牙按钮同逻辑：
+         已连接→点击断开；未连接→弹「选择主机设备」选机；on 态=主机蓝牙已连接） */
+      var hstSt = window.S || {};
+      var hostBleOn = !!((hstSt.host && hstSt.host.connected) || (hstSt.ble && hstSt.ble.host && hstSt.ble.host.connected));
       const acts = '<div class="status-actions">'
         + '<div class="wbtn' + (M.nebOn ? ' on' : '') + '" data-act="control_nebulizer">' + I.mist + '<span>' + T('ctrlNeb', '雾化器') + '</span></div>'
         + '<div class="wbtn' + (M.warmOn ? ' on' : '') + '" data-act="control_warm_light">' + I.sun + '<span>' + T('statusWarm', '暖光灯') + '</span></div>'
-        + '<div class="wbtn' + (M.innerOn ? ' on' : '') + '" data-act="control_inner">' + I.loopIn + '<span>' + T('ctrlInner', '内循环') + '</span></div></div>';
+        + '<div class="wbtn' + (M.innerOn ? ' on' : '') + '" data-act="control_inner">' + I.loopIn + '<span>' + T('ctrlInner', '内循环') + '</span></div>'
+        + '<div class="wbtn' + (hostBleOn ? ' on' : '') + '" data-act="host_ble">' + I.bluetooth + '<span>' + T('monBle', '蓝牙') + '</span></div></div>';
       /* ★ 2026-10-13：摄像头下方原装饰块（.cam.small，只有一个空 .glow，无数据无原生绑定）
          改为红外热图区：画面 + 最高/最低温 + 帧率 + 连接/断开，数据由 js/thermal.js 驱动 */
       const cam = '<div class="camcol"><div class="cam big">' + P.fisheye(D.stamp) + '</div>'
@@ -591,7 +596,7 @@
         + funcChip(T('ctrlOuter', '外循环'), !!M.outerOn)
         + funcChip(T('ctrlCold', '冷光照明'), !!M.coldOn)
         + '</div>'; */
-      return PAGE(P.topbar('care'), grid + acts + cam, P.sessionBar('status'), false, P.sessionTag());
+      return PAGE(P.topbar('care'), grid + acts + cam + blePickModal(), P.sessionBar('status'), false, P.sessionTag());
     }
   };
 
@@ -1300,16 +1305,20 @@
         return '<div class="tile' + (x[3] ? ' dis' : '') + '"' + (x[3] ? '' : ' data-go="' + x[0] + '"') + '>'
           + '<div class="ti">' + (I[x[2]] || I.doc) + '</div><span>' + T(x[1], x[1]) + '</span></div>';
       }).join('');
-      /* ★ 任务13（R93）→ 2026-09-30 曾放开全角色；2026-10-15 V49 按 V1.02 收紧：舱区切换仅工程师（bridge 点击拦截+原生兜底） */
+      /* ★ 任务13（R93）→ 2026-09-30 曾放开全角色；2026-10-15 V49 按 V1.02 收紧：舱区切换仅工程师（bridge 点击拦截+原生兜底）
+         ★ 2026-10-22 V70：切换按钮仅工程师可见（D.canSwitchZone），其他角色连按钮都不渲染；
+            「当前舱区」文字标签仍全员可见（只是信息展示，不含操作入口） */
       var isLeft = (D.zone !== 'right');
       var zoneCard = '<div class="zone-card">'
         + '<span class="zt">' + T('zoneTitle', '当前舱区') + '：' + (isLeft ? T('zoneLeft', '左舱') : T('zoneRight', '右舱')) + '</span>'
-        + '<div class="seg zseg">'
-        + '<button data-zone="left"' + (isLeft ? ' class="on"' : '')
-        + '>' + T('zoneLeft', '左舱') + '</button>'
-        + '<button data-zone="right"' + (isLeft ? '' : ' class="on"')
-        + '>' + T('zoneRight', '右舱') + '</button>'
-        + '</div>'
+        + (D.canSwitchZone
+          ? '<div class="seg zseg">'
+            + '<button data-zone="left"' + (isLeft ? ' class="on"' : '')
+            + '>' + T('zoneLeft', '左舱') + '</button>'
+            + '<button data-zone="right"' + (isLeft ? '' : ' class="on"')
+            + '>' + T('zoneRight', '右舱') + '</button>'
+            + '</div>'
+          : '')
         + '</div>';
       /* ★ 任务21：调试密码弹层（角色通过后才弹出，输入正确密码才进 comp） */
       var pwdModal = (window.__debugPwdPending) ? (
@@ -1387,7 +1396,7 @@
     const st = window.S || {};
     const ch = isHost ? (st.host || (st.ble && st.ble.host) || {}) : ((st.ble && st.ble.monitor) || {});
     const devs = Array.isArray(ch.devices) ? ch.devices : [];
-    const title = isHost ? T('blePickHost', '选择主机蓝牙') : T('blePickMon', '选择监护设备');
+    const title = isHost ? T('blePickHost', '选择主机设备') : T('blePickMon', '选择监护设备');
     const rows = devs.length
       ? devs.map(function (d) {
         return '<div class="bledev" data-bledev="' + esc(d.deviceId || d.id || '') + '">'

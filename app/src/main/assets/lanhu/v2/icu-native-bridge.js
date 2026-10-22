@@ -273,6 +273,15 @@
          设置-打印页与 NSD 扫描结果合并渲染、点击即选 */
       try { var __pl = JSON.parse(localStorage.getItem('icu_printer_list') || '[]'); D.printerSaved = Array.isArray(__pl) ? __pl : []; }
       catch (e) { D.printerSaved = []; }
+      /* ★ 2026-10-22 V70：历史地址簿迁移——name 缺失或等于 IP 的条目改名「打印机 N」并回写，
+         可用打印机列表从此只显名称不显 IP（V48 旧条目 name=addr 的遗留） */
+      var __plMig = false;
+      D.printerSaved.forEach(function (sp, i) {
+        if (sp && sp.addr && (!sp.name || sp.name === sp.addr)) {
+          sp.name = TT('printerAutoName', '打印机') + ' ' + (i + 1); __plMig = true;
+        }
+      });
+      if (__plMig) { try { localStorage.setItem('icu_printer_list', JSON.stringify(D.printerSaved)); } catch (e) {} }
       /* ★ 2026-10-08 日志页：用户/操作日志（原生 userOpLog，倒序最新在前） */
       D.userLogs = Array.isArray(S.userLogs) ? S.userLogs : [];
       /* ★ 2026-10-08 日志页：前端调试（H5 侧捕获）/ 错误记录（H5 + 原生合并）
@@ -1234,8 +1243,9 @@
       }
     }
 
-    /* ★ 2026-10-08 监护页「蓝牙/监护宝」按钮：已连接=断开；未连接=打开设备选择（与连接页一致） */
-    if (cur === 'monitor' || cur === 'monitor-unit') {
+    /* ★ 2026-10-08 监护页「蓝牙/监护宝」按钮：已连接=断开；未连接=打开设备选择（与连接页一致）
+       ★ 2026-10-22 V70：状态屏快捷钮「蓝牙」(host_ble) 同逻辑，故放行 status 屏 */
+    if (cur === 'monitor' || cur === 'monitor-unit' || cur === 'status') {
       var ma = e.target.closest('[data-act]');
       if (ma && (ma.dataset.act === 'host_ble' || ma.dataset.act === 'monitor_ble')) {
         stop(e);
@@ -1830,7 +1840,14 @@
           var plist2 = []; try { var _pa = JSON.parse(localStorage.getItem('icu_printer_list') || '[]'); if (Array.isArray(_pa)) plist2 = _pa; } catch (e) {}
           var dup = plist2.some(function (x) { return x && x.addr === addr; });
           if (!dup) {
-            plist2.push({ addr: addr, name: addr });
+            /* ★ 2026-10-22 V70：手动添加的打印机不再把 IP 当名字——地址与扫描结果匹配时
+               用真实名称，否则自动编号「打印机 N」；IP 只存 addr 字段用于连接 */
+            var scanned = (D.printerScan && D.printerScan.printers) || [];
+            var hitName = '';
+            for (var si = 0; si < scanned.length; si++) {
+              if (scanned[si] && scanned[si].addr === addr && scanned[si].name) { hitName = scanned[si].name; break; }
+            }
+            plist2.push({ addr: addr, name: hitName || (T2('printerAutoName', '打印机') + ' ' + (plist2.length + 1)) });
             try { localStorage.setItem('icu_printer_list', JSON.stringify(plist2)); } catch (e) {}
             D.printerSaved = plist2;
           }
