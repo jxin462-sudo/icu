@@ -296,7 +296,8 @@
         factoryNoPerm: '无权限：恢复出厂设置仅工程师可用',
         zoneNoPerm: '无权限：仅工程师可切换左/右舱', exitNoPerm: '无权限：关闭软件仅管理员/工程师可用',
         errPrinterAddr: '请输入打印机地址', errPrinterAddrFmt: '打印机地址格式不正确，示例 192.168.1.10:9100',
-        errPrinterName: '请输入打印机名称', printerNamePh: '打印机名称（如 前台HP）',
+        errPrinterName: '请输入打印机名称', printerNamePh: '打印机名称（留空自动获取）',
+        printerResolving: '正在获取名称…', printerUnknown: '未知打印机',
         errHospPhone: '医院电话格式不正确',
         errUserName: '请输入用户名', errPwdReq: '密码必填', errPwdLen: '密码至少 4 位', errRoleReq: '权限必选',
         userNoPerm: '无权限：账号管理仅工程师/管理员可用',
@@ -357,7 +358,8 @@
         factoryNoPerm: 'No permission: factory reset is engineer-only',
         zoneNoPerm: 'No permission: only engineers can switch cabins', exitNoPerm: 'No permission: only admin/engineer can exit the app',
         errPrinterAddr: 'Please enter printer address', errPrinterAddrFmt: 'Invalid printer address, e.g. 192.168.1.10:9100',
-        errPrinterName: 'Please enter printer name', printerNamePh: 'Printer name (e.g. Front-desk HP)',
+        errPrinterName: 'Please enter printer name', printerNamePh: 'Printer name (auto if empty)',
+        printerResolving: 'Resolving name…', printerUnknown: 'Unknown printer',
         errHospPhone: 'Invalid hospital phone format',
         errUserName: 'Please enter username', errPwdReq: 'Password is required', errPwdLen: 'Password must be at least 4 characters', errRoleReq: 'Role is required',
         userNoPerm: 'No permission: account management is engineer/admin only',
@@ -1493,7 +1495,8 @@
       var pitems = [];
       (scan.printers || []).forEach(function (p) { if (p && p.addr) pitems.push({ addr: p.addr, name: p.name || p.addr }); });
       (D.printerSaved || []).forEach(function (sp) {
-        if (sp && sp.addr && !pitems.some(function (x) { return x.addr === sp.addr; })) pitems.push({ addr: sp.addr, name: sp.name || sp.addr });
+        /* ★ 2026-10-22 V73：名称空串 = 正在联网自动查询名称中；永不回退显示 IP */
+        if (sp && sp.addr && !pitems.some(function (x) { return x.addr === sp.addr; })) pitems.push({ addr: sp.addr, name: sp.name || T('printerResolving', '正在获取名称…') });
       });
       var plist;
       if (scan.scanning) {
@@ -1511,9 +1514,9 @@
         + frow(T('printerAvail', '可用打印机'), plist + '<div class="btn sm" data-print="scan">' + T('scanPrinter', '扫描') + '</div>')
         + frow(T('printerAddr', '打印机地址'), '<div class="inp flex"><input class="icu-input" data-print-addr maxlength="30" data-addr="1" placeholder="' + T('printerAddrPh', '如 192.168.1.10:9100') + '" value="'
           + ((D.settings && D.settings.printerAddress) ? esc(D.settings.printerAddress) : '') + '"></div>'
-          /* ★ 2026-10-22 V72：加名称输入——可用打印机列表显示真实名称（用户要求，不再用
-             「打印机 N」占位或 IP）；同地址重复添加 = 改名 */
-          + '<div class="inp flex"><input class="icu-input" data-print-name maxlength="30" placeholder="' + T('printerNamePh', '打印机名称（如 前台HP）') + '"></div>'
+          /* ★ 2026-10-22 V73：名称输入框改为可选改名通道——留空则添加后自动联网查询打印机真实名称
+             （IPP Get-Printer-Attributes→PJL 兜底，查询中显「正在获取名称…」，失败显「未知打印机」） */
+          + '<div class="inp flex"><input class="icu-input" data-print-name maxlength="30" placeholder="' + T('printerNamePh', '打印机名称（留空自动获取）') + '"></div>'
           + '<div class="btn sm" data-print="addPrinter">' + T('addPrinter', '添加打印机') + '</div><div class="btn sm" data-print="test">' + T('printTest', '打印测试页') + '</div>')
         + frow(T('hospitalName', '医院名称'), pf('name', org.name) + setBtn)
         + frow(T('hospitalPhone', '医院电话'), pf('phone', org.phone) + setBtn)

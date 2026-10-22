@@ -2175,6 +2175,11 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
                         dashboardView.applyS5SettingsFromText(text);
                         return;
                     }
+                    // ★ 2026-10-22 V73：手动添加打印机后自动查询真实名称（IPP→PJL 兜底），payload 带 addr
+                    if ("printer_name_query".equals(action)) {
+                        dashboardView.queryPrinterNameFromLanhu(text);
+                        return;
+                    }
                     // ★ 2026-10-16 V58：设置-常规 设备信息（型号/机号/生产日期）保存，原生侧角色门禁
                     if ("device_profile_save".equals(action)) {
                         dashboardView.applyDeviceProfileFromText(text);

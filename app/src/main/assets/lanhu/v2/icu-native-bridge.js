@@ -68,7 +68,7 @@
 
   /* ★ 任务38：蓝牙连接状态边沿检测（false→true / true→false 时弹窗提示）。
      null 表示尚未初始化，首次同步不弹。 */
-  var prevHostConn = null, prevMonConn = null, prevScreen = null, prevPrintSeq = null;
+  var prevHostConn = null, prevMonConn = null, prevScreen = null, prevPrintSeq = null, lastPrinterNameSeq = 0;
   var lastShareQrError = ''; /* ★ V48：文件助手传输失败 toast 边沿检测 */
 
   /* ★ 任务38：原生状态事件驱动的前导+尾随节流渲染。
@@ -274,14 +274,27 @@
       try { var __pl = JSON.parse(localStorage.getItem('icu_printer_list') || '[]'); D.printerSaved = Array.isArray(__pl) ? __pl : []; }
       catch (e) { D.printerSaved = []; }
       /* ★ 2026-10-22 V70：历史地址簿迁移——name 缺失或等于 IP 的条目改名「打印机 N」并回写，
-         可用打印机列表从此只显名称不显 IP（V48 旧条目 name=addr 的遗留） */
+         可用打印机列表从此只显名称不显 IP（V48 旧条目 name=addr 的遗留）。
+         ★ 2026-10-22 V73：空字符串 = 新条目正在自动查询名称中，迁移不得覆盖（查询结果会按 addr 回填） */
       var __plMig = false;
       D.printerSaved.forEach(function (sp, i) {
-        if (sp && sp.addr && (!sp.name || sp.name === sp.addr)) {
+        if (sp && sp.addr && (sp.name === undefined || sp.name === null || sp.name === sp.addr)) {
           sp.name = TT('printerAutoName', '打印机') + ' ' + (i + 1); __plMig = true;
         }
       });
       if (__plMig) { try { localStorage.setItem('icu_printer_list', JSON.stringify(D.printerSaved)); } catch (e) {} }
+      /* ★ 2026-10-22 V73：打印机名称自动查询结果回填——seq 边沿检测，按 addr 更新地址簿显示名并回写；
+         查询失败（name 空）显示「未知打印机」，用户可用名称输入框手动改名 */
+      var pnr = S.printerNameResult || {};
+      if (pnr.seq && pnr.seq !== lastPrinterNameSeq) {
+        lastPrinterNameSeq = pnr.seq;
+        var __pnrHit = null;
+        (D.printerSaved || []).forEach(function (sp) { if (sp && sp.addr === pnr.addr) __pnrHit = sp; });
+        if (__pnrHit) {
+          __pnrHit.name = pnr.name || TT('printerUnknown', '未知打印机');
+          try { localStorage.setItem('icu_printer_list', JSON.stringify(D.printerSaved)); } catch (e) {}
+        }
+      }
       /* ★ 2026-10-08 日志页：用户/操作日志（原生 userOpLog，倒序最新在前） */
       D.userLogs = Array.isArray(S.userLogs) ? S.userLogs : [];
       /* ★ 2026-10-08 日志页：前端调试（H5 侧捕获）/ 错误记录（H5 + 原生合并）
@@ -1836,9 +1849,10 @@
           if (!addr) { toast(T2('errPrinterAddr', '请输入打印机地址')); return; }
           /* ★ 任务32：打印机地址格式校验（IPv4，可带端口） */
           if (!/^(\d{1,3}\.){3}\d{1,3}(:\d{1,5})?$/.test(addr)) { toast(T2('errPrinterAddrFmt', '打印机地址格式不正确，示例 192.168.1.10:9100')); return; }
-          /* ★ 2026-10-22 V70/V72：名称优先级=名称输入框 > 扫描结果同地址真名；都没有则要求输入
-             （用户明确：显示打印机具体名称，不要 IP、不要「打印机 N」占位）；
-             同地址重复添加且带了名称 = 改名更新（地址簿无删除/改名入口的补救） */
+          /* ★ 2026-10-22 V73：名称优先级=名称输入框 > 扫描结果同地址真名 > 自动联网查询（IPP/PJL）。
+             用户明确：输入 IP 添加后可用打印机列表显示打印机真实名称，不要求手动输名称；
+             查询期间显示「正在获取名称…」，查询失败显示「未知打印机」；
+             名称输入框保留为手动改名通道（同地址重复添加且带了名称 = 改名更新） */
           var pnameInput = val('input[data-print-name]');
           var scanned = (D.printerScan && D.printerScan.printers) || [];
           var hitName = '';
@@ -1855,15 +1869,23 @@
               try { localStorage.setItem('icu_printer_list', JSON.stringify(plist2)); } catch (e) {}
               D.printerSaved = plist2;
               toast(T2('printerRenamed', '已更新打印机名称'));
+            } else if (!plist2[dupIdx].name || plist2[dupIdx].name === addr) {
+              /* 旧条目名称仍空（或历史遗留 name=IP）→ 重新发起自动查询 */
+              act('printer_name_query', JSON.stringify({ addr: addr }));
+              toast(T2('printerResolving', '正在获取打印机名称…'));
             } else {
               toast(T2('printerSelected', '已选择该打印机'));
             }
           } else {
-            if (!pname) { toast(T2('errPrinterName', '请输入打印机名称')); return; }
-            plist2.push({ addr: addr, name: pname });
+            plist2.push({ addr: addr, name: pname || '' });
             try { localStorage.setItem('icu_printer_list', JSON.stringify(plist2)); } catch (e) {}
             D.printerSaved = plist2;
-            toast(T2('printerAdded', '已添加打印机'));
+            if (pname) {
+              toast(T2('printerAdded', '已添加打印机'));
+            } else {
+              act('printer_name_query', JSON.stringify({ addr: addr }));
+              toast(T2('printerResolving', '正在获取打印机名称…'));
+            }
           }
           act('settings_save', JSON.stringify({ printerAddress: addr }));
           IcuApp.render();

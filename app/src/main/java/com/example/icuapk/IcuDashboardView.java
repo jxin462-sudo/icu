@@ -185,6 +185,11 @@ public class IcuDashboardView extends View {
     private final java.util.List<NsdManager.DiscoveryListener> printerScanListeners = new java.util.ArrayList<>();
     private final Handler printerScanHandler = new Handler(Looper.getMainLooper());
     private WifiManager.MulticastLock printerScanLock = null;
+    /* ★ 2026-10-22 V73：手动添加打印机后自动查询真实名称（IPP Get-Printer-Attributes→PJL 兜底）。
+       结果以 {seq, addr, name} 推给 H5，H5 按 addr 更新地址簿显示名（seq 单调递增做边沿检测）。 */
+    private int printerNameSeq = 0;
+    private String printerNameAddr = "";
+    private String printerNameValue = "";
     private static final String CAMERA_PLAYER_VERSION = "摄像头内置播放器 v1.8";
     private static final String EMPTY_MONITOR_SUMMARY = "尚未收到 AM4100 数据";
     private static final String PERIOD_ALL = "all";
@@ -1228,6 +1233,15 @@ public class IcuDashboardView extends View {
                 }
                 scan.put("printers", arr);
                 root.put("printerScan", scan);
+            } catch (JSONException ignored) {
+            }
+            // ★ 2026-10-22 V73：打印机名称自动查询结果（seq 边沿检测 → H5 更新地址簿显示名）
+            try {
+                JSONObject pnr = new JSONObject();
+                pnr.put("seq", printerNameSeq);
+                pnr.put("addr", printerNameAddr);
+                pnr.put("name", printerNameValue);
+                root.put("printerNameResult", pnr);
             } catch (JSONException ignored) {
             }
             // 页面通用数据绑定使用顶层 host；与 ble.host 共用同一份实时主机状态，避免跨页面字段不一致。
@@ -7607,6 +7621,220 @@ public class IcuDashboardView extends View {
 
     /* ★ 2026-10-10 #57：NSD 扫描局域网打印机（Bonjour/mDNS 广播的 _ipp._tcp 与 _pdl-datastream._tcp 服务）。
        8 秒后自动停止；每台解析出的打印机以 {name, addr} 存入 printerScanResults 并即时回推 H5。 */
+    /* ★ 2026-10-22 V73：手动添加打印机后自动查询真实名称——IPP Get-Printer-Attributes（631）
+       → PJL INFO ID（9100）兜底；结果经 printerNameResult 状态下发，H5 按 addr 更新地址簿显示名。
+       全程后台线程 + 短超时，失败 name 置空（H5 显示「未知打印机」），不阻塞 UI。 */
+    public void queryPrinterNameFromLanhu(String payload) {
+        String addr = "";
+        try {
+            addr = new JSONObject(payload == null ? "{}" : payload).optString("addr", "").trim();
+        } catch (Exception ignored) {
+        }
+        if (TextUtils.isEmpty(addr)) {
+            return;
+        }
+        final String target = addr;
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String name = queryPrinterNameIpp(target);
+                if (TextUtils.isEmpty(name)) {
+                    name = queryPrinterNamePjl(target);
+                }
+                printerNameAddr = target;
+                printerNameValue = name == null ? "" : name.trim();
+                printerNameSeq++;
+                appendDebugLog("INFO", "printerNameQuery", target + " → " + (printerNameValue.isEmpty() ? "(未获取到)" : printerNameValue));
+                if (activity != null) {
+                    activity.runOnUiThread(new Runnable() {
+                        @Override
+                        public void run() {
+                            activity.notifyLanhuStateChanged();
+                        }
+                    });
+                }
+            }
+        }, "printer-name-query").start();
+    }
+
+    /** IPP Get-Printer-Attributes：请求 printer-name / printer-make-and-model，解析二进制响应取值。 */
+    private String queryPrinterNameIpp(String addr) {
+        java.net.Socket socket = null;
+        try {
+            String[] hp = parsePrinterAddr(addr, 631, "/ipp/print");
+            String host = hp[0];
+            int port = Integer.parseInt(hp[1]);
+            String path = hp[2];
+            String printerUri = "ipp://" + host + ":" + port + path;
+            java.io.ByteArrayOutputStream headBuf = new java.io.ByteArrayOutputStream();
+            java.io.DataOutputStream d = new java.io.DataOutputStream(headBuf);
+            d.writeByte(1);
+            d.writeByte(1);              // IPP version 1.1
+            d.writeShort(0x000B);        // operation-id = Get-Printer-Attributes
+            d.writeInt(1);               // request-id
+            d.writeByte(0x01);           // operation-attributes-tag
+            writeIppAttr(d, 0x47, "attributes-charset", "utf-8");
+            writeIppAttr(d, 0x48, "attributes-natural-language", "zh-cn");
+            writeIppAttr(d, 0x45, "printer-uri", printerUri);
+            writeIppAttr(d, 0x42, "requested-attributes", "printer-name");
+            writeIppAttr(d, 0x42, "requested-attributes", "printer-make-and-model");
+            d.writeByte(0x03);           // end-of-attributes-tag
+            d.flush();
+            byte[] body = headBuf.toByteArray();
+            socket = new java.net.Socket();
+            socket.connect(new java.net.InetSocketAddress(host, port), 4000);
+            socket.setSoTimeout(5000);
+            try {
+                OutputStream out = socket.getOutputStream();
+                String reqHead = "POST " + path + " HTTP/1.1\r\n"
+                        + "Host: " + host + ":" + port + "\r\n"
+                        + "Content-Type: application/ipp\r\n"
+                        + "Content-Length: " + body.length + "\r\n"
+                        + "Connection: close\r\n\r\n";
+                out.write(reqHead.getBytes("US-ASCII"));
+                out.write(body);
+                out.flush();
+                java.io.InputStream in = socket.getInputStream();
+                String statusLine = readHttpStatusLine(in);
+                if (statusLine == null || !statusLine.startsWith("HTTP/")) {
+                    return "";
+                }
+                String[] parts = statusLine.split(" ");
+                int code = parts.length > 1 ? Integer.parseInt(parts[1].trim()) : 0;
+                if (code < 200 || code >= 300) {
+                    return "";
+                }
+                // 跳过剩余 HTTP 头（空行结束），之后读全部响应体（Connection: close 收尾）
+                int prev = -1, prevprev = -1, prev3 = -1;
+                int c;
+                while ((c = in.read()) >= 0) {
+                    if (prev3 == '\r' && prevprev == '\n' && prev == '\r' && c == '\n') {
+                        break;
+                    }
+                    prev3 = prevprev;
+                    prevprev = prev;
+                    prev = c;
+                }
+                java.io.ByteArrayOutputStream respBuf = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[4096];
+                int n;
+                try {
+                    while ((n = in.read(buf)) >= 0) {
+                        respBuf.write(buf, 0, n);
+                    }
+                } catch (java.net.SocketTimeoutException ignored) {
+                    // 部分打印机不关连接，超时后已收到的数据照常解析
+                }
+                byte[] resp = respBuf.toByteArray();
+                String name = extractIppAttrValue(resp, "printer-name");
+                if (TextUtils.isEmpty(name)) {
+                    name = extractIppAttrValue(resp, "printer-make-and-model");
+                }
+                return name;
+            } finally {
+                try {
+                    socket.close();
+                } catch (Exception ignored) {
+                }
+            }
+        } catch (Exception ignored) {
+            try {
+                if (socket != null) {
+                    socket.close();
+                }
+            } catch (Exception ignored2) {
+            }
+            return "";
+        }
+    }
+
+    /** IPP 响应体里按属性名定位：[tag(1)][nameLen(2)][name][valueLen(2)][value]，取 value（UTF-8）。 */
+    private String extractIppAttrValue(byte[] body, String attrName) {
+        if (body == null || attrName == null) {
+            return "";
+        }
+        byte[] needle;
+        try {
+            needle = attrName.getBytes("US-ASCII");
+        } catch (Exception e) {
+            return "";
+        }
+        for (int i = 0; i + needle.length + 2 <= body.length; i++) {
+            boolean match = true;
+            for (int j = 0; j < needle.length; j++) {
+                if (body[i + j] != needle[j]) {
+                    match = false;
+                    break;
+                }
+            }
+            if (!match) {
+                continue;
+            }
+            int vlenOff = i + needle.length;
+            int vlen = ((body[vlenOff] & 0xFF) << 8) | (body[vlenOff + 1] & 0xFF);
+            int vstart = vlenOff + 2;
+            if (vlen > 0 && vstart + vlen <= body.length) {
+                try {
+                    return new String(body, vstart, vlen, "UTF-8").trim();
+                } catch (Exception ignored) {
+                }
+            }
+        }
+        return "";
+    }
+
+    /** PJL 兜底（9100 口或地址指定端口）：发 @PJL INFO ID，取回包引号内的型号字符串。 */
+    private String queryPrinterNamePjl(String addr) {
+        java.net.Socket socket = null;
+        try {
+            String[] hp = parsePrinterAddr(addr, 9100, "");
+            String host = hp[0];
+            int port = Integer.parseInt(hp[1]);
+            socket = new java.net.Socket();
+            socket.connect(new java.net.InetSocketAddress(host, port), 4000);
+            socket.setSoTimeout(4000);
+            try {
+                OutputStream out = socket.getOutputStream();
+                out.write("\u001B%-12345X@PJL INFO ID\r\n".getBytes("US-ASCII"));
+                out.flush();
+                java.io.InputStream in = socket.getInputStream();
+                java.io.ByteArrayOutputStream respBuf = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[4096];
+                int n;
+                try {
+                    while ((n = in.read(buf)) >= 0) {
+                        respBuf.write(buf, 0, n);
+                        if (respBuf.size() > 16384) {
+                            break;
+                        }
+                    }
+                } catch (java.net.SocketTimeoutException ignored) {
+                }
+                String resp = new String(respBuf.toByteArray(), "US-ASCII");
+                // 回包形如：@PJL INFO ID\r\n"HP LaserJet Pro M126nw"\r\n\f
+                int q1 = resp.indexOf('"');
+                int q2 = q1 >= 0 ? resp.indexOf('"', q1 + 1) : -1;
+                if (q1 >= 0 && q2 > q1 + 1) {
+                    return resp.substring(q1 + 1, q2).trim();
+                }
+                return "";
+            } finally {
+                try {
+                    socket.close();
+                } catch (Exception ignored) {
+                }
+            }
+        } catch (Exception ignored) {
+            try {
+                if (socket != null) {
+                    socket.close();
+                }
+            } catch (Exception ignored2) {
+            }
+            return "";
+        }
+    }
+
     private void startPrinterScan() {
         if (activity == null) {
             return;
