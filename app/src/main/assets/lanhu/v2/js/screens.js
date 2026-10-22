@@ -132,8 +132,9 @@
         verHist: '更新记录', vhTime: '时间', vhModule: '模块', vhChange: '版本变化', vhContent: '更新内容',
         vhAll: '全部', vhRefresh: '刷新', vhEmpty: '暂无更新记录', vhStart: '开始日期', vhEnd: '结束日期',
         vhModApp: 'APP', vhModMain: '主控', vhModCtrl: '监护', vhModBt: '蓝牙',
-        tuTitle: '使用教程', tuPick: '＋ 选择照片/视频', tuChange: '重选', tuClear: '移除',
-        tuSlot: '教程位', tuHint: '点击空位从相册选择照片或视频；点击已绑定的内容可播放/查看。',
+        tuTitle: '使用教程', tuPick: '＋ 选择照片/视频/文档', tuChange: '重选', tuClear: '移除',
+        tuSlot: '教程位', tuHint: '点击空位从平板选择照片、视频或文档；点击已绑定的内容可播放/查看。',
+        tuPickFixed: '＋ 选择文件',
         logFront: '前端调试', logBack: '后端调试', logErr: '错误记录', logComm: '通信记录',
         logStack: '堆栈信息', logNormal: '常规信息', logUser: '用户日志',
         /* ★ 任务13：用户管理 / 舱区 / 连接 */
@@ -200,8 +201,9 @@
         verHist: 'Update History', vhTime: 'Time', vhModule: 'Module', vhChange: 'Version', vhContent: 'Changes',
         vhAll: 'All', vhRefresh: 'Refresh', vhEmpty: 'No update records', vhStart: 'Start date', vhEnd: 'End date',
         vhModApp: 'APP', vhModMain: 'Main', vhModCtrl: 'Monitor', vhModBt: 'BT',
-        tuTitle: 'Tutorial', tuPick: '＋ Pick photo/video', tuChange: 'Change', tuClear: 'Remove',
-        tuSlot: 'Slot', tuHint: 'Tap an empty slot to pick a photo or video from the gallery; tap a bound item to play/view it.',
+        tuTitle: 'Tutorial', tuPick: '＋ Pick photo/video/doc', tuChange: 'Change', tuClear: 'Remove',
+        tuSlot: 'Slot', tuHint: 'Tap an empty slot to pick a photo, video or document from the tablet; tap a bound item to play/view it.',
+        tuPickFixed: '＋ Pick file',
         logFront: 'Frontend', logBack: 'Backend', logErr: 'Errors', logComm: 'Comm',
         logStack: 'Stack', logNormal: 'General', logUser: 'User Log',
         /* ★ 任务13：用户管理 / 舱区 / 连接 */
@@ -1744,31 +1746,39 @@
      数据 D.tutorialSlots 由 icu-native-bridge 从 IcuNative.tutorialState().slots 注入。 */
   SCREENS['tutorial'] = {
     name: '使用教程', group: '1 主流程', render() {
-      /* ★ 2026-10-20 V64（V1.02 R92 / V1.01 R57-R60）：4 个固定教程位——装机教程/使用操作指南（固定视频
-         assets/lanhu/v2/tutorial/install.mp4、guide.mp4，原生 tutorialFixedState 探活后内嵌播放）、
-         临床应用手册（固定文件 tutorial/manual.pdf，点打开走原生系统查看器）、其他教程（网络更新，占位提示）。
-         资源未打包时显示缺失提示（不崩溃）。下方保留 6 个自定义槽位（本地相册绑定）。 */
+      /* ★ 2026-10-20 V64（V1.02 R92 / V1.01 R57-R60）：4 个固定教程位。
+         ★ 2026-10-22 V75（用户要求）：固定位支持从平板本机选择文件绑定——装机/指南=视频、
+         手册=文档（PDF/Word/TXT）、其他教程=图片/视频/文档（在线更新二期不做）；
+         本机绑定优先于随包资源（assets/lanhu/v2/tutorial/）展示，可重选/移除。 */
       var tf = D.tutorialFixed || {};
       var fx = [
-        { k: 'install', lab: T('tuInstall', '装机教程'), typ: 'video', src: 'tutorial/install.mp4' },
-        { k: 'guide', lab: T('tuGuide', '使用操作指南'), typ: 'video', src: 'tutorial/guide.mp4' },
-        { k: 'manual', lab: T('tuManual', '临床应用手册'), typ: 'pdf' },
-        { k: 'other', lab: T('tuOther', '其他教程'), typ: 'net' }
+        { k: 'install', lab: T('tuInstall', '装机教程'), src: 'tutorial/install.mp4' },
+        { k: 'guide', lab: T('tuGuide', '使用操作指南'), src: 'tutorial/guide.mp4' },
+        { k: 'manual', lab: T('tuManual', '临床应用手册'), src: '' },
+        { k: 'other', lab: T('tuOther', '其他教程'), src: '' }
       ];
       var fcards = fx.map(function (f) {
-        var inner;
-        if (f.typ === 'video') {
-          inner = tf[f.k]
-            ? '<video class="tut-media" src="' + f.src + '" controls preload="metadata"></video>'
-            : '<div class="tut-empty">' + T('tuMissing', '固定资源缺失，请联系厂家导入') + '</div>';
-        } else if (f.typ === 'pdf') {
-          inner = tf.manual
-            ? '<div class="tut-empty">📄</div><div class="tut-tools"><span class="tut-btn" data-tfixed-open="manual">' + T('tuOpenDoc', '打开文件') + '</span></div>'
-            : '<div class="tut-empty">' + T('tuMissing', '固定资源缺失，请联系厂家导入') + '</div>';
-        } else {
-          inner = '<div class="tut-empty" data-tfixed-other="1" style="cursor:pointer">🌐<br><span style="font-size:16px">' + T('tuNetTodo', '网络更新通道待云平台二期开通') + '</span></div>';
+        var st = tf[f.k] || {};
+        /* ① 本机已绑定：图标按类型 + 文件名 + 重选/移除；点卡片打开（系统查看器/播放器） */
+        if (st.uri) {
+          var ico = st.mime && st.mime.indexOf('video/') === 0 ? '🎬' : (st.mime && st.mime.indexOf('image/') === 0 ? '🖼' : '📄');
+          return '<div class="tut-slot bound" data-tfixed-open="' + f.k + '"><div class="tut-tag">' + f.lab + '</div>'
+            + '<div class="tut-empty">' + ico + '</div><div class="tut-name">' + esc(st.name || '') + '</div>'
+            + '<div class="tut-tools"><span class="tut-btn" data-tfixed-pick="' + f.k + '">' + T('tuChange', '重选') + '</span>'
+            + '<span class="tut-btn" data-tfixed-clear="' + f.k + '">' + T('tuClear', '移除') + '</span></div></div>';
         }
-        return '<div class="tut-slot bound">' + '<div class="tut-tag">' + f.lab + '</div>' + inner + '</div>';
+        /* ② 随包资源：视频内嵌播放、手册走系统查看器 */
+        if (st.bundled && f.src) {
+          return '<div class="tut-slot bound"><div class="tut-tag">' + f.lab + '</div>'
+            + '<video class="tut-media" src="' + f.src + '" controls preload="metadata"></video></div>';
+        }
+        if (st.bundled && f.k === 'manual') {
+          return '<div class="tut-slot bound"><div class="tut-tag">' + f.lab + '</div>'
+            + '<div class="tut-empty">📄</div><div class="tut-tools"><span class="tut-btn" data-tfixed-open="manual">' + T('tuOpenDoc', '打开文件') + '</span></div></div>';
+        }
+        /* ③ 空位：点击从平板选择文件 */
+        return '<div class="tut-slot" data-tfixed-pick="' + f.k + '" style="cursor:pointer"><div class="tut-tag">' + f.lab + '</div>'
+          + '<div class="tut-empty">' + T('tuPickFixed', '＋ 选择文件') + '</div></div>';
       }).join('');
       const slots = (D.tutorialSlots && D.tutorialSlots.length) ? D.tutorialSlots : [];
       let cards = '';
@@ -1778,7 +1788,7 @@
         const body = bound
           ? (s.thumb
             ? '<img class="tut-thumb" src="' + s.thumb + '">'
-            : '<div class="tut-empty">' + (s.mime && s.mime.indexOf('video/') === 0 ? '🎬' : '🖼') + '</div>')
+            : '<div class="tut-empty">' + (s.mime && s.mime.indexOf('video/') === 0 ? '🎬' : (s.mime && s.mime.indexOf('image/') === 0 ? '🖼' : '📄')) + '</div>')
             + '<div class="tut-name">' + (s.name || '') + '</div>'
           : '<div class="tut-empty">' + T('tuPick', '＋ 选择照片/视频') + '</div>';
         const tools = bound

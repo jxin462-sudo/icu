@@ -69,8 +69,11 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
     private static final int REQUEST_TUTORIAL_PERMISSION = 1004;
     /* ★ 2026-10-09 教程页槽位媒体选择 / 升级安装未知来源授权 */
     private static final int REQUEST_TUTORIAL_MEDIA_PICK = 1005;
+    /* ★ 2026-10-22 V75：固定教程位本机绑定选择器 */
+    private static final int REQUEST_TUTORIAL_FIXED_PICK = 1006;
     private static final int REQUEST_UNKNOWN_SOURCES = 1006;
     private int pendingTutorialSlot = -1;
+    private String pendingTutorialFixedKey = "";
     private static final String HOST_CONNECTION_PREFS = "host_connection";
     private static final String KEY_LAST_HOST_DEVICE_ID = "last_host_device_id";
     private static final String KEY_TUTORIAL_PERMISSION_ASKED = "tutorial_permission_asked";
@@ -1459,6 +1462,16 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
             }
             return;
         }
+        /* ★ 2026-10-22 V75：固定教程位本机绑定选择返回 */
+        if (requestCode == REQUEST_TUTORIAL_FIXED_PICK) {
+            String key = pendingTutorialFixedKey;
+            pendingTutorialFixedKey = "";
+            if (resultCode == RESULT_OK && data != null && data.getData() != null && !TextUtils.isEmpty(key)) {
+                dashboardView.onTutorialFixedSelected(key, data.getData());
+                notifyLanhuStateChanged();
+            }
+            return;
+        }
         /* ★ 2026-10-09 未知来源授权返回后继续安装 */
         if (requestCode == REQUEST_UNKNOWN_SOURCES) {
             resumePendingApkInstall();
@@ -1517,18 +1530,41 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
     /**
      * ★ 2026-10-09 教程页槽位选择：调起系统文档选择器挑照片/视频。
      * SAF ACTION_OPEN_DOCUMENT 由用户显式授权，无需 READ_MEDIA_* 权限。
+     * ★ 2026-10-22 V75：自定义槽位 MIME 扩到文档（PDF/Word/TXT）。
      */
     public void pickTutorialMedia(int slot) {
         pendingTutorialSlot = slot;
         Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
         intent.addCategory(Intent.CATEGORY_OPENABLE);
         intent.setType("*/*");
-        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "video/*"});
+        intent.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"image/*", "video/*", "application/pdf",
+                "application/msword", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                "text/plain"});
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
         try {
             startActivityForResult(intent, REQUEST_TUTORIAL_MEDIA_PICK);
         } catch (Exception e) {
             pendingTutorialSlot = -1;
+            Toast.makeText(this, "无法打开文件选择器: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /**
+     * ★ 2026-10-22 V75：固定教程位本机绑定——装机/指南挑视频、手册挑文档、其他教程任意（在线更新二期不做）。
+     */
+    public void pickTutorialFixed(String key, String[] mimeTypes) {
+        pendingTutorialFixedKey = key;
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("*/*");
+        if (mimeTypes != null && mimeTypes.length > 0) {
+            intent.putExtra(Intent.EXTRA_MIME_TYPES, mimeTypes);
+        }
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        try {
+            startActivityForResult(intent, REQUEST_TUTORIAL_FIXED_PICK);
+        } catch (Exception e) {
+            pendingTutorialFixedKey = "";
             Toast.makeText(this, "无法打开文件选择器: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }

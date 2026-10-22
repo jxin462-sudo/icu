@@ -1184,9 +1184,13 @@
     var tPlay = e.target.closest('[data-tslot-play]');
     if (tPlay) { stop(e); act('tutorial_slot_play_' + tPlay.dataset.tslotPlay); return; }
     /* ★ 2026-10-20 V64：固定教程位——手册打开（原生系统查看器）/ 其他教程网络更新占位提示 */
+    /* ★ 2026-10-22 V75：固定教程位本机绑定——顺序须 移除→重选→打开（按钮在卡片内，closest 会先中卡片） */
+    var tfClear = e.target.closest('[data-tfixed-clear]');
+    if (tfClear) { stop(e); act('tutorial_fixed_clear_' + tfClear.dataset.tfixedClear); return; }
+    var tfPick = e.target.closest('[data-tfixed-pick]');
+    if (tfPick) { stop(e); act('tutorial_fixed_pick_' + tfPick.dataset.tfixedPick); return; }
     var tfOpen = e.target.closest('[data-tfixed-open]');
-    if (tfOpen) { stop(e); act('tutorial_open_manual'); return; }
-    if (e.target.closest('[data-tfixed-other]')) { stop(e); toast(TT('tuNetTodo', '网络更新通道待云平台二期开通')); return; }
+    if (tfOpen) { stop(e); act('tutorial_fixed_open_' + tfOpen.dataset.tfixedOpen); return; }
     /* ★ 2026-10-20 V64（R84/R85）：日志 复制（当前页所见进剪贴板）/ 导出（原生写 txt） */
     if (e.target.closest('[data-logcopy]')) {
       stop(e);

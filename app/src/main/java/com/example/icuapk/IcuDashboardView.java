@@ -1961,6 +1961,24 @@ public class IcuDashboardView extends View {
                 openTutorialManual();
                 return true;
             }
+            /* ★ 2026-10-22 V75：固定教程位本机绑定——装机/指南=视频、手册=文档、其他=任意（在线更新二期不做，
+               用户要求从平板选图片/视频/文档展示）；本地绑定优先于随包资源 */
+            if (action.startsWith("tutorial_fixed_pick_")) {
+                String key = action.substring("tutorial_fixed_pick_".length());
+                activity.pickTutorialFixed(key, tutorialFixedPickMimes(key));
+                return true;
+            }
+            if (action.startsWith("tutorial_fixed_open_")) {
+                openTutorialFixed(action.substring("tutorial_fixed_open_".length()));
+                return true;
+            }
+            if (action.startsWith("tutorial_fixed_clear_")) {
+                clearTutorialFixed(action.substring("tutorial_fixed_clear_".length()));
+                if (activity instanceof MainActivity) {
+                    ((MainActivity) activity).notifyLanhuStateChanged();
+                }
+                return true;
+            }
             if (action.startsWith("tutorial_slot_pick_")) {
                 try {
                     activity.pickTutorialMedia(Integer.parseInt(action.substring("tutorial_slot_pick_".length())));
@@ -3808,16 +3826,129 @@ public class IcuDashboardView extends View {
     }
 
     /* ★ 2026-10-20 V64（V1.02 R92）：内置固定教程资源探测——装机/操作指南视频与临床应用手册 PDF
-       是否随包携带（assets/lanhu/v2/tutorial/）。H5 教程页据此渲染「固定教程」区。 */
+       是否随包携带（assets/lanhu/v2/tutorial/）。H5 教程页据此渲染「固定教程」区。
+       ★ 2026-10-22 V75：每槽扩展 {bundled, uri, mime, name}——用户可从平板本机选文件绑定
+       （图片/视频/文档），本地绑定优先于随包资源展示。 */
+    private static final String KEY_TUTORIAL_FIXED_PREFIX = "tutorial_fixed_";
+
     String tutorialFixedStateJson() {
         JSONObject obj = new JSONObject();
         try {
-            obj.put("install", assetFileExists("lanhu/v2/tutorial/install.mp4"));
-            obj.put("guide", assetFileExists("lanhu/v2/tutorial/guide.mp4"));
-            obj.put("manual", assetFileExists("lanhu/v2/tutorial/manual.pdf"));
+            String[] keys = {"install", "guide", "manual", "other"};
+            String[] assets = {"lanhu/v2/tutorial/install.mp4", "lanhu/v2/tutorial/guide.mp4", "lanhu/v2/tutorial/manual.pdf", ""};
+            for (int i = 0; i < keys.length; i++) {
+                JSONObject slot = new JSONObject();
+                slot.put("bundled", !TextUtils.isEmpty(assets[i]) && assetFileExists(assets[i]));
+                JSONObject b = tutorialFixedBinding(keys[i]);
+                slot.put("uri", b == null ? "" : b.optString("uri", ""));
+                slot.put("mime", b == null ? "" : b.optString("mime", ""));
+                slot.put("name", b == null ? "" : b.optString("name", ""));
+                obj.put(keys[i], slot);
+            }
         } catch (JSONException ignored) {
         }
         return obj.toString();
+    }
+
+    /** 固定教程位本机绑定读取；未绑定返回 null。 */
+    private JSONObject tutorialFixedBinding(String key) {
+        try {
+            String raw = tutorialPrefs().getString(KEY_TUTORIAL_FIXED_PREFIX + key, "");
+            if (TextUtils.isEmpty(raw)) return null;
+            return new JSONObject(raw);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** 固定教程位选择器的 MIME 过滤：装机/指南=视频、手册=文档（PDF/Word/TXT）、其他=图片/视频/文档。 */
+    static String[] tutorialFixedPickMimes(String key) {
+        if ("install".equals(key) || "guide".equals(key)) {
+            return new String[]{"video/*"};
+        }
+        if ("manual".equals(key)) {
+            return new String[]{"application/pdf", "application/msword",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain"};
+        }
+        return new String[]{"image/*", "video/*", "application/pdf", "application/msword",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "text/plain"};
+    }
+
+    /** 固定教程位显示名（toast/日志用）。 */
+    private String tutorialFixedLabel(String key) {
+        if ("install".equals(key)) return "装机教程";
+        if ("guide".equals(key)) return "使用操作指南";
+        if ("manual".equals(key)) return "临床应用手册";
+        if ("other".equals(key)) return "其他教程";
+        return key;
+    }
+
+    /** 固定教程位选择器返回：校验可读、持久化授权、存绑定。 */
+    void onTutorialFixedSelected(String key, Uri uri) {
+        if (uri == null || TextUtils.isEmpty(key)) return;
+        java.io.InputStream probe = null;
+        try {
+            probe = activity.getContentResolver().openInputStream(uri);
+            if (probe == null) throw new IOException("openInputStream null");
+        } catch (Exception e) {
+            Toast.makeText(activity, "教程文件读取失败，请重新选择", Toast.LENGTH_LONG).show();
+            return;
+        } finally {
+            if (probe != null) {
+                try { probe.close(); } catch (Exception ignored) {
+                }
+            }
+        }
+        try {
+            activity.getContentResolver().takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (SecurityException ignored) {
+            // 部分提供方不支持持久权限，当前会话仍可读
+        }
+        String mime = activity.getContentResolver().getType(uri);
+        if (TextUtils.isEmpty(mime)) mime = "";
+        String name = displayNameForUri(uri);
+        try {
+            JSONObject b = new JSONObject();
+            b.put("uri", uri.toString());
+            b.put("mime", mime);
+            b.put("name", name);
+            tutorialPrefs().edit().putString(KEY_TUTORIAL_FIXED_PREFIX + key, b.toString()).apply();
+        } catch (JSONException ignored) {
+        }
+        appendUserLog("教程", "绑定固定教程", tutorialFixedLabel(key) + " ← " + name);
+        Toast.makeText(activity, "已绑定「" + tutorialFixedLabel(key) + "」：" + name, Toast.LENGTH_SHORT).show();
+    }
+
+    /** 打开固定教程位：本地绑定 → 系统查看器/播放器；未绑定且手册随包 → 内置手册通道；否则提示先选择。 */
+    void openTutorialFixed(String key) {
+        JSONObject b = tutorialFixedBinding(key);
+        if (b == null) {
+            if ("manual".equals(key) && assetFileExists("lanhu/v2/tutorial/manual.pdf")) {
+                openTutorialManual();
+            } else {
+                Toast.makeText(activity, "「" + tutorialFixedLabel(key) + "」还未选择文件", Toast.LENGTH_SHORT).show();
+            }
+            return;
+        }
+        try {
+            Uri uri = Uri.parse(b.optString("uri", ""));
+            String mime = b.optString("mime", "");
+            if (TextUtils.isEmpty(mime)) mime = "*/*";
+            Intent intent = new Intent(Intent.ACTION_VIEW);
+            intent.setDataAndType(uri, mime);
+            intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+            activity.startActivity(Intent.createChooser(intent, "打开" + tutorialFixedLabel(key)));
+            appendUserLog("教程", "打开固定教程", tutorialFixedLabel(key));
+        } catch (Exception e) {
+            Toast.makeText(activity, "打开失败：" + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    void clearTutorialFixed(String key) {
+        tutorialPrefs().edit().remove(KEY_TUTORIAL_FIXED_PREFIX + key).apply();
+        appendUserLog("教程", "移除固定教程绑定", tutorialFixedLabel(key));
+        invalidate();
     }
 
     private boolean assetFileExists(String path) {
@@ -3929,8 +4060,9 @@ public class IcuDashboardView extends View {
         }
         try {
             Uri uri = Uri.parse(b.optString("uri", ""));
-            String mime = b.optString("mime", "video/*");
-            if (TextUtils.isEmpty(mime)) mime = "video/*";
+            /* ★ 2026-10-22 V75：槽位支持文档后 mime 兜底改通配（绑定时已存真实 mime，仅缺失时用到） */
+            String mime = b.optString("mime", "");
+            if (TextUtils.isEmpty(mime)) mime = "*/*";
             Intent intent = new Intent(Intent.ACTION_VIEW);
             intent.setDataAndType(uri, mime);
             intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
