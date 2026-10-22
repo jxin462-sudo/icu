@@ -31,8 +31,12 @@ final class TimedControlProtocol {
         return DEFAULT_MINUTES;
     }
 
+    /* ★ 2026-10-22 V69：超过 24h（1440 分钟）即视为不限时常开。
+       固件的不限时哨兵实测可能是 65535(0xFFFF) 或从 65536 逐分钟倒数的回包，
+       此前 ==65536 精确匹配全部漏判 → 24h常开失效、状态页被 V25 规则误显「关」。
+       可配置上限 120 远低于 1440，不误伤正常设时。 */
     static boolean isUnlimitedMinutes(int minutes) {
-        return minutes == UNLIMITED_MINUTES;
+        return minutes > 24 * 60;
     }
 
     /** 只有红外/蓝光可以下发 65536，其余仍限制 0-120。 */

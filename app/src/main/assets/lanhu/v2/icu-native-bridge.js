@@ -339,13 +339,32 @@
       if (typeof D.levelIdx !== 'number') D.levelIdx = 0;
       /* ★ V22：主机蓝牙未连接时状态页/主控页主机数据全部空值+关闭态 */
       var hostUp = !!((S.host && S.host.connected) || (S.ble && S.ble.host && S.ble.host.connected));
+      /* ★ 2026-10-22 V69：状态页定时控件（红外/蓝光）与主控页同一判定——
+         未连接-- / 关→关 / 不限时→24h常开 / 有剩余→mm:ss 倒计时。
+         此前状态页直接显示原生文本：设备回包 65535≠65536 漏判不限时后，
+         主控页走剩余毫秒显示巨大倒计时"数值"，状态页被 V25 规则（开而无配置时长→关）显「关」。 */
+      function timedStat(on, unlimited, remainingMs, nativeVal) {
+        if (!hostUp) return '--';
+        if (!on) return TT('off', '关');
+        if (unlimited) return TT('uv24h', '24h常开');
+        if (remainingMs && remainingMs > 0) {
+          var s = Math.floor(remainingMs / 1000);
+          return pad(Math.floor(s / 60)) + ':' + pad(s % 60);
+        }
+        var nv = text(nativeVal, '');
+        return (nv && nv !== '关') ? nv : TT('on', '开');
+      }
       D.status = {
         temp: hostUp ? num(comped(h.temp, 0), '--') : '--', o2: hostUp ? num(comped(h.oxygen, 1), '--') : '--', hum: hostUp ? num(comped(h.humidity, 2), '--') : '--',
         co2: hostUp ? num(comped(h.co2, 3), '--') : '--', irTemp: hostUp ? num(comped(h.infraredTemp, 4), '--') : '--', dur: text(h.treatmentHours, '--'),
-        red: hostUp ? text(c.redTherapy, '--') : '--', blue: hostUp ? text(c.blueTherapy, '--') : '--',
+        red: timedStat(!!c.redTherapyOn, !!c.redTherapyUnlimited, c.redTherapyRemainingMs, c.redTherapy),
+        blue: timedStat(!!c.blueTherapyOn, !!c.blueTherapyUnlimited, c.blueTherapyRemainingMs, c.blueTherapy),
         /* ★ 2026-10-19 V60：#11 补齐——状态页环境功能状态（紫外/负离子/外循环/冷光），此前仅主控页 ctrlRow2/3 有 */
         uvOn: hostUp ? !!c.uvOn : false, anionOn: hostUp ? !!c.anionOn : false,
-        coldOn: hostUp ? !!c.coldLightOn : false, outerOn: hostUp ? !!c.outerCycleOn : false
+        coldOn: hostUp ? !!c.coldLightOn : false, outerOn: hostUp ? !!c.outerCycleOn : false,
+        /* ★ 2026-10-22 V69：状态页三个快捷按钮（雾化器/暖光/内循环）的开关态，供按钮高亮 */
+        nebOn: hostUp ? !!c.nebulizerOn : false, warmOn: hostUp ? !!c.warmLightOn : false,
+        innerOn: hostUp ? !!c.innerCycleOn : false
       };
       /* ★ 任务33：AM4100 监护宝实时体征接入。S.monitor.connected 且有数据时填真实值；
          未连接时保持全 '--'（不造假数据），波形走本地演示滚动动画

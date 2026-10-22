@@ -206,7 +206,7 @@ input.inp::placeholder{color:var(--ink3)}
 .status-func-strip .fchip.on .st{color:#1fae5a}
 .status-func-strip .fchip.off .st{color:#9aa6b6}
 .wbtn svg{width:42px;height:42px}
-.wbtn:first-child{background:var(--accent);color:#fff}
+.wbtn.on{background:var(--accent);color:#fff}
 .camcol{position:absolute;left:1224px;top:60px;width:650px}
 .cam{background:#4d4d4d;border-radius:6px;position:relative;overflow:hidden}
 .cam.big{height:628px}
