@@ -265,6 +265,7 @@
         secProj: '【治疗项目】', secVitals: '【生命体征记录】', secEnv: '【环境参数】',
         secImgs: '【影像记录】', secAlarm: '【报警事件】', secConcl: '【治疗结论】',
         sheetImgPh: '图片', sheetBefore: '治疗前', sheetAfter: '治疗后', sheetQrBox: '二维码', sheetQrView: '扫码查看原图',
+        sheetImgHint: '点图片插入/更换', sheetImgPicked: '图片已选择，保存后生效',
         sheetEffect: '治疗效果：', sheetAdvice: '出院建议：',
         conclGood: '良好', conclFair: '一般', conclPoor: '差',
         sheetLabDoc: '检验医师：', sheetLabTime: '检验时间：', sheetPage: '页码',
@@ -326,6 +327,7 @@
         secProj: '[Treatment Items]', secVitals: '[Vital Signs]', secEnv: '[Environment]',
         secImgs: '[Images]', secAlarm: '[Alarm Events]', secConcl: '[Conclusion]',
         sheetImgPh: 'Photo', sheetBefore: 'Before', sheetAfter: 'After', sheetQrBox: 'QR Code', sheetQrView: 'Scan to view',
+        sheetImgHint: 'Tap image to insert/replace', sheetImgPicked: 'Image selected, takes effect after save',
         sheetEffect: 'Outcome: ', sheetAdvice: 'Discharge Advice: ',
         conclGood: 'Good', conclFair: 'Fair', conclPoor: 'Poor',
         sheetLabDoc: 'Lab Doctor: ', sheetLabTime: 'Lab Time: ', sheetPage: 'Page',
@@ -1087,10 +1089,21 @@
         }
         return '<div class="e"><b>' + e[0] + '：</b><span>' + e[1] + '</span></div>';
       }).join('') + '</div>';
-      /* 【影像记录】图片 × 2 + 二维码 */
-      const imgs = '<div class="img-row">' + s.imgs.map(function (im) {
-        return '<div class="imgcell"><div class="ph' + (im.qr ? ' qr' : '') + '">' + im.lab + '</div>'
-          + '<div class="cp">' + im.cap + '</div><div class="tm">' + (im.t || '') + '</div></div>';
+      /* 【影像记录】图片 × 2 + 二维码
+         ★ 2026-10-23 V80：治疗前/治疗后支持手动插入图片——编辑态点图框调 SAF 选图（选后显图+×移除，
+         保存才随病例落盘、取消丢弃）；查看态有图显图。二维码格仍占位。 */
+      const imgs = '<div class="img-row">' + s.imgs.map(function (im, ii) {
+        const which = ii === 0 ? 'before' : (ii === 1 ? 'after' : 'qr');
+        const pickable = !!ed && !im.qr;
+        const uri = ed
+          ? (which === 'before' ? (ed.imgBefore || '') : which === 'after' ? (ed.imgAfter || '') : '')
+          : (im.uri || '');
+        const inner = uri ? '<img class="sheet-photo" src="' + uri + '" alt="">' : im.lab;
+        const clr = (pickable && uri) ? '<span class="imgclear" data-imgclear="' + which + '">×</span>' : '';
+        return '<div class="imgcell' + (pickable ? ' pickable' : '') + '" data-img="' + which + '"'
+          + (pickable ? ' data-imgpick="' + which + '"' : '') + '>'
+          + '<div class="ph' + (im.qr ? ' qr' : '') + '">' + inner + clr + '</div>'
+          + '<div class="cp">' + im.cap + (pickable ? ' · ' + T('sheetImgHint', '点图片插入/更换') : '') + '</div><div class="tm">' + (im.t || '') + '</div></div>';
       }).join('') + '</div>';
       /* 【治疗结论】治疗效果三态 + 出院建议（任务26a：selIdx 记录选中态，编辑态可点选/编辑建议） */
       const ci = ed ? (ed.conclIdx || 0) : (s.concl.selIdx || 0);

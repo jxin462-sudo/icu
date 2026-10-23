@@ -190,6 +190,11 @@ public class IcuDashboardView extends View {
     private int printerNameSeq = 0;
     private String printerNameAddr = "";
     private String printerNameValue = "";
+    /* ★ 2026-10-23 V80：记录单「影像记录」手动插图——SAF 选择结果经状态 {seq, which, uri} 推给 H5，
+       H5 编辑态边沿检测写入编辑暂存（保存才随病例落盘，取消丢弃）。 */
+    private int sheetImgPickSeq = 0;
+    private String sheetImgPickWhich = "";
+    private String sheetImgPickUri = "";
     private static final String CAMERA_PLAYER_VERSION = "摄像头内置播放器 v1.8";
     private static final String EMPTY_MONITOR_SUMMARY = "尚未收到 AM4100 数据";
     private static final String PERIOD_ALL = "all";
@@ -553,6 +558,10 @@ public class IcuDashboardView extends View {
         // ★ 2026-10-13 V30：结束护疗时把三波形采样冻结成 JSON 文本随病例持久化
         //   （monitorSnapshot 原始历史不落盘，重启即丢，导致记录单波形/体征行变空）。
         String sheetWaves = "";
+        // ★ 2026-10-23 V80：记录单「影像记录」治疗前/治疗后手动插入图片（content:// URI 字符串，空=未插入），
+        //   随病例持久化；PDF 影像区优先于摄像头快照
+        String imgBeforeUri = "";
+        String imgAfterUri = "";
         final ArrayList<TreatmentEntry> treatmentEntries = new ArrayList<>();
         final MonitorSnapshot monitorSnapshot = new MonitorSnapshot();
 
@@ -1244,6 +1253,15 @@ public class IcuDashboardView extends View {
                 root.put("printerNameResult", pnr);
             } catch (JSONException ignored) {
             }
+            // ★ 2026-10-23 V80：记录单影像图片选择结果（seq 边沿检测 → H5 写入编辑暂存）
+            try {
+                JSONObject sip = new JSONObject();
+                sip.put("seq", sheetImgPickSeq);
+                sip.put("which", sheetImgPickWhich);
+                sip.put("uri", sheetImgPickUri);
+                root.put("sheetImgPick", sip);
+            } catch (JSONException ignored) {
+            }
             // 页面通用数据绑定使用顶层 host；与 ble.host 共用同一份实时主机状态，避免跨页面字段不一致。
             root.put("host", ble.optJSONObject("host"));
             root.put("deviceProfile", deviceProfileToJson());
@@ -1507,6 +1525,13 @@ public class IcuDashboardView extends View {
             if (json.has("conclIdx")) {
                 int ci = json.optInt("conclIdx", 0);
                 patient.sheetConclusionIdx = ci < 0 ? 0 : (ci > 2 ? 2 : ci);
+            }
+            /* ★ 2026-10-23 V80：影像记录手动插入图片。用 has 判断而非 optNonEmpty：允许空串=移除 */
+            if (json.has("imgBefore")) {
+                patient.imgBeforeUri = json.optString("imgBefore", "");
+            }
+            if (json.has("imgAfter")) {
+                patient.imgAfterUri = json.optString("imgAfter", "");
             }
             // 治疗项目勾选 + 显示值（值写回 lastValue；开启采样项后续可能被实时采样覆盖）
             JSONArray proj = json.optJSONArray("proj");
@@ -2022,6 +2047,14 @@ public class IcuDashboardView extends View {
                 return true;
             }
             showTutorialAction(action);
+            return true;
+        }
+        /* ★ 2026-10-23 V80：记录单「影像记录」手动插图入口（编辑态点图框 → SAF 选图，全员可用与记录单编辑一致） */
+        if (action.startsWith("sheet_img_pick_")) {
+            String which = action.substring("sheet_img_pick_".length());
+            if ("before".equals(which) || "after".equals(which)) {
+                activity.pickSheetImage(which);
+            }
             return true;
         }
         if ("host_ble".equals(action)) {
@@ -3182,6 +3215,9 @@ public class IcuDashboardView extends View {
         json.put("conclIdx", patient.sheetConclusionIdx);
         // ★ 2026-10-13 V33：记录单页脚检验医师（H5 编辑态可改，随病例持久化）
         json.put("labDoctor", safeJsonText(patient.labDoctor));
+        // ★ 2026-10-23 V80：影像记录手动插入图片 URI（content://，空=未插入）
+        json.put("imgBefore", safeJsonText(patient.imgBeforeUri));
+        json.put("imgAfter", safeJsonText(patient.imgAfterUri));
         JSONArray vitals = new JSONArray();
         if (!TextUtils.isEmpty(patient.sheetVitals)) {
             try {
@@ -4069,6 +4105,26 @@ public class IcuDashboardView extends View {
         invalidate();
     }
 
+    /* ★ 2026-10-23 V80：记录单「影像记录」治疗前/治疗后手动插图 —— SAF 选择返回。
+       校验可解码 + 持久授权；结果不直接写病例，先经状态推给 H5 编辑暂存（保存才落盘，取消丢弃）。 */
+    void onSheetImagePicked(String which, Uri uri) {
+        if (uri == null || TextUtils.isEmpty(which)) return;
+        if (!isDecodableImage(uri)) {
+            Toast.makeText(activity, "图片读取失败，请重新选择", Toast.LENGTH_LONG).show();
+            return;
+        }
+        try {
+            activity.getContentResolver().takePersistableUriPermission(
+                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        } catch (SecurityException ignored) {
+            // 部分提供方不支持持久权限，当前会话仍可读
+        }
+        sheetImgPickSeq++;
+        sheetImgPickWhich = which;
+        sheetImgPickUri = uri.toString();
+        appendDebugLog("INFO", "sheetImgPick", which + " -> " + uri);
+    }
+
     /** 播放/查看某槽位绑定的媒体；未绑定则提示先选择。 */
     void playTutorialSlot(int slot) {
         JSONObject b = tutorialSlotBinding(slot);
@@ -4728,6 +4784,9 @@ public class IcuDashboardView extends View {
         item.put("sheetConclusionIdx", patient.sheetConclusionIdx);
         item.put("sheetVitals", safeJsonText(patient.sheetVitals));
         item.put("sheetWaves", safeJsonText(patient.sheetWaves));
+        // ★ 2026-10-23 V80：影像记录手动插入图片随病例持久化
+        item.put("imgBeforeUri", safeJsonText(patient.imgBeforeUri));
+        item.put("imgAfterUri", safeJsonText(patient.imgAfterUri));
         JSONArray entries = new JSONArray();
         for (TreatmentEntry entry : patient.treatmentEntries) {
             JSONObject entryJson = new JSONObject();
@@ -4808,6 +4867,9 @@ public class IcuDashboardView extends View {
                 item.put("sheetConclusionIdx", patient.sheetConclusionIdx);
                 item.put("sheetVitals", safeJsonText(patient.sheetVitals));
         item.put("sheetWaves", safeJsonText(patient.sheetWaves));
+                // ★ 2026-10-23 V80：影像记录手动插入图片（旧版存储路径同写）
+                item.put("imgBeforeUri", safeJsonText(patient.imgBeforeUri));
+                item.put("imgAfterUri", safeJsonText(patient.imgAfterUri));
                 JSONArray entries = new JSONArray();
                 for (TreatmentEntry entry : patient.treatmentEntries) {
                     JSONObject entryJson = new JSONObject();
@@ -5104,6 +5166,9 @@ public class IcuDashboardView extends View {
         patient.sheetVitals = item.optString("sheetVitals", "");
         patient.sheetWaves = item.optString("sheetWaves", "");
         patient.labDoctor = item.optString("labDoctor", "");
+        // ★ 2026-10-23 V80：影像记录手动插入图片
+        patient.imgBeforeUri = item.optString("imgBeforeUri", "");
+        patient.imgAfterUri = item.optString("imgAfterUri", "");
         loadTreatmentEntriesFromStorage(patient, item.optJSONArray("entries"));
         ensureTreatmentEntrySet(patient);
         // ★ 游标按舱推进：读左舱病例不能把右舱的编号起点抬上去。
@@ -5203,6 +5268,9 @@ public class IcuDashboardView extends View {
                 patient.sheetVitals = item.optString("sheetVitals", "");
                 patient.sheetWaves = item.optString("sheetWaves", "");
                 patient.labDoctor = item.optString("labDoctor", "");
+                // ★ 2026-10-23 V80：影像记录手动插入图片（旧版存储路径同读）
+                patient.imgBeforeUri = item.optString("imgBeforeUri", "");
+                patient.imgAfterUri = item.optString("imgAfterUri", "");
                 JSONArray entries = item.optJSONArray("entries");
                 if (entries != null && entries.length() > 0) {
                     patient.treatmentEntries.clear();
@@ -8754,9 +8822,14 @@ public class IcuDashboardView extends View {
         RectF box1 = new RectF(28, 599, 108, 654);
         RectF box2 = new RectF(118, 599, 198, 654);
         RectF boxQr = new RectF(228, 599, 308, 654);
-        drawPdfSnapshotBox(canvas, pdfPaint, box1, first, "图片");
-        drawPdfSnapshotBox(canvas, pdfPaint, box2, second, "图片");
+        /* ★ 2026-10-23 V80：手动插入的图片优先于摄像头快照（记录单编辑态插入，随病例持久化） */
+        Bitmap beforeManual = (patient == null) ? null : pdfLoadLogoBitmap(patient.imgBeforeUri);
+        Bitmap afterManual = (patient == null) ? null : pdfLoadLogoBitmap(patient.imgAfterUri);
+        drawPdfImageBox(canvas, pdfPaint, box1, beforeManual, first, "图片");
+        drawPdfImageBox(canvas, pdfPaint, box2, afterManual, second, "图片");
         drawPdfSnapshotBox(canvas, pdfPaint, boxQr, null, "二维码");
+        if (beforeManual != null) beforeManual.recycle();
+        if (afterManual != null) afterManual.recycle();
         int capColor = Color.rgb(96, 101, 108);
         int tmColor = Color.rgb(108, 114, 122);
         pdfTextCenter(canvas, pdfPaint, "治疗前", new RectF(box1.left, 656, box1.right, 670), 8.8f, capColor, false);
@@ -8908,9 +8981,19 @@ public class IcuDashboardView extends View {
         }
     }
 
+    /* ★ 2026-10-23 V80：影像记录图框 —— 手动插入图片（manual）优先，无则回退摄像头快照，再无则占位框 */
+    private void drawPdfImageBox(Canvas canvas, Paint pdfPaint, RectF box, Bitmap manual, CameraSnapshot snapshot, String placeholder) {
+        if (manual != null) {
+            canvas.drawBitmap(manual, null, box, pdfPaint);
+            pdfRoundRect(canvas, pdfPaint, box.left, box.top, box.right, box.bottom, 2,
+                    Color.TRANSPARENT, Color.rgb(160, 168, 176), 0.6f);
+            return;
+        }
+        drawPdfSnapshotBox(canvas, pdfPaint, box, snapshot, placeholder);
+    }
+
     private void drawPdfSnapshotBox(Canvas canvas, Paint pdfPaint, RectF box, CameraSnapshot snapshot, String placeholder) {
-        boolean drewBitmap = false;
-        if (snapshot != null && snapshot.cacheFile != null && snapshot.cacheFile.exists()) {
+        boolean drewBitmap = false;        if (snapshot != null && snapshot.cacheFile != null && snapshot.cacheFile.exists()) {
             Bitmap bitmap = BitmapFactory.decodeFile(snapshot.cacheFile.getAbsolutePath());
             if (bitmap != null) {
                 canvas.drawBitmap(bitmap, null, box, pdfPaint);

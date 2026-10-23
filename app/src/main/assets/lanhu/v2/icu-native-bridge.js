@@ -68,7 +68,7 @@
 
   /* ★ 任务38：蓝牙连接状态边沿检测（false→true / true→false 时弹窗提示）。
      null 表示尚未初始化，首次同步不弹。 */
-  var prevHostConn = null, prevMonConn = null, prevScreen = null, prevPrintSeq = null, lastPrinterNameSeq = 0;
+  var prevHostConn = null, prevMonConn = null, prevScreen = null, prevPrintSeq = null, lastPrinterNameSeq = 0, lastSheetImgPickSeq = 0;
   var lastShareQrError = ''; /* ★ V48：文件助手传输失败 toast 边沿检测 */
 
   /* ★ 任务38：原生状态事件驱动的前导+尾随节流渲染。
@@ -293,6 +293,18 @@
         if (__pnrHit) {
           __pnrHit.name = pnr.name || TT('printerUnknown', '未知打印机');
           try { localStorage.setItem('icu_printer_list', JSON.stringify(D.printerSaved)); } catch (e) {}
+        }
+      }
+      /* ★ 2026-10-23 V80：记录单影像图片选择结果——seq 边沿检测，写入编辑暂存并原地更新图框
+         （不整页重渲染：编辑态输入内容由 DOM 暂存，重渲染会丢未保存输入；保存时才随病例落盘） */
+      var sip = S.sheetImgPick || {};
+      if (sip.seq && sip.seq !== lastSheetImgPickSeq) {
+        lastSheetImgPickSeq = sip.seq;
+        if (D.sheetEdit && sip.uri && (sip.which === 'before' || sip.which === 'after')) {
+          if (sip.which === 'before') D.sheetEdit.imgBefore = sip.uri;
+          else D.sheetEdit.imgAfter = sip.uri;
+          applySheetImgDom(sip.which, sip.uri);
+          toast(TT('sheetImgPicked', '图片已选择，保存后生效'));
         }
       }
       /* ★ 2026-10-08 日志页：用户/操作日志（原生 userOpLog，倒序最新在前） */
@@ -547,8 +559,8 @@
       var _p2 = function (x) { return (x < 10 ? '0' : '') + x; };
       var nowMdHm = _p2(_n.getMonth() + 1) + '-' + _p2(_n.getDate()) + ' ' + _p2(_n.getHours()) + ':' + _p2(_n.getMinutes());
       D.sheet.imgs = [
-        { lab: TT('sheetImgPh', '图片'), cap: TT('sheetBefore', '治疗前'), t: mdhm(p.treatmentStartTime) },
-        { lab: TT('sheetImgPh', '图片'), cap: TT('sheetAfter', '治疗后'), t: (!endRaw || endRaw === '进行中') ? nowMdHm : mdhm(endRaw) },
+        { lab: TT('sheetImgPh', '图片'), cap: TT('sheetBefore', '治疗前'), t: mdhm(p.treatmentStartTime), uri: p.imgBefore || '' },
+        { lab: TT('sheetImgPh', '图片'), cap: TT('sheetAfter', '治疗后'), t: (!endRaw || endRaw === '进行中') ? nowMdHm : mdhm(endRaw), uri: p.imgAfter || '' },
         { lab: TT('sheetQrBox', '二维码'), cap: TT('sheetQrView', '扫码查看原图'), qr: true, t: '' }
       ];
       /* ★ 任务29：体征行 / 出院建议 / 治疗效果由原生 patient 回推（#26c 编辑保存后持久化在病例上） */
@@ -686,6 +698,23 @@
     return -1;
   }
 
+  /* ★ 2026-10-23 V80：记录单影像图框原地更新（编辑态不整页重渲染，保护正在输入的内容） */
+  function applySheetImgDom(which, uri) {
+    var cell = document.querySelector('.sheet .imgcell[data-img="' + which + '"]');
+    if (!cell) return;
+    var ph = cell.querySelector('.ph');
+    if (ph) ph.innerHTML = uri ? '<img class="sheet-photo" src="' + uri + '" alt="">' : TT('sheetImgPh', '图片');
+    var old = cell.querySelector('.imgclear');
+    if (old) old.parentNode.removeChild(old);
+    if (uri && D.sheetEdit && ph) {
+      var x = document.createElement('span');
+      x.className = 'imgclear';
+      x.setAttribute('data-imgclear', which);
+      x.textContent = '×';
+      ph.appendChild(x);
+    }
+  }
+
   /* ★ 任务26a：记录单编辑态 —— 进入编辑：把 D.sheet 可编辑字段快照进 D.sheetEdit */
   function openSheetEdit() {
     var s = D.sheet || {};
@@ -698,7 +727,10 @@
       conclIdx: (s.concl && s.concl.selIdx) || 0,
       advice: (s.concl && s.concl.advice) || '',
       /* ★ 任务29（#26b）：体征行深拷贝进编辑暂存，增删行只改暂存，保存时统一收集 */
-      vitals: (s.vitalsRows || []).map(function (r) { return [r[0] || '', r[1] || '', r[2] || '', r[3] || '', r[4] || '']; })
+      vitals: (s.vitalsRows || []).map(function (r) { return [r[0] || '', r[1] || '', r[2] || '', r[3] || '', r[4] || '']; }),
+      /* ★ 2026-10-23 V80：影像记录图片 URI（空=未插入；保存写回病例，取消丢弃） */
+      imgBefore: (s.imgs && s.imgs[0] && s.imgs[0].uri) || '',
+      imgAfter: (s.imgs && s.imgs[1] && s.imgs[1].uri) || ''
     };
     IcuApp.render();
   }
@@ -762,8 +794,14 @@
       advice: (s.concl && s.concl.advice) || '',
       conclIdx: (s.concl && s.concl.selIdx) || 0,
       proj: (s.proj || []).map(function (p, i) { return { i: i, on: p.on ? 1 : 0, val: p.val || '' }; }),
-      vitals: rows
+      vitals: rows,
+      /* ★ 2026-10-23 V80：影像图片随编辑保存落盘（has 语义，空串=移除） */
+      imgBefore: D.sheetEdit.imgBefore || '',
+      imgAfter: D.sheetEdit.imgAfter || ''
     };
+    /* 同步回 D.sheet.imgs，保存后立即按新图渲染（不等原生回推） */
+    if (s.imgs && s.imgs[0]) s.imgs[0].uri = D.sheetEdit.imgBefore || '';
+    if (s.imgs && s.imgs[1]) s.imgs[1].uri = D.sheetEdit.imgAfter || '';
     act('update_record', JSON.stringify(payload));
     D.sheetEdit = null;
     IcuApp.render();
@@ -1658,6 +1696,23 @@
           if (D.sheetEdit.vitals.length >= 50) { toast(TT('maxVitalsRows', '最多 50 行体征记录')); return; }
           D.sheetEdit.vitals.push(['', '', '', '', '']);
           IcuApp.render();
+          return;
+        }
+        /* ★ 2026-10-23 V80：影像记录 —— × 移除（先于图框判断，× 在图框内）；点图框调 SAF 选图。
+           两者都只改编辑暂存+原地 DOM，保存才随病例落盘、取消丢弃 */
+        var imgClear = e.target.closest('.imgclear');
+        if (imgClear) {
+          stop(e);
+          var cw = imgClear.getAttribute('data-imgclear');
+          if (cw === 'before') D.sheetEdit.imgBefore = '';
+          else if (cw === 'after') D.sheetEdit.imgAfter = '';
+          applySheetImgDom(cw, '');
+          return;
+        }
+        var imgPick = e.target.closest('[data-imgpick]');
+        if (imgPick) {
+          stop(e);
+          act('sheet_img_pick_' + imgPick.getAttribute('data-imgpick'));
           return;
         }
         if (!e.target.closest('.sheet-in')) {

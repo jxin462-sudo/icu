@@ -72,8 +72,11 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
     /* ★ 2026-10-22 V75：固定教程位本机绑定选择器 */
     private static final int REQUEST_TUTORIAL_FIXED_PICK = 1006;
     private static final int REQUEST_UNKNOWN_SOURCES = 1006;
+    /* ★ 2026-10-23 V80：记录单「影像记录」手动插图选择器 */
+    private static final int REQUEST_SHEET_IMG_PICK = 1007;
     private int pendingTutorialSlot = -1;
     private String pendingTutorialFixedKey = "";
+    private String pendingSheetImgWhich = "";
     private static final String HOST_CONNECTION_PREFS = "host_connection";
     private static final String KEY_LAST_HOST_DEVICE_ID = "last_host_device_id";
     private static final String KEY_TUTORIAL_PERMISSION_ASKED = "tutorial_permission_asked";
@@ -1472,6 +1475,16 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
             }
             return;
         }
+        /* ★ 2026-10-23 V80：记录单影像记录手动插图选择返回 */
+        if (requestCode == REQUEST_SHEET_IMG_PICK) {
+            String which = pendingSheetImgWhich;
+            pendingSheetImgWhich = "";
+            if (resultCode == RESULT_OK && data != null && data.getData() != null && !TextUtils.isEmpty(which)) {
+                dashboardView.onSheetImagePicked(which, data.getData());
+                notifyLanhuStateChanged();
+            }
+            return;
+        }
         /* ★ 2026-10-09 未知来源授权返回后继续安装 */
         if (requestCode == REQUEST_UNKNOWN_SOURCES) {
             resumePendingApkInstall();
@@ -1545,6 +1558,24 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
             startActivityForResult(intent, REQUEST_TUTORIAL_MEDIA_PICK);
         } catch (Exception e) {
             pendingTutorialSlot = -1;
+            Toast.makeText(this, "无法打开文件选择器: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
+    /**
+     * ★ 2026-10-23 V80：记录单「影像记录」手动插图——SAF 只挑图片（image/*）。
+     * 结果经 dashboardView.onSheetImagePicked 推状态给 H5 编辑暂存，保存才随病例落盘。
+     */
+    public void pickSheetImage(String which) {
+        pendingSheetImgWhich = which;
+        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType("image/*");
+        intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+        try {
+            startActivityForResult(intent, REQUEST_SHEET_IMG_PICK);
+        } catch (Exception e) {
+            pendingSheetImgWhich = "";
             Toast.makeText(this, "无法打开文件选择器: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
     }
