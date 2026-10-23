@@ -25,6 +25,7 @@ import android.graphics.RectF;
 import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.pdf.PdfDocument;
+import android.graphics.pdf.PdfRenderer;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
 import android.net.Uri;
@@ -7683,26 +7684,56 @@ public class IcuDashboardView extends View {
     /* ★ 2026-10-20 V64（R58）：直连 S5 设置的打印机地址——后台线程先 IPP（默认 631/ipp/print，
        document-format=application/pdf）；仅「连接级失败」回退 RAW 9100（打印机在线但拒绝 IPP
        时不发 RAW，防直接打 PDF 源码乱码页）；两者皆败回退系统打印对话框。
-       地址写法支持 "192.168.1.10" / "192.168.1.10:9100" / "ipp://host:631/ipp/print"。 */
+       地址写法支持 "192.168.1.10" / "192.168.1.10:9100" / "ipp://host:631/ipp/print"。
+       ★ 2026-10-23 V82 重写（用户实测：手动添加跨网段打印机能连上但打不出来）：
+       ① IPP 响应体状态码真解析——此前只看 HTTP 2xx 就报成功，打印机在响应体里回
+          client-error-document-format-not-supported(0x040A) 等错误时被误判"已发送"，
+          纸不出、提示成功（假成功）；现在错误状态会显式抛出并带 IPP 状态码/打印机消息；
+       ② IPP 路径 404 自动尝试 /ipp/print → /ipp → /（各品牌 IPP 路径不一）；
+       ③ PDF 被拒时查 document-format-supported，支持 image/jpeg 则光栅化逐页重发
+          （不支持 PDF 直打的打印机大多支持 JPEG）；
+       ④ RAW 9100 回退改发 PCL5 单 raster（原样发 PDF 字节对只懂 PCL 的激光机等于白纸；
+          能进 RAW 分支说明 IPP 整体不可用，按 PJL/激光机处理，PCL 光栅通吃）；
+       ⑤ 每一步写 appendDebugLog（日志页「后端调试」可导出，便于远程定位）。 */
     private void printPdfToConfiguredPrinter(final File pdf) {
         final String addr = s5PrinterAddress.trim();
         Toast.makeText(activity, "正在直连打印机 " + addr + " …", Toast.LENGTH_SHORT).show();
+        appendDebugLog("INFO", "直连打印", "开始 地址=" + addr + " 文件=" + pdf.getName() + " 大小=" + pdf.length());
         new Thread(new Runnable() {
             @Override
             public void run() {
                 try {
-                    tryIppPrint(pdf, addr);
+                    tryIppPrint(pdf, addr, "application/pdf", readFileBytes(pdf));
                     finishDirectPrint(true, "IPP 任务已发送到打印机 " + addr);
+                    appendDebugLog("INFO", "直连打印", "成功 IPP/PDF → " + addr);
                     return;
                 } catch (IppRefusedException refused) {
-                    fallbackToSystemDialog(pdf, "打印机拒绝 IPP 打印（" + refused.getMessage() + "），已改用系统打印对话框");
+                    appendDebugLog("WARN", "直连打印", "IPP 被拒: " + refused.getMessage());
+                    /* PDF 被拒 → 查打印机支持的文档格式，支持 JPEG 则光栅化重发 */
+                    String formats = queryPrinterFormats(addr);
+                    appendDebugLog("INFO", "直连打印", "打印机支持格式: " + (TextUtils.isEmpty(formats) ? "(查询失败)" : formats));
+                    if (TextUtils.isEmpty(formats) || formats.contains("image/jpeg")) {
+                        try {
+                            tryIppPrintJpegRaster(pdf, addr);
+                            finishDirectPrint(true, "已发送到打印机 " + addr + "（图像模式）");
+                            appendDebugLog("INFO", "直连打印", "成功 IPP/JPEG光栅 → " + addr);
+                            return;
+                        } catch (Exception jpegErr) {
+                            appendDebugLog("WARN", "直连打印", "JPEG 光栅失败: " + safeErrText(jpegErr));
+                        }
+                    }
+                    fallbackToSystemDialog(pdf, "打印机拒绝打印（" + refused.getMessage()
+                            + (TextUtils.isEmpty(formats) ? "" : "；支持格式: " + formats) + "），已改用系统打印对话框");
                     return;
                 } catch (Exception connErr) {
+                    appendDebugLog("WARN", "直连打印", "IPP 连接失败: " + safeErrText(connErr));
                     try {
-                        tryRaw9100(pdf, addr);
+                        tryRaw9100Pcl(pdf, addr);
                         finishDirectPrint(true, "RAW 任务已发送到打印机 " + addr);
+                        appendDebugLog("INFO", "直连打印", "成功 RAW9100/PCL光栅 → " + addr);
                         return;
                     } catch (Exception rawErr) {
+                        appendDebugLog("WARN", "直连打印", "RAW 失败: " + safeErrText(rawErr));
                         fallbackToSystemDialog(pdf, "直连打印机失败（IPP: " + safeErrText(connErr)
                                 + " / RAW: " + safeErrText(rawErr) + "），已改用系统打印对话框");
                     }
@@ -7742,10 +7773,15 @@ public class IcuDashboardView extends View {
         });
     }
 
-    /** IPP 被在线拒绝（打印机可达但返回 HTTP/IPP 错误）——区别于连接级失败，用于决定是否回退 RAW。 */
+    /** IPP 被在线拒绝（打印机可达但返回 HTTP/IPP 错误）——区别于连接级失败，用于决定是否回退 RAW。
+     *  ★ V82：携带 httpCode（0=非HTTP层）与 ippStatus（-1=未取到），便于精确分流（404 换路径、0x040A 换格式）。 */
     private static class IppRefusedException extends Exception {
-        IppRefusedException(String msg) {
+        final int httpCode;
+        final int ippStatus;
+        IppRefusedException(String msg, int httpCode, int ippStatus) {
             super(msg);
+            this.httpCode = httpCode;
+            this.ippStatus = ippStatus;
         }
     }
 
@@ -7776,16 +7812,40 @@ public class IcuDashboardView extends View {
         return new String[]{host, String.valueOf(port), path};
     }
 
-    /* IPP 1.1 Print-Job：POST application/ipp 到 host:631/ipp/print。
-       成功=任务已受理；IppRefusedException=打印机在线但拒绝（HTTP 非 2xx）；
-       其他 IOException=连接级失败（调用方可回退 RAW 9100）。 */
-    private void tryIppPrint(File pdf, String addr) throws Exception {
+    /* ★ V82 重写：IPP 1.1 Print-Job（POST application/ipp 到 host:port/path）。
+       ① 路径回退：默认 /ipp/print，HTTP 404 时依次试 /ipp、/（各品牌 IPP 路径不一）；
+       ② 响应体 IPP status-code 真解析：>0x00FF 即拒绝（如 0x040A=document-format-not-supported），
+          此前只看 HTTP 2xx 造成「假成功」；
+       成功=任务已受理；IppRefusedException=打印机在线但拒绝；其他 IOException=连接级失败（回退 RAW）。 */
+    private void tryIppPrint(File pdf, String addr, String docFormat, byte[] data) throws Exception {
         String[] hp = parsePrinterAddr(addr, 631, "/ipp/print");
         String host = hp[0];
         int port = Integer.parseInt(hp[1]);
-        String path = hp[2];
+        String firstPath = hp[2];
+        String[] candidates = "/ipp/print".equals(firstPath)
+                ? new String[]{"/ipp/print", "/ipp", "/"}
+                : new String[]{firstPath};
+        IppRefusedException notFound = null;
+        for (String path : candidates) {
+            try {
+                ippPrintOnce(host, port, path, docFormat, data, pdf.getName());
+                return;
+            } catch (IppRefusedException refused) {
+                /* HTTP 404 或 IPP 0x0401(client-error-not-found) 都可能是路径不对 → 换下一个路径 */
+                if ((refused.httpCode == 404 || refused.ippStatus == 0x0401) && candidates.length > 1) {
+                    appendDebugLog("INFO", "直连打印", "IPP 路径无效: " + path + "（" + refused.getMessage() + "），尝试下一个");
+                    notFound = refused;
+                    continue;
+                }
+                throw refused;
+            }
+        }
+        throw notFound != null ? notFound : new IOException("IPP 路径不可用");
+    }
+
+    /* 单路径 IPP Print-Job：发送并完整解析响应（HTTP 状态 + IPP status-code + status-message）。 */
+    private void ippPrintOnce(String host, int port, String path, String docFormat, byte[] data, String jobName) throws Exception {
         String printerUri = "ipp://" + host + ":" + port + path;
-        byte[] pdfBytes = readFileBytes(pdf);
         java.io.ByteArrayOutputStream headBuf = new java.io.ByteArrayOutputStream();
         java.io.DataOutputStream d = new java.io.DataOutputStream(headBuf);
         d.writeByte(1);
@@ -7796,8 +7856,8 @@ public class IcuDashboardView extends View {
         writeIppAttr(d, 0x47, "attributes-charset", "utf-8");
         writeIppAttr(d, 0x48, "attributes-natural-language", "zh-cn");
         writeIppAttr(d, 0x45, "printer-uri", printerUri);
-        writeIppAttr(d, 0x42, "job-name", pdf.getName());
-        writeIppAttr(d, 0x49, "document-format", "application/pdf");
+        writeIppAttr(d, 0x42, "job-name", jobName);
+        writeIppAttr(d, 0x49, "document-format", docFormat);
         d.writeByte(0x03);           // end-of-attributes-tag
         d.flush();
         byte[] ippHead = headBuf.toByteArray();
@@ -7809,11 +7869,11 @@ public class IcuDashboardView extends View {
             String reqHead = "POST " + path + " HTTP/1.1\r\n"
                     + "Host: " + host + ":" + port + "\r\n"
                     + "Content-Type: application/ipp\r\n"
-                    + "Content-Length: " + (ippHead.length + pdfBytes.length) + "\r\n"
+                    + "Content-Length: " + (ippHead.length + data.length) + "\r\n"
                     + "Connection: close\r\n\r\n";
             out.write(reqHead.getBytes("US-ASCII"));
             out.write(ippHead);
-            out.write(pdfBytes);
+            out.write(data);
             out.flush();
             java.io.InputStream in = socket.getInputStream();
             String statusLine = readHttpStatusLine(in);
@@ -7823,12 +7883,162 @@ public class IcuDashboardView extends View {
             String[] parts = statusLine.split(" ");
             int code = parts.length > 1 ? Integer.parseInt(parts[1].trim()) : 0;
             if (code < 200 || code >= 300) {
-                throw new IppRefusedException("HTTP " + code);
+                throw new IppRefusedException("HTTP " + code + " @ " + path, code, -1);
             }
-            // HTTP 2xx 即视为受理（IPP status-code 在响应体内，successful 一般随 200 返回）
+            /* ★ V82：HTTP 2xx ≠ 成功——IPP status-code 在响应体里，必须解析（假成功病根） */
+            byte[] body = readHttpResponseBody(in);
+            if (body.length >= 4) {
+                int ippStatus = ((body[2] & 0xFF) << 8) | (body[3] & 0xFF);
+                if (ippStatus > 0x00FF) {
+                    String sm = extractIppAttrValue(body, "status-message");
+                    throw new IppRefusedException("IPP状态 0x" + Integer.toHexString(ippStatus)
+                            + (TextUtils.isEmpty(sm) ? "" : "（" + sm + "）"), code, ippStatus);
+                }
+                appendDebugLog("INFO", "直连打印", "IPP 受理 HTTP " + code + " status=0x" + Integer.toHexString(ippStatus) + " " + docFormat + " @ " + path);
+            } else {
+                appendDebugLog("INFO", "直连打印", "IPP 受理 HTTP " + code + "（响应体过短未取到状态）" + docFormat + " @ " + path);
+            }
         } finally {
             try {
                 socket.close();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /* ★ V82：跳过剩余 HTTP 头（空行结束）后读全部响应体（Connection: close；不关连接的按超时收尾）。 */
+    private byte[] readHttpResponseBody(java.io.InputStream in) throws IOException {
+        int prev = -1, prevprev = -1, prev3 = -1;
+        int c;
+        while ((c = in.read()) >= 0) {
+            if (prev3 == '\r' && prevprev == '\n' && prev == '\r' && c == '\n') {
+                break;
+            }
+            prev3 = prevprev;
+            prevprev = prev;
+            prev = c;
+        }
+        java.io.ByteArrayOutputStream respBuf = new java.io.ByteArrayOutputStream();
+        byte[] buf = new byte[4096];
+        int n;
+        try {
+            while ((n = in.read(buf)) >= 0) {
+                respBuf.write(buf, 0, n);
+            }
+        } catch (java.net.SocketTimeoutException ignored) {
+            // 部分打印机不关连接，超时后已收到的数据照常解析
+        }
+        return respBuf.toByteArray();
+    }
+
+    /* ★ V82：Get-Printer-Attributes 查 document-format-supported —— 在响应体里直接检索已知格式串
+       （多值属性逐个解析太啰嗦，格式枚举是封闭集合，子串匹配足够稳）；返回逗号串，查询失败返回 ""。 */
+    private String queryPrinterFormats(String addr) {
+        java.net.Socket socket = null;
+        try {
+            String[] hp = parsePrinterAddr(addr, 631, "/ipp/print");
+            String host = hp[0];
+            int port = Integer.parseInt(hp[1]);
+            String path = hp[2];
+            String printerUri = "ipp://" + host + ":" + port + path;
+            java.io.ByteArrayOutputStream headBuf = new java.io.ByteArrayOutputStream();
+            java.io.DataOutputStream d = new java.io.DataOutputStream(headBuf);
+            d.writeByte(1);
+            d.writeByte(1);
+            d.writeShort(0x000B);        // Get-Printer-Attributes
+            d.writeInt(1);
+            d.writeByte(0x01);
+            writeIppAttr(d, 0x47, "attributes-charset", "utf-8");
+            writeIppAttr(d, 0x48, "attributes-natural-language", "zh-cn");
+            writeIppAttr(d, 0x45, "printer-uri", printerUri);
+            writeIppAttr(d, 0x42, "requested-attributes", "document-format-supported");
+            d.writeByte(0x03);
+            d.flush();
+            byte[] body = headBuf.toByteArray();
+            socket = new java.net.Socket();
+            socket.connect(new java.net.InetSocketAddress(host, port), 4000);
+            socket.setSoTimeout(5000);
+            try {
+                OutputStream out = socket.getOutputStream();
+                String reqHead = "POST " + path + " HTTP/1.1\r\n"
+                        + "Host: " + host + ":" + port + "\r\n"
+                        + "Content-Type: application/ipp\r\n"
+                        + "Content-Length: " + body.length + "\r\n"
+                        + "Connection: close\r\n\r\n";
+                out.write(reqHead.getBytes("US-ASCII"));
+                out.write(body);
+                out.flush();
+                java.io.InputStream in = socket.getInputStream();
+                String statusLine = readHttpStatusLine(in);
+                if (statusLine == null || !statusLine.startsWith("HTTP/")) {
+                    return "";
+                }
+                byte[] resp = readHttpResponseBody(in);
+                String text = new String(resp, "ISO-8859-1");
+                String[] known = {"application/pdf", "image/jpeg", "image/pwg-raster",
+                        "application/postscript", "application/octet-stream", "image/urf"};
+                StringBuilder sb = new StringBuilder();
+                for (String fmt : known) {
+                    if (text.contains(fmt)) {
+                        if (sb.length() > 0) {
+                            sb.append(',');
+                        }
+                        sb.append(fmt);
+                    }
+                }
+                return sb.toString();
+            } finally {
+                try {
+                    socket.close();
+                } catch (Exception ignored) {
+                }
+            }
+        } catch (Exception ignored) {
+            try {
+                if (socket != null) {
+                    socket.close();
+                }
+            } catch (Exception ignored2) {
+            }
+            return "";
+        }
+    }
+
+    /* ★ V82：PDF 被拒后的光栅回退——PdfRenderer 逐页渲染 200dpi 位图 → JPEG →
+       每页一个 IPP Print-Job（document-format=image/jpeg）。不支持 PDF 直打的 IPP 打印机
+       （尤其 IPP Everywhere/喷墨类）几乎都支持 JPEG。 */
+    private void tryIppPrintJpegRaster(File pdf, String addr) throws Exception {
+        ParcelFileDescriptor pfd = ParcelFileDescriptor.open(pdf, ParcelFileDescriptor.MODE_READ_ONLY);
+        try {
+            PdfRenderer renderer = new PdfRenderer(pfd);
+            try {
+                int pages = renderer.getPageCount();
+                appendDebugLog("INFO", "直连打印", "JPEG 光栅化 " + pages + " 页 @200dpi");
+                for (int i = 0; i < pages; i++) {
+                    PdfRenderer.Page page = renderer.openPage(i);
+                    Bitmap bmp = null;
+                    try {
+                        int w = Math.max(1, Math.round(page.getWidth() * 200f / 72f));
+                        int h = Math.max(1, Math.round(page.getHeight() * 200f / 72f));
+                        bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                        bmp.eraseColor(Color.WHITE);
+                        page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT);
+                        java.io.ByteArrayOutputStream jpg = new java.io.ByteArrayOutputStream();
+                        bmp.compress(Bitmap.CompressFormat.JPEG, 88, jpg);
+                        tryIppPrint(pdf, addr, "image/jpeg", jpg.toByteArray());
+                    } finally {
+                        if (bmp != null) {
+                            bmp.recycle();
+                        }
+                        page.close();
+                    }
+                }
+            } finally {
+                renderer.close();
+            }
+        } finally {
+            try {
+                pfd.close();
             } catch (Exception ignored) {
             }
         }
@@ -7881,9 +8091,12 @@ public class IcuDashboardView extends View {
         }
     }
 
-    /* RAW 9100：PDF 原样写入打印机 9100 端口（多数网口激光打印机可直接解析 PDF/PS）；
+    /* ★ V82 重写：RAW 9100 改发 PCL5 单色 raster（原实现把 PDF 字节原样写入——只懂 PCL 的激光机
+       收到 PDF 源码要么打白纸要么打乱码页，这是「能连上但打不出来」的另一条病根）。
+       能走到 RAW 分支说明 IPP 整体不可用，目标基本是 PJL/激光机，PCL5 光栅通吃。
+       页面按 200dpi 逐页光栅化，A4（ESC&l26A），未压缩模式（*b<n>W），结束 *rC + 换页。
        地址中带的是 IPP 端口 631 时自动改用 9100。 */
-    private void tryRaw9100(File pdf, String addr) throws IOException {
+    private void tryRaw9100Pcl(File pdf, String addr) throws IOException {
         String[] hp = parsePrinterAddr(addr, 9100, "/");
         String host = hp[0];
         int port = Integer.parseInt(hp[1]);
@@ -7895,23 +8108,83 @@ public class IcuDashboardView extends View {
         socket.setSoTimeout(15000);
         try {
             OutputStream out = socket.getOutputStream();
-            FileInputStream in = new FileInputStream(pdf);
-            try {
-                byte[] buf = new byte[8192];
-                int n;
-                while ((n = in.read(buf)) >= 0) {
-                    out.write(buf, 0, n);
-                }
-            } finally {
-                in.close();
-            }
+            byte[] job = buildPcl5RasterJob(pdf);
+            out.write(job);
             out.flush();
+            appendDebugLog("INFO", "直连打印", "RAW9100/PCL 光栅已发 " + job.length + " 字节 → " + host + ":" + port);
         } finally {
             try {
                 socket.close();
             } catch (Exception ignored) {
             }
         }
+    }
+
+    /* ★ V82：整份 PDF → PCL5 raster 任务字节（200dpi 单色，1=黑）。 */
+    private byte[] buildPcl5RasterJob(File pdf) throws IOException {
+        java.io.ByteArrayOutputStream jobBuf = new java.io.ByteArrayOutputStream();
+        try {
+            jobBuf.write(new byte[]{0x1B, 'E'});                                  // ESC E 复位
+            jobBuf.write("\u001B&l26A".getBytes("US-ASCII"));                     // A4 纸
+            jobBuf.write("\u001B&l0O".getBytes("US-ASCII"));                      // 纵向
+            ParcelFileDescriptor pfd = ParcelFileDescriptor.open(pdf, ParcelFileDescriptor.MODE_READ_ONLY);
+            try {
+                PdfRenderer renderer = new PdfRenderer(pfd);
+                try {
+                    int pages = renderer.getPageCount();
+                    for (int i = 0; i < pages; i++) {
+                        PdfRenderer.Page page = renderer.openPage(i);
+                        Bitmap bmp = null;
+                        try {
+                            int w = Math.max(1, Math.round(page.getWidth() * 200f / 72f));
+                            int h = Math.max(1, Math.round(page.getHeight() * 200f / 72f));
+                            bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                            bmp.eraseColor(Color.WHITE);
+                            page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT);
+                            int[] px = new int[w * h];
+                            bmp.getPixels(px, 0, w, 0, 0, w, h);
+                            int rowBytes = (w + 7) / 8;
+                            jobBuf.write("\u001B*t200R".getBytes("US-ASCII"));    // raster 分辨率 200dpi
+                            jobBuf.write("\u001B*r0A".getBytes("US-ASCII"));      // 左边距处开始 raster
+                            byte[] row = new byte[rowBytes];
+                            for (int y = 0; y < h; y++) {
+                                java.util.Arrays.fill(row, (byte) 0);
+                                int base = y * w;
+                                for (int x = 0; x < w; x++) {
+                                    int c = px[base + x];
+                                    int lum = ((c >> 16) & 0xFF) * 299 + ((c >> 8) & 0xFF) * 587 + (c & 0xFF) * 114;
+                                    if (lum < 128000) {
+                                        row[x >> 3] |= (byte) (0x80 >> (x & 7));
+                                    }
+                                }
+                                jobBuf.write(("\u001B*b" + rowBytes + "W").getBytes("US-ASCII"));
+                                jobBuf.write(row);
+                            }
+                            jobBuf.write("\u001B*rC".getBytes("US-ASCII"));       // 结束 raster
+                            jobBuf.write(0x0C);                                   // 换页/出纸
+                        } finally {
+                            if (bmp != null) {
+                                bmp.recycle();
+                            }
+                            page.close();
+                        }
+                    }
+                } finally {
+                    renderer.close();
+                }
+            } finally {
+                try {
+                    pfd.close();
+                } catch (Exception ignored) {
+                }
+            }
+            jobBuf.write(new byte[]{0x1B, 'E'});                                  // ESC E 复位收尾
+        } catch (IOException e) {
+            throw e;
+        } catch (Exception e) {
+            throw new IOException("PCL 光栅化失败: " + e.getMessage());
+        }
+        return jobBuf.toByteArray();
     }
 
     /* ★ 2026-10-10 #57：NSD 扫描局域网打印机（Bonjour/mDNS 广播的 _ipp._tcp 与 _pdl-datastream._tcp 服务）。
@@ -8227,17 +8500,13 @@ public class IcuDashboardView extends View {
     }
 
     /**
-     * ★ 任务14（V1.02 R59）：打印测试页 —— 生成一页简易 PDF（含打印机地址与时间），
-     * 走与报告相同的系统打印通道，用于验证打印机配置是否正确。
+     * ★ 任务14（V1.02 R59）：打印测试页 —— 生成一页简易 PDF（含打印机地址与时间）。
+     * ★ 2026-10-23 V82：已配置打印机地址时改走与报告相同的直连链路（IPP→RAW）——
+     * 此前测试页只弹系统打印对话框，而系统打印服务靠 mDNS 发现，跨网段手动添加的打印机
+     * 根本不在列表里，测试页永远打不出去（用户实测反馈）。
      */
     private void printTestPageViaSystem() {
         if (activity == null) {
-            Toast.makeText(activity, "当前环境不支持打印", Toast.LENGTH_SHORT).show();
-            return;
-        }
-        Object pm = activity.getSystemService(Context.PRINT_SERVICE);
-        if (!(pm instanceof PrintManager)) {
-            Toast.makeText(activity, "当前设备不支持打印", Toast.LENGTH_SHORT).show();
             return;
         }
         try {
@@ -8266,9 +8535,19 @@ public class IcuDashboardView extends View {
                 os.close();
                 doc.close();
             }
+            if (!TextUtils.isEmpty(s5PrinterAddress)) {
+                appendDebugLog("INFO", "打印测试页", "直连 " + s5PrinterAddress);
+                printPdfToConfiguredPrinter(pdf);
+                return;
+            }
+            Object pm = activity.getSystemService(Context.PRINT_SERVICE);
+            if (!(pm instanceof PrintManager)) {
+                Toast.makeText(activity, "当前设备不支持打印", Toast.LENGTH_SHORT).show();
+                return;
+            }
             ((PrintManager) pm).print("动物ICU打印测试页", new PdfPrintAdapter(pdf), null);
             Toast.makeText(activity, "已发送打印测试页", Toast.LENGTH_SHORT).show();
-            appendUserLog("打印", "打印测试页", TextUtils.isEmpty(s5PrinterAddress) ? "未设置地址" : s5PrinterAddress);
+            appendUserLog("打印", "打印测试页", "系统对话框（未设置打印机地址）");
         } catch (Exception e) {
             Toast.makeText(activity, "打印测试页失败: " + e.getMessage(), Toast.LENGTH_LONG).show();
         }
