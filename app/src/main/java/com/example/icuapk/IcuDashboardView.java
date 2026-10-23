@@ -4171,23 +4171,93 @@ public class IcuDashboardView extends View {
     }
 
     /* ★ 2026-10-23 V80：记录单「影像记录」治疗前/治疗后手动插图 —— SAF 选择返回。
-       校验可解码 + 持久授权；结果不直接写病例，先经状态推给 H5 编辑暂存（保存才落盘，取消丢弃）。 */
+       校验可解码 + 持久授权；结果不直接写病例，先经状态推给 H5 编辑暂存（保存才落盘，取消丢弃）。
+       ★ 2026-10-23 V83：改为先降采样落 MediaStore 私有副本（Pictures/ICUSheet）再引用——
+       相机原图可达 50MP（解码 ≈200MB 位图）：WebView 渲染进程解码原图 OOM 会连带杀整个 App（闪退）、
+       PDF/打印全尺寸解码同样 OOM、content:// 持久授权部分机型重启后失效。副本长边 ≤1600px，
+       自己插入的 MediaStore 条目本 App 永久可读，不再需要持久授权。 */
     void onSheetImagePicked(String which, Uri uri) {
         if (uri == null || TextUtils.isEmpty(which)) return;
-        if (!isDecodableImage(uri)) {
+        String saved = importSheetImageCopy(uri, which);
+        if (saved == null) {
             Toast.makeText(activity, "图片读取失败，请重新选择", Toast.LENGTH_LONG).show();
             return;
         }
-        try {
-            activity.getContentResolver().takePersistableUriPermission(
-                    uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        } catch (SecurityException ignored) {
-            // 部分提供方不支持持久权限，当前会话仍可读
-        }
         sheetImgPickSeq++;
         sheetImgPickWhich = which;
-        sheetImgPickUri = uri.toString();
-        appendDebugLog("INFO", "sheetImgPick", which + " -> " + uri);
+        sheetImgPickUri = saved;
+        appendDebugLog("INFO", "sheetImgPick", which + " -> " + saved);
+    }
+
+    /* ★ V83：选中图片降采样解码（长边 ≤1600px）→ JPEG q90 写入 MediaStore（Pictures/ICUSheet），
+       返回新 content:// URI 字符串；任何失败（含 OOM）返回 null 不崩溃。 */
+    private String importSheetImageCopy(Uri uri, String which) {
+        InputStream in = null;
+        Bitmap bmp = null;
+        try {
+            in = activity.getContentResolver().openInputStream(uri);
+            if (in == null) {
+                return null;
+            }
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            BitmapFactory.decodeStream(in, null, bounds);
+            try {
+                in.close();
+            } catch (Exception ignored) {
+            }
+            in = null;
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                return null;
+            }
+            int sample = 1;
+            while (Math.max(bounds.outWidth, bounds.outHeight) / (sample * 2) > 1600) {
+                sample *= 2;
+            }
+            in = activity.getContentResolver().openInputStream(uri);
+            if (in == null) {
+                return null;
+            }
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inSampleSize = sample;
+            bmp = BitmapFactory.decodeStream(in, null, opts);
+            if (bmp == null) {
+                return null;
+            }
+            ContentValues cv = new ContentValues();
+            cv.put(MediaStore.Images.Media.DISPLAY_NAME, "sheet_" + which + "_" + System.currentTimeMillis() + ".jpg");
+            cv.put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                cv.put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/ICUSheet");
+            }
+            Uri outUri = activity.getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
+            if (outUri == null) {
+                return null;
+            }
+            OutputStream os = activity.getContentResolver().openOutputStream(outUri);
+            if (os == null) {
+                return null;
+            }
+            try {
+                bmp.compress(Bitmap.CompressFormat.JPEG, 90, os);
+            } finally {
+                os.close();
+            }
+            return outUri.toString();
+        } catch (Throwable e) {
+            appendDebugLog("WARN", "sheetImgPick", "导入副本失败: " + e);
+            return null;
+        } finally {
+            if (bmp != null) {
+                bmp.recycle();
+            }
+            if (in != null) {
+                try {
+                    in.close();
+                } catch (Exception ignored) {
+                }
+            }
+        }
     }
 
     /** 播放/查看某槽位绑定的媒体；未绑定则提示先选择。 */
@@ -7702,47 +7772,54 @@ public class IcuDashboardView extends View {
         new Thread(new Runnable() {
             @Override
             public void run() {
+                /* ★ V83：整段兜 Throwable——光栅化大位图可能 OOM（Error 不是 Exception），
+                   此前线程内 OOM 未捕获直接把整个 App 打崩（闪退）；现在降级系统对话框 */
                 try {
-                    tryIppPrint(pdf, addr, "application/pdf", readFileBytes(pdf));
-                    finishDirectPrint(true, "IPP 任务已发送到打印机 " + addr);
-                    appendDebugLog("INFO", "直连打印", "成功 IPP/PDF → " + addr);
-                    return;
-                } catch (IppRefusedException refused) {
-                    appendDebugLog("WARN", "直连打印", "IPP 被拒: " + refused.getMessage());
-                    /* PDF 被拒 → 查打印机支持的文档格式，支持 JPEG 则光栅化重发 */
-                    String formats = queryPrinterFormats(addr);
-                    appendDebugLog("INFO", "直连打印", "打印机支持格式: " + (TextUtils.isEmpty(formats) ? "(查询失败)" : formats));
-                    if (TextUtils.isEmpty(formats) || formats.contains("image/jpeg")) {
+                    try {
+                        tryIppPrint(pdf, addr, "application/pdf", readFileBytes(pdf));
+                        finishDirectPrint(true, "IPP 任务已发送到打印机 " + addr);
+                        appendDebugLog("INFO", "直连打印", "成功 IPP/PDF → " + addr);
+                        return;
+                    } catch (IppRefusedException refused) {
+                        appendDebugLog("WARN", "直连打印", "IPP 被拒: " + refused.getMessage());
+                        /* PDF 被拒 → 查打印机支持的文档格式，支持 JPEG 则光栅化重发 */
+                        String formats = queryPrinterFormats(addr);
+                        appendDebugLog("INFO", "直连打印", "打印机支持格式: " + (TextUtils.isEmpty(formats) ? "(查询失败)" : formats));
+                        if (TextUtils.isEmpty(formats) || formats.contains("image/jpeg")) {
+                            try {
+                                tryIppPrintJpegRaster(pdf, addr);
+                                finishDirectPrint(true, "已发送到打印机 " + addr + "（图像模式）");
+                                appendDebugLog("INFO", "直连打印", "成功 IPP/JPEG光栅 → " + addr);
+                                return;
+                            } catch (Exception jpegErr) {
+                                appendDebugLog("WARN", "直连打印", "JPEG 光栅失败: " + safeErrText(jpegErr));
+                            }
+                        }
+                        fallbackToSystemDialog(pdf, "打印机拒绝打印（" + refused.getMessage()
+                                + (TextUtils.isEmpty(formats) ? "" : "；支持格式: " + formats) + "），已改用系统打印对话框");
+                        return;
+                    } catch (Exception connErr) {
+                        appendDebugLog("WARN", "直连打印", "IPP 连接失败: " + safeErrText(connErr));
                         try {
-                            tryIppPrintJpegRaster(pdf, addr);
-                            finishDirectPrint(true, "已发送到打印机 " + addr + "（图像模式）");
-                            appendDebugLog("INFO", "直连打印", "成功 IPP/JPEG光栅 → " + addr);
+                            tryRaw9100Pcl(pdf, addr);
+                            finishDirectPrint(true, "RAW 任务已发送到打印机 " + addr);
+                            appendDebugLog("INFO", "直连打印", "成功 RAW9100/PCL光栅 → " + addr);
                             return;
-                        } catch (Exception jpegErr) {
-                            appendDebugLog("WARN", "直连打印", "JPEG 光栅失败: " + safeErrText(jpegErr));
+                        } catch (Exception rawErr) {
+                            appendDebugLog("WARN", "直连打印", "RAW 失败: " + safeErrText(rawErr));
+                            fallbackToSystemDialog(pdf, "直连打印机失败（IPP: " + safeErrText(connErr)
+                                    + " / RAW: " + safeErrText(rawErr) + "），已改用系统打印对话框");
                         }
                     }
-                    fallbackToSystemDialog(pdf, "打印机拒绝打印（" + refused.getMessage()
-                            + (TextUtils.isEmpty(formats) ? "" : "；支持格式: " + formats) + "），已改用系统打印对话框");
-                    return;
-                } catch (Exception connErr) {
-                    appendDebugLog("WARN", "直连打印", "IPP 连接失败: " + safeErrText(connErr));
-                    try {
-                        tryRaw9100Pcl(pdf, addr);
-                        finishDirectPrint(true, "RAW 任务已发送到打印机 " + addr);
-                        appendDebugLog("INFO", "直连打印", "成功 RAW9100/PCL光栅 → " + addr);
-                        return;
-                    } catch (Exception rawErr) {
-                        appendDebugLog("WARN", "直连打印", "RAW 失败: " + safeErrText(rawErr));
-                        fallbackToSystemDialog(pdf, "直连打印机失败（IPP: " + safeErrText(connErr)
-                                + " / RAW: " + safeErrText(rawErr) + "），已改用系统打印对话框");
-                    }
+                } catch (Throwable t) {
+                    appendDebugLog("ERROR", "直连打印", "未捕获异常（已拦截防闪退）: " + safeErrText(t));
+                    fallbackToSystemDialog(pdf, "打印过程异常（" + t.getClass().getSimpleName() + "），已改用系统打印对话框");
                 }
             }
         }, "icu-direct-print").start();
     }
 
-    private String safeErrText(Exception e) {
+    private String safeErrText(Throwable e) {
         String m = e.getMessage();
         return e.getClass().getSimpleName() + (TextUtils.isEmpty(m) ? "" : ": " + m);
     }
@@ -8004,22 +8081,23 @@ public class IcuDashboardView extends View {
         }
     }
 
-    /* ★ V82：PDF 被拒后的光栅回退——PdfRenderer 逐页渲染 200dpi 位图 → JPEG →
+    /* ★ V82：PDF 被拒后的光栅回退——PdfRenderer 逐页渲染位图 → JPEG →
        每页一个 IPP Print-Job（document-format=image/jpeg）。不支持 PDF 直打的 IPP 打印机
-       （尤其 IPP Everywhere/喷墨类）几乎都支持 JPEG。 */
+       （尤其 IPP Everywhere/喷墨类）几乎都支持 JPEG。
+       ★ V83：200dpi→150dpi（位图 15.5MB→8.7MB/页，省内存防 OOM 闪退）。 */
     private void tryIppPrintJpegRaster(File pdf, String addr) throws Exception {
         ParcelFileDescriptor pfd = ParcelFileDescriptor.open(pdf, ParcelFileDescriptor.MODE_READ_ONLY);
         try {
             PdfRenderer renderer = new PdfRenderer(pfd);
             try {
                 int pages = renderer.getPageCount();
-                appendDebugLog("INFO", "直连打印", "JPEG 光栅化 " + pages + " 页 @200dpi");
+                appendDebugLog("INFO", "直连打印", "JPEG 光栅化 " + pages + " 页 @150dpi");
                 for (int i = 0; i < pages; i++) {
                     PdfRenderer.Page page = renderer.openPage(i);
                     Bitmap bmp = null;
                     try {
-                        int w = Math.max(1, Math.round(page.getWidth() * 200f / 72f));
-                        int h = Math.max(1, Math.round(page.getHeight() * 200f / 72f));
+                        int w = Math.max(1, Math.round(page.getWidth() * 150f / 72f));
+                        int h = Math.max(1, Math.round(page.getHeight() * 150f / 72f));
                         bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
                         bmp.eraseColor(Color.WHITE);
                         page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT);
@@ -8120,7 +8198,8 @@ public class IcuDashboardView extends View {
         }
     }
 
-    /* ★ V82：整份 PDF → PCL5 raster 任务字节（200dpi 单色，1=黑）。 */
+    /* ★ V82：整份 PDF → PCL5 raster 任务字节（150dpi 单色，1=黑）。
+       ★ V83：150dpi + 逐行取像素——原为 200dpi 整帧 int[]（15.5MB/页），大报告叠加大位图易 OOM。 */
     private byte[] buildPcl5RasterJob(File pdf) throws IOException {
         java.io.ByteArrayOutputStream jobBuf = new java.io.ByteArrayOutputStream();
         try {
@@ -8136,22 +8215,21 @@ public class IcuDashboardView extends View {
                         PdfRenderer.Page page = renderer.openPage(i);
                         Bitmap bmp = null;
                         try {
-                            int w = Math.max(1, Math.round(page.getWidth() * 200f / 72f));
-                            int h = Math.max(1, Math.round(page.getHeight() * 200f / 72f));
+                            int w = Math.max(1, Math.round(page.getWidth() * 150f / 72f));
+                            int h = Math.max(1, Math.round(page.getHeight() * 150f / 72f));
                             bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
                             bmp.eraseColor(Color.WHITE);
                             page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT);
-                            int[] px = new int[w * h];
-                            bmp.getPixels(px, 0, w, 0, 0, w, h);
                             int rowBytes = (w + 7) / 8;
-                            jobBuf.write("\u001B*t200R".getBytes("US-ASCII"));    // raster 分辨率 200dpi
+                            jobBuf.write("\u001B*t150R".getBytes("US-ASCII"));    // raster 分辨率 150dpi
                             jobBuf.write("\u001B*r0A".getBytes("US-ASCII"));      // 左边距处开始 raster
                             byte[] row = new byte[rowBytes];
+                            int[] rowPx = new int[w];
                             for (int y = 0; y < h; y++) {
+                                bmp.getPixels(rowPx, 0, w, 0, y, w, 1);
                                 java.util.Arrays.fill(row, (byte) 0);
-                                int base = y * w;
                                 for (int x = 0; x < w; x++) {
-                                    int c = px[base + x];
+                                    int c = rowPx[x];
                                     int lum = ((c >> 16) & 0xFF) * 299 + ((c >> 8) & 0xFF) * 587 + (c & 0xFF) * 114;
                                     if (lum < 128000) {
                                         row[x >> 3] |= (byte) (0x80 >> (x & 7));
@@ -8786,10 +8864,33 @@ public class IcuDashboardView extends View {
        \uff08onOrganizationLogoSelected/onFooterLogoSelected \u91cc Uri.toString()\uff09\uff0c
        BitmapFactory.decodeFile \u53ea\u80fd\u8bfb\u6587\u4ef6\u8def\u5f84\uff0c\u5bf9 content:// \u6052\u8fd4\u56de null\u3002
        \u7edf\u4e00\u5728\u6b64\u6309 scheme \u5206\u6d3e\uff1acontent/android.resource \u8d70 ContentResolver\uff0cfile/\u88f8\u8def\u5f84\u8d70 decodeFile\u3002 */
+    /* ★ 2026-10-23 V83：解码前先测边界、按 inSampleSize 降到长边 ≤1600px，且 OOM 也兜住——
+       此前全尺寸解码，V80 起可插入相机原图（50MP≈200MB 位图），PDF 生成/打印时直接 OOM 闪退。 */
     private Bitmap pdfLoadLogoBitmap(String uriOrPath) {
         if (pdfIsBlankValue(uriOrPath) || activity == null) {
             return null;
         }
+        try {
+            BitmapFactory.Options bounds = new BitmapFactory.Options();
+            bounds.inJustDecodeBounds = true;
+            decodeImageWithOptions(uriOrPath, bounds);
+            if (bounds.outWidth <= 0 || bounds.outHeight <= 0) {
+                return null;
+            }
+            int sample = 1;
+            while (Math.max(bounds.outWidth, bounds.outHeight) / (sample * 2) > 1600) {
+                sample *= 2;
+            }
+            BitmapFactory.Options opts = new BitmapFactory.Options();
+            opts.inSampleSize = sample;
+            return decodeImageWithOptions(uriOrPath, opts);
+        } catch (Throwable e) {
+            return null;
+        }
+    }
+
+    /* 按来源（content://、file://、裸路径）解码图片；opts 可带 inJustDecodeBounds/inSampleSize。 */
+    private Bitmap decodeImageWithOptions(String uriOrPath, BitmapFactory.Options opts) {
         try {
             if (uriOrPath.startsWith("content://") || uriOrPath.startsWith("android.resource://")) {
                 InputStream in = activity.getContentResolver().openInputStream(Uri.parse(uriOrPath));
@@ -8797,16 +8898,16 @@ public class IcuDashboardView extends View {
                     return null;
                 }
                 try {
-                    return BitmapFactory.decodeStream(in);
+                    return BitmapFactory.decodeStream(in, null, opts);
                 } finally {
                     in.close();
                 }
             }
             if (uriOrPath.startsWith("file://")) {
                 String path = Uri.parse(uriOrPath).getPath();
-                return TextUtils.isEmpty(path) ? null : BitmapFactory.decodeFile(path);
+                return TextUtils.isEmpty(path) ? null : BitmapFactory.decodeFile(path, opts);
             }
-            return BitmapFactory.decodeFile(uriOrPath);
+            return BitmapFactory.decodeFile(uriOrPath, opts);
         } catch (Exception e) {
             return null;
         }
