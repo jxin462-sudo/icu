@@ -1700,15 +1700,43 @@
           setTimeout(positionSendMenu, 0);
           return;
         }
-        /* 上一样本/下一样本：在 S.cases 全量列表中定位当前样本，切换选中后停留本页并刷新 */
+        /* 上一样本/下一样本：★ 2026-10-23 起按记录单来源分池、两池不互通 ——
+           回顾来源只走 S.historyCases（历史病例），护疗来源只走 S.cases（当前舱样本）；
+           锚点改为正在预览的病例（此前恒取 S.patient，回顾预览时会从护疗池起跳，
+           导致回顾页记录单能切到护疗页未结束样本的报告单） */
         var rkPrev = TT('recordPrev', '上一样本'), rkNext = TT('recordNext', '下一样本');
         if (rk === 'recordPrev' || rk === 'recordNext' || rk === 'p' || rk === '上一样本' || rk === 'n' || rk === '下一样本' || rk === rkPrev || rk === rkNext) {
           stop(e);
           var Tg3 = window.T || function (k, fb) { return fb; };
-          var curId = (S.patient && S.patient.caseId) || D.selCaseId || '';
+          var dir = (rk === 'recordPrev' || rk === 'p' || rk === '上一样本' || rk === rkPrev) ? -1 : 1;
+          var curId = (sheetPreviewCase && sheetPreviewCase.caseId) || (S.patient && S.patient.caseId) || D.selCaseId || '';
+          if (D.sheetFrom === 'review') {
+            /* 回顾池：只在历史病例中切换；不 patient_select（不扰动当前舱选中）、纯本地换预览对象 */
+            var hist = S.historyCases || [];
+            var hi = -1;
+            for (var hi2 = 0; hi2 < hist.length; hi2++) { if (hist[hi2] && hist[hi2].caseId === curId) { hi = hi2; break; } }
+            if (hi < 0 || hist.length < 2) { toast(Tg3('recordNoSwitch', '暂无可切换的样本')); return; }
+            var hn = hi + dir;
+            if (hn < 0) { toast(Tg3('recordFirstSample', '已经是第一个样本')); return; }
+            if (hn >= hist.length) { toast(Tg3('recordLastSample', '已经是最后一个样本')); return; }
+            var hc2 = hist[hn];
+            if (!hc2 || !hc2.caseId) { toast(Tg3('recordNoSwitch', '暂无可切换的样本')); return; }
+            /* 列表项是轻量序列化（无 sheetWaves/vitals），按需向原生取完整数据（同 openRecordSheetFor） */
+            try {
+              var nn2 = N();
+              var full2 = JSON.parse((nn2.caseSheetData && nn2.caseSheetData(hc2.caseId)) || '{}');
+              if (full2 && full2.caseId) hc2 = full2;
+            } catch (e2) { /* 保持列表项兜底 */ }
+            sheetPreviewCase = hc2;
+            D.selCaseId = hc2.caseId; // 立即更新，回顾列表选中行同步
+            if (D.sheet.foot) D.sheet.foot.time = localNowText(); // 检验时间按本次查看重取（同打开记录单）
+            syncD();
+            IcuApp.render();
+            return;
+          }
+          /* 护疗池：S.cases 内切换（原逻辑），天然跨不进回顾历史病例 */
           var curIdx = indexOfCase(curId);
           if (curIdx < 0 || !S.cases || S.cases.length < 2) { toast(Tg3('recordNoSwitch', '暂无可切换的样本')); return; }
-          var dir = (rk === 'recordPrev' || rk === 'p' || rk === '上一样本' || rk === rkPrev) ? -1 : 1;
           var nextIdx = curIdx + dir;
           if (nextIdx < 0) { toast(Tg3('recordFirstSample', '已经是第一个样本')); return; }
           if (nextIdx >= S.cases.length) { toast(Tg3('recordLastSample', '已经是最后一个样本')); return; }
