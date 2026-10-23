@@ -581,16 +581,20 @@
       }
       var tr = sheetPreviewCase ? (sheetPreviewCase.treatments || []) : (S.treatments || []);
       /* ★ 2026-10-13 V30：项目有数据（lastValue 非空）即使 enabled 被复位也自动勾选 */
+      /* ★ 2026-10-23 V81：会话跟踪类项目（红外/蓝光/雾化/负离子/紫外）优先显示累计使用时长（usage），
+         不再显示倒计时残留值；记录表时段列同显时长、平均/最高/最低改 "—"（倒计时采样值无意义） */
       D.sheet.proj = tr.slice(0, 6).map(function (t) {
-        var v = t.lastValue || '';
+        var v = t.usage || t.lastValue || '';
         var hasVal = v !== '' && v !== '--';
         return { on: (t.enabled || hasVal) ? 1 : 0, lab: t.itemName || '', val: v };
       });
       D.recordRows = tr.map(function (t, i) {
         // ★ 任务13：第4列「是否录入报告」读原生 TreatmentEntry.includeInReport（此前硬编码 ✗）
+        var use = t.usage || '';
         return [pad(i + 1), t.itemName || '', t.enabled ? '✓' : '✗',
           (t.includeInReport === false ? '✗' : '✓'),
-          (t.period || TT('openPeriod', '打开时段')), t.average || '--', t.high || '--', t.low || '--'];
+          (use || t.period || TT('openPeriod', '打开时段')),
+          (use ? '—' : (t.average || '--')), (use ? '—' : (t.high || '--')), (use ? '—' : (t.low || '--'))];
       });
     } catch (e) { /* noop */ }
   }

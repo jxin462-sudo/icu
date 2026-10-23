@@ -370,6 +370,57 @@ public class IcuDashboardView extends View {
         return "\u5168\u65f6\u6bb5";
     }
 
+    /* \u2605 2026-10-23 V81\uff1a\u4f1a\u8bdd\u8ddf\u8e2a\u7c7b\u6cbb\u7597\u9879\u7684\u4f7f\u7528\u65f6\u957f\u7edf\u8ba1 */
+    /** currentTimeText \u683c\u5f0f\uff08yyyy-MM-dd HH:mm:ss\uff09\u2192 \u6beb\u79d2\uff1b\u89e3\u6790\u5931\u8d25\u8fd4\u56de -1\u3002 */
+    private static long parseTimeTextMs(String text) {
+        if (TextUtils.isEmpty(text)) {
+            return -1;
+        }
+        try {
+            Date d = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault()).parse(text.trim());
+            return d == null ? -1 : d.getTime();
+        } catch (Exception ignored) {
+            return -1;
+        }
+    }
+
+    /** \u628a start\u2192end \u4e00\u6bb5\u4f1a\u8bdd\u7d2f\u52a0\u8fdb totalOnMs\uff08\u4efb\u4e00\u7aef\u89e3\u6790\u5931\u8d25\u6309 0 \u8ba1\uff0c\u4e0d\u6c61\u67d3\u7d2f\u8ba1\uff09\u3002 */
+    private static void accumulateOnSession(TreatmentEntry entry, String start, String end) {
+        if (entry == null) {
+            return;
+        }
+        long t0 = parseTimeTextMs(start);
+        long t1 = parseTimeTextMs(end);
+        if (t0 > 0 && t1 > t0) {
+            entry.totalOnMs += (t1 - t0);
+        }
+    }
+
+    /** \u4f1a\u8bdd\u8ddf\u8e2a\u7c7b\u6cbb\u7597\u9879\u7684\u7d2f\u8ba1\u4f7f\u7528\u65f6\u957f\u6587\u672c\uff08"35\u5206\u949f"/"1\u5c0f\u65f65\u5206\u949f"\uff09\uff1b\u4ece\u672a\u4f7f\u7528\u8fd4\u56de ""\u3002 */
+    private String sessionUsageText(TreatmentEntry entry) {
+        if (entry == null || !isSessionTrackedTreatment(entry.itemName)) {
+            return "";
+        }
+        long ms = entry.totalOnMs;
+        /* \u4ecd\u5728\u8fdb\u884c\u7684\u4f1a\u8bdd\u5b9e\u65f6\u8ba1\u5165\uff08endTime=="\u8fdb\u884c\u4e2d"\uff09 */
+        if ("\u8fdb\u884c\u4e2d".equals(entry.endTime) && !TextUtils.isEmpty(entry.startTime)) {
+            long t0 = parseTimeTextMs(entry.startTime);
+            long nowMs = System.currentTimeMillis();
+            if (t0 > 0 && nowMs > t0) {
+                ms += nowMs - t0;
+            }
+        }
+        if (ms <= 0) {
+            return "";
+        }
+        long min = Math.max(1L, Math.round(ms / 60000.0));
+        if (min >= 60) {
+            long h = min / 60, m = min % 60;
+            return m > 0 ? (h + "\u5c0f\u65f6" + m + "\u5206\u949f") : (h + "\u5c0f\u65f6");
+        }
+        return min + "\u5206\u949f";
+    }
+
     private boolean usesEnabledOnlyPeriod(TreatmentEntry entry) {
         if (entry == null || TextUtils.isEmpty(entry.itemName)) {
             return false;
@@ -653,6 +704,10 @@ public class IcuDashboardView extends View {
         String manualLowValue = "";
         String manualValue = "";
         String lastValue = "--";
+        /* ★ 2026-10-23 V81：会话跟踪类治疗项（红外/蓝光/雾化/负离子/紫外）累计使用时长毫秒——
+           开关关断边沿与结束护疗时累加，随病例持久化；记录单/记录表据此显示"使用时长"，
+           不再显示采样到的倒计时残留值 */
+        long totalOnMs = 0;
         float sum;
         float high = Float.NaN;
         float low = Float.NaN;
@@ -1117,6 +1172,13 @@ public class IcuDashboardView extends View {
                     entry.startTime = now;
                 }
                 entry.endTime = now;
+                /* ★ 2026-10-23 V81：关断边沿累加本段使用时长，并把显示值更新为累计使用时长
+                   （此前 lastValue 停留在采样到的倒计时残留值，记录单看不到"用了多久"） */
+                accumulateOnSession(entry, entry.startTime, now);
+                String use = sessionUsageText(entry);
+                if (!TextUtils.isEmpty(use)) {
+                    entry.lastValue = use;
+                }
             }
             entry.customPeriod = false;
             changed = true;
@@ -3290,6 +3352,8 @@ public class IcuDashboardView extends View {
             json.put("manualValue", buildTreatmentManualSummary(entry));
             json.put("lastValue", entry.lastValue);
             json.put("sampleCount", entry.sampleCount);
+            /* ★ 2026-10-23 V81：会话跟踪类治疗项的累计使用时长（非跟踪项为空串，H5/PDF 据此改显时长） */
+            json.put("usage", sessionUsageText(entry));
             json.put("period", treatmentPeriodDisplayText(entry));
             json.put("average", treatmentAverageText(entry));
             json.put("high", treatmentHighText(entry));
@@ -4623,6 +4687,7 @@ public class IcuDashboardView extends View {
             entry.customPeriod = false;
             entry.startTime = "";
             entry.endTime = "";
+            entry.totalOnMs = 0;   // ★ V81：新样本使用时长清零
             return;
         }
         entry.customPeriod = false;
@@ -4645,7 +4710,15 @@ public class IcuDashboardView extends View {
                     if (TextUtils.isEmpty(entry.startTime)) {
                         entry.startTime = now;
                     }
+                    /* ★ 2026-10-23 V81：只累加结束时刻仍在进行的会话（关断边沿已累计过的段落不重复累加） */
+                    if ("进行中".equals(entry.endTime) || TextUtils.isEmpty(entry.endTime)) {
+                        accumulateOnSession(entry, entry.startTime, now);
+                    }
                     entry.endTime = now;
+                    String use = sessionUsageText(entry);
+                    if (!TextUtils.isEmpty(use)) {
+                        entry.lastValue = use;
+                    }
                 }
                 entry.enabled = false;
                 entry.customPeriod = false;
@@ -4806,6 +4879,7 @@ public class IcuDashboardView extends View {
             entryJson.put("high", Float.isNaN(entry.high) ? JSONObject.NULL : entry.high);
             entryJson.put("low", Float.isNaN(entry.low) ? JSONObject.NULL : entry.low);
             entryJson.put("sampleCount", entry.sampleCount);
+            entryJson.put("totalOnMs", entry.totalOnMs);   // ★ V81：使用时长累计随病例持久化
             entries.put(entryJson);
         }
         item.put("entries", entries);
@@ -4889,6 +4963,7 @@ public class IcuDashboardView extends View {
                     entryJson.put("high", Float.isNaN(entry.high) ? JSONObject.NULL : entry.high);
                     entryJson.put("low", Float.isNaN(entry.low) ? JSONObject.NULL : entry.low);
                     entryJson.put("sampleCount", entry.sampleCount);
+                    entryJson.put("totalOnMs", entry.totalOnMs);   // ★ V81：使用时长累计随病例持久化
                     entries.put(entryJson);
                 }
                 item.put("entries", entries);
@@ -5133,6 +5208,7 @@ public class IcuDashboardView extends View {
             entry.high = entryJson.isNull("high") ? Float.NaN : (float) entryJson.optDouble("high", Float.NaN);
             entry.low = entryJson.isNull("low") ? Float.NaN : (float) entryJson.optDouble("low", Float.NaN);
             entry.sampleCount = entryJson.optInt("sampleCount", 0);
+            entry.totalOnMs = entryJson.optLong("totalOnMs", 0L);   // ★ V81
             applyManualStatOverrides(entry);
             entry.manualValue = buildTreatmentManualSummary(entry);
             patient.treatmentEntries.add(entry);
@@ -5303,6 +5379,7 @@ public class IcuDashboardView extends View {
                         entry.high = entryJson.isNull("high") ? Float.NaN : (float) entryJson.optDouble("high", Float.NaN);
                         entry.low = entryJson.isNull("low") ? Float.NaN : (float) entryJson.optDouble("low", Float.NaN);
                         entry.sampleCount = entryJson.optInt("sampleCount", 0);
+                        entry.totalOnMs = entryJson.optLong("totalOnMs", 0L);   // ★ V81
                         applyManualStatOverrides(entry);
                         entry.manualValue = buildTreatmentManualSummary(entry);
                         patient.treatmentEntries.add(entry);
@@ -8491,6 +8568,10 @@ public class IcuDashboardView extends View {
         for (int r = 0; r < rows; r++) {
             y += rowH;
             TreatmentEntry e = r < count ? entries.get(r) : null;
+            /* ★ 2026-10-23 V81：会话跟踪类治疗项（红外/蓝光/雾化/负离子/紫外）——时段列显累计使用时长，
+               平均/最高/最低是倒计时采样的无意义数值，显 "—"（与波形行同例） */
+            String usageText = e == null ? "" : sessionUsageText(e);
+            boolean showUsage = !TextUtils.isEmpty(usageText);
             x = left;
             for (int c = 0; c < headers.length; c++) {
                 RectF cell = new RectF(x, y, x + widths[c], y + rowH);
@@ -8506,10 +8587,10 @@ public class IcuDashboardView extends View {
                     if (e == null) { v = ""; }
                     else if (c == 0) { v = String.format(Locale.getDefault(), "%02d", r + 1); }
                     else if (c == 1) { v = e.itemName; }
-                    else if (c == 4) { v = treatmentPeriodDisplayText(e); }
-                    else if (c == 5) { v = treatmentAverageText(e); }
-                    else if (c == 6) { v = treatmentHighText(e); }
-                    else { v = treatmentLowText(e); }
+                    else if (c == 4) { v = showUsage ? usageText : treatmentPeriodDisplayText(e); }
+                    else if (c == 5) { v = showUsage ? "—" : treatmentAverageText(e); }
+                    else if (c == 6) { v = showUsage ? "—" : treatmentHighText(e); }
+                    else { v = showUsage ? "—" : treatmentLowText(e); }
                     if (v == null) { v = ""; }
                     if (c >= 4 && TextUtils.isEmpty(v)) { v = "--"; }
                     if (c == 1) {
@@ -9287,7 +9368,14 @@ public class IcuDashboardView extends View {
             }
             return value;
         }
-        return pdfEntryDurationText(entry);
+        return pdfEntryUsageOrDurationText(entry);
+    }
+
+    /* ★ 2026-10-23 V81：历史样本时长优先用累计使用时长（totalOnMs 逐段累加，不受
+       "结束护疗把 endTime 改写成结束时刻"影响）；无累计再回退 start/end 折算 */
+    private String pdfEntryUsageOrDurationText(TreatmentEntry entry) {
+        String use = sessionUsageText(entry);
+        return TextUtils.isEmpty(use) ? pdfEntryDurationText(entry) : use;
     }
 
     /** 历史样本的治疗时长：由条目 startTime/endTime（yyyy-MM-dd HH:mm:ss）折算分钟。 */
