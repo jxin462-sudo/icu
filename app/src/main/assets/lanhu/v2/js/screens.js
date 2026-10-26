@@ -713,18 +713,18 @@
       + '</div>';
   }
   function monitorBody(units) {
-    /* App 内只显示真实 AM4100 采样；未连接/采样未到用平线空态，不能用演示波形冒充患者数据。
-       桌面原型没有原生桥时仍保留演示动画，便于查看 UI。 */
+    /* 未连接监护蓝牙时保留虚拟滚动波形；连接成功后立即停用演示，
+       有真实 AM4100 采样就画真实波形，尚未收到采样则显示平线空态。
+       演示只用于监护页待机，数值仍为 --，记录单/报告不使用演示数据。 */
     var WL = D.waveLive || {};
     var live = !!D.monitorLive;
-    var nativeApp = !!(window.IcuNative && window.IcuNative.firstPhaseState);
     var flat = function (c, lab) {
       return '<div class="wave wave-flat"><svg viewBox="0 0 1448 289" preserveAspectRatio="none">'
         + '<line x1="0" y1="145" x2="1448" y2="145" stroke="' + c + '" stroke-width="2" opacity=".45"/></svg>'
         + '<div class="lab" style="color:' + c + '">' + lab + '</div></div>';
     };
     var wb = function (k, c, lab) {
-      if (!live) return nativeApp ? flat(c, lab) : P.waveBox(k, c, lab);
+      if (!live) return P.waveBox(k, c, lab);
       var s = WL[k];
       if (s && s.length > 1) return P.liveWaveBox(s, c, lab, k);
       return flat(c, lab);
