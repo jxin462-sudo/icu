@@ -1134,7 +1134,7 @@ public class IcuDashboardView extends View {
 
     void syncCurrentPatientMonitorSnapshot() {
         PatientCase patient = currentCase();
-        if (patient == null || !am4100Manager.hasVitals()) {
+        if (patient == null || !am4100Manager.hasMonitorData()) {
             return;
         }
         fillMonitorSnapshot(patient.monitorSnapshot);
@@ -1190,8 +1190,14 @@ public class IcuDashboardView extends View {
         }
     }
 
+    private boolean isTreatmentEnded(PatientCase patient) {
+        return patient != null && patient.treatmentStarted && !patient.pendingInitialEntry
+                && !TextUtils.isEmpty(patient.treatmentEndTime) && !"进行中".equals(patient.treatmentEndTime);
+    }
+
     private boolean blockPatientSwitchIfNeeded() {
-        if (am4100Manager.isConnected() && am4100Manager.hasVitals()) {
+        /* 已结束样本可以切换下一样本；监护仪仍连着不代表上一段治疗仍在进行。 */
+        if (!isTreatmentEnded(currentCase()) && am4100Manager.isConnected() && am4100Manager.hasMonitorData()) {
             Toast.makeText(activity, "实时监护已有数据，不能切换宠物", Toast.LENGTH_SHORT).show();
             return true;
         }
@@ -1596,6 +1602,42 @@ public class IcuDashboardView extends View {
             if (json.has("imgAfter")) {
                 patient.imgAfterUri = json.optString("imgAfter", "");
             }
+            /* 三波形编辑：JSONArray=真实采样，字符串=图片 URI（空串=明确移除）。
+               保留未提交的另外两路，数值点和 URI 长度均做服务端兜底限制。 */
+            JSONObject waveEdits = json.optJSONObject("waves");
+            if (waveEdits != null) {
+                JSONObject storedWaves = parseSheetWavesJson(patient.sheetWaves);
+                if (storedWaves == null) {
+                    storedWaves = new JSONObject();
+                }
+                String[] waveKeys = {"ecg", "pleth", "resp"};
+                for (String key : waveKeys) {
+                    if (!waveEdits.has(key)) {
+                        continue;
+                    }
+                    Object value = waveEdits.opt(key);
+                    if (value instanceof JSONArray) {
+                        JSONArray source = (JSONArray) value;
+                        JSONArray cleanWave = new JSONArray();
+                        for (int i = 0; i < source.length() && cleanWave.length() < 1500; i++) {
+                            double sample = source.optDouble(i, Double.NaN);
+                            if (!Double.isNaN(sample) && !Double.isInfinite(sample)) {
+                                cleanWave.put((int) Math.round(sample));
+                            }
+                        }
+                        storedWaves.put(key, cleanWave);
+                    } else if (value instanceof String) {
+                        String uri = ((String) value).trim();
+                        if (uri.length() > 2048) {
+                            return "保存失败：波形图片地址过长";
+                        }
+                        storedWaves.put(key, uri);
+                    } else {
+                        storedWaves.put(key, "");
+                    }
+                }
+                patient.sheetWaves = storedWaves.toString();
+            }
             // 治疗项目勾选 + 显示值（值写回 lastValue；开启采样项后续可能被实时采样覆盖）
             JSONArray proj = json.optJSONArray("proj");
             if (proj != null) {
@@ -1754,6 +1796,16 @@ public class IcuDashboardView extends View {
             createNewTreatmentRecord();
             invalidate();
             activity.openLanhuPatientEditorAfterNew();
+            return true;
+        }
+        if (action.startsWith("patient_delete_case_")) {
+            String caseId = action.substring("patient_delete_case_".length());
+            PatientCase patient = findPatientCase(bleManager.getCurrentZone(), caseId, -1);
+            if (patient == null) {
+                Toast.makeText(activity, "未找到要删除的样本", Toast.LENGTH_SHORT).show();
+            } else {
+                confirmDeletePatient(patient);
+            }
             return true;
         }
         if ("patient_delete".equals(action)) {
@@ -2115,7 +2167,8 @@ public class IcuDashboardView extends View {
         /* ★ 2026-10-23 V80：记录单「影像记录」手动插图入口（编辑态点图框 → SAF 选图，全员可用与记录单编辑一致） */
         if (action.startsWith("sheet_img_pick_")) {
             String which = action.substring("sheet_img_pick_".length());
-            if ("before".equals(which) || "after".equals(which)) {
+            if ("before".equals(which) || "after".equals(which)
+                    || "ecg".equals(which) || "pleth".equals(which) || "resp".equals(which)) {
                 activity.pickSheetImage(which);
             }
             return true;
@@ -4871,6 +4924,20 @@ public class IcuDashboardView extends View {
         }
     }
 
+    /** 手动波形图片 URI；只有字符串值才是图片，JSONArray 不能转成字符串误判。 */
+    private String sheetWaveImageUri(PatientCase patient, String key) {
+        JSONObject frozen = patient == null ? null : parseSheetWavesJson(patient.sheetWaves);
+        Object value = frozen == null ? null : frozen.opt(key);
+        return value instanceof String ? (String) value : "";
+    }
+
+    /** 编辑态 × 会写入空串；报告必须尊重这个明确清空，不能再回退到实时/历史采样。 */
+    private boolean sheetWaveExplicitlyCleared(PatientCase patient, String key) {
+        JSONObject frozen = patient == null ? null : parseSheetWavesJson(patient.sheetWaves);
+        Object value = frozen == null ? null : frozen.opt(key);
+        return value instanceof String && TextUtils.isEmpty(((String) value).trim());
+    }
+
     /** 记录单/PDF 取波形采样：优先冻结数据，其次实时快照。 */
     private List<Integer> sheetWaveSamples(PatientCase patient, String key) {
         if (patient == null) {
@@ -6853,9 +6920,10 @@ public class IcuDashboardView extends View {
             return;
         }
         // 已结束的记录（治疗结束时间已落为具体时间、且非待录入）不可重复开始护疗。
-        boolean alreadyEnded = !"进行中".equals(patient.treatmentEndTime) && !patient.pendingInitialEntry;
+        boolean alreadyEnded = isTreatmentEnded(patient)
+                || (!"进行中".equals(patient.treatmentEndTime) && !patient.pendingInitialEntry);
         if (alreadyEnded) {
-            Toast.makeText(activity, "该记录已结束，不能重复开始护疗", Toast.LENGTH_SHORT).show();
+            Toast.makeText(activity, "治疗已结束，不可重复开始", Toast.LENGTH_SHORT).show();
             return;
         }
         String now = currentTimeText();
@@ -6907,6 +6975,10 @@ public class IcuDashboardView extends View {
     }
 
     private void enterCarePage(PatientCase patient) {
+        if (isTreatmentEnded(patient)) {
+            Toast.makeText(activity, "治疗已结束，不可重复开始", Toast.LENGTH_SHORT).show();
+            return;
+        }
         if (patient != null) {
             String zone = zoneOfPatient(patient);
             PatientZoneState state = patientStateForZone(zone);
@@ -8751,20 +8823,23 @@ public class IcuDashboardView extends View {
         //   否则一律用该样本自身快照——避免给已结束样本打印时嵌入正在监护的其他患者的波形/数值。
         boolean pdfLive = pdfUseLiveMonitor(patient);
         drawPdfTemplateWave(canvas, pdfPaint, "\u3010\u5fc3\u7535\u56fe\u3011", 333, Color.rgb(55, 220, 92), 0,
+                sheetWaveImageUri(patient, "ecg"),
                 pdfWaveSamples(pdfLive ? am4100Manager.getEcgWaveSamples() : null, pdfLive ? am4100Manager.getHeartRateHistory() : null,
                         sheetWaveSamples(patient, "ecg"), patient.monitorSnapshot.heartRateHistory),
                 pdfFirstNonZero(pdfLive ? am4100Manager.getHeartRateValue() : 0,
-                        pdfVitalsNumber(patient.monitorSnapshot.heartRate)));
+                        pdfVitalsNumber(patient.monitorSnapshot.heartRate)), sheetWaveExplicitlyCleared(patient, "ecg"));
         drawPdfTemplateWave(canvas, pdfPaint, "\u3010\u8109\u640f\u6ce2\u5f62\u56fe\u3011", 387, Color.rgb(245, 74, 72), 1,
+                sheetWaveImageUri(patient, "pleth"),
                 pdfWaveSamples(pdfLive ? am4100Manager.getSpo2WaveSamples() : null, pdfLive ? am4100Manager.getSpo2History() : null,
                         sheetWaveSamples(patient, "pleth"), patient.monitorSnapshot.spo2History),
                 pdfFirstNonZero(pdfLive ? am4100Manager.getSpo2Value() : 0,
-                        pdfVitalsNumber(patient.monitorSnapshot.spo2)));
+                        pdfVitalsNumber(patient.monitorSnapshot.spo2)), sheetWaveExplicitlyCleared(patient, "pleth"));
         drawPdfTemplateWave(canvas, pdfPaint, "\u3010\u547c\u5438\u7387\u56fe\u3011", 441, Color.rgb(53, 176, 232), 2,
+                sheetWaveImageUri(patient, "resp"),
                 pdfWaveSamples(pdfLive ? am4100Manager.getRespWaveSamples() : null, pdfLive ? am4100Manager.getRespHistory() : null,
                         sheetWaveSamples(patient, "resp"), patient.monitorSnapshot.respHistory),
                 pdfFirstNonZero(pdfLive ? am4100Manager.getRespValue() : 0,
-                        pdfVitalsNumber(patient.monitorSnapshot.resp)));
+                        pdfVitalsNumber(patient.monitorSnapshot.resp)), sheetWaveExplicitlyCleared(patient, "resp"));
         drawPdfTemplateEnvironment(canvas, pdfPaint);
         drawPdfTemplateImageAlarm(canvas, pdfPaint, patient);
         drawPdfTemplateConclusion(canvas, pdfPaint, patient, org, createdAt);
@@ -9242,14 +9317,25 @@ public class IcuDashboardView extends View {
     }
 
     private void drawPdfTemplateWave(Canvas canvas, Paint pdfPaint, String label, float top, int color, int type,
-                                     List<Integer> samples, int numericValue) {
+                                     String imageUri, List<Integer> samples, int numericValue, boolean explicitlyCleared) {
         float labelLeft = 54;
         float boxLeft = 98;
         float boxRight = 568;
         float boxHeight = 48;
         pdfTextRight(canvas, pdfPaint, label, labelLeft + 34, top + 24, 10, Color.rgb(96, 101, 108), true);
         pdfRoundRect(canvas, pdfPaint, boxLeft, top, boxRight, top + boxHeight, 2, Color.BLACK, Color.TRANSPARENT, 0);
-        if (pdfHasWaveSamples(samples)) {
+        /* 手动图片优先于采样；即使图片日后读取失败也不拿另一条波形似的数据顶替。 */
+        if (!pdfIsBlankValue(imageUri)) {
+            Bitmap waveImage = pdfLoadLogoBitmap(imageUri);
+            if (waveImage != null) {
+                pdfPaint.setShader(null);
+                pdfPaint.setStyle(Paint.Style.FILL);
+                canvas.drawBitmap(waveImage, null, new RectF(boxLeft + 1, top + 1, boxRight - 1, top + boxHeight - 1), pdfPaint);
+                waveImage.recycle();
+            }
+            return;
+        }
+        if (!explicitlyCleared && pdfHasWaveSamples(samples)) {
             drawReportWave(canvas, boxLeft + 5, top + boxHeight / 2f, boxRight - 5, boxHeight * 0.34f,
                     color, type, samples, numericValue, 1.05f);
         }
@@ -9678,8 +9764,8 @@ public class IcuDashboardView extends View {
 
     /** ★ 2026-10-11 高危修复：仅被打印样本就是当前监护样本（且监护在线有数据）时才允许报告使用实时数据。 */
     private boolean pdfUseLiveMonitor(PatientCase patient) {
-        return patient != null && patient == currentCase()
-                && am4100Manager.isConnected() && am4100Manager.hasVitals();
+        return patient != null && patient == currentCase() && !isTreatmentEnded(patient)
+                && am4100Manager.isConnected() && am4100Manager.hasMonitorData();
     }
 
     /** 波形采样优先实时，其次病例快照。 */
