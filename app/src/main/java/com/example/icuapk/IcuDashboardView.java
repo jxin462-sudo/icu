@@ -962,6 +962,8 @@ public class IcuDashboardView extends View {
     private String cameraStreamUrl = "";
     private CameraPreviewHost cameraPreviewHost;
     private String currentLanhuPath = "";
+    private long respUnavailableSinceMs;
+    private boolean respUnavailableDiagnosticWritten;
     private final boolean[] monitorLimitEnabled = {true, true, true, true, true, true, true};
     private final float[] monitorLimitHigh = {120f, 140f, 90f, 120f, 100f, 38f, 40f};
     private final float[] monitorLimitLow = {60f, 90f, 60f, 60f, 94f, 35f, 8f};
@@ -1133,6 +1135,7 @@ public class IcuDashboardView extends View {
     }
 
     void syncCurrentPatientMonitorSnapshot() {
+        trackRespUnavailableDiagnostic();
         PatientCase patient = currentCase();
         if (patient == null || !am4100Manager.hasMonitorData()) {
             return;
@@ -1140,6 +1143,44 @@ public class IcuDashboardView extends View {
         fillMonitorSnapshot(patient.monitorSnapshot);
         // 同步检查实时报警阈值，越界时自动播放报警音
         checkMonitorAlarmThresholds();
+    }
+
+    /** 呼吸率持续无效时留存一次原始接收帧；不改协议判定，也不拿旧值冒充实时测量。 */
+    private void trackRespUnavailableDiagnostic() {
+        if (!am4100Manager.isConnected() || !"--".equals(am4100Manager.getRespText())) {
+            respUnavailableSinceMs = 0L;
+            respUnavailableDiagnosticWritten = false;
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (respUnavailableSinceMs == 0L) {
+            respUnavailableSinceMs = now;
+            return;
+        }
+        if (respUnavailableDiagnosticWritten || now - respUnavailableSinceMs < 15000L) {
+            return;
+        }
+        respUnavailableDiagnosticWritten = true;
+        StringBuilder recent = new StringBuilder();
+        List<String> logs = am4100Manager.getLogs();
+        int count = 0;
+        for (String line : logs) {
+            if (line == null || (!line.contains("AM4100 收到") && !line.contains("呼吸"))) {
+                continue;
+            }
+            if (recent.length() > 0) {
+                recent.append('\n');
+            }
+            recent.append(line);
+            if (++count >= 6) {
+                break;
+            }
+        }
+        appendDebugLog("WARN", "监护呼吸率无有效值", "已持续15秒；state="
+                + safeText(am4100Manager.getStateText()) + "；最近帧摘要="
+                + safeText(am4100Manager.getLastFrameSummary())
+                + "。以下原始日志用于核对 HR/RESP 状态位、帧长及是否被异常值检查拦截：\n"
+                + (recent.length() == 0 ? "（暂无接收日志）" : recent.toString()));
     }
 
     void syncCurrentTreatmentEntryStatesFromDevice() {
@@ -3366,20 +3407,12 @@ public class IcuDashboardView extends View {
             }
         }
         json.put("vitals", vitals);
-        /* ★ 2026-10-13 V30：优先用结束护疗时冻结的波形（重启后仍有数据），无冻结再回落实时缓冲 */
+        /* 记录单三路波形逐通道合并：有效冻结采样/手动图片优先，空数组回退该病例实时快照；
+           空串仍是编辑态 × 的明确清除，不能重新填回。 */
         if (light) {
             json.put("sheetWaves", new JSONObject());
         } else {
-            JSONObject sheetWaves = parseSheetWavesJson(patient.sheetWaves);
-            if (sheetWaves == null) {
-                synchronized (patient.monitorSnapshot) {
-                    sheetWaves = new JSONObject();
-                    sheetWaves.put("ecg", intListToJsonArray(patient.monitorSnapshot.ecgWaveSamples));
-                    sheetWaves.put("pleth", intListToJsonArray(patient.monitorSnapshot.spo2WaveSamples));
-                    sheetWaves.put("resp", intListToJsonArray(patient.monitorSnapshot.respWaveSamples));
-                }
-            }
-            json.put("sheetWaves", sheetWaves);
+            json.put("sheetWaves", sheetWavesToJson(patient));
         }
         return json;
     }
@@ -4891,14 +4924,11 @@ public class IcuDashboardView extends View {
                     patient.sheetVitals = arr.toString();
                 }
             }
-            if (TextUtils.isEmpty(patient.sheetWaves)
-                    && (!snap.ecgWaveSamples.isEmpty() || !snap.spo2WaveSamples.isEmpty() || !snap.respWaveSamples.isEmpty())) {
+            /* 旧病例可能已保存 {"ecg":[],...}；结束护疗时仍要按通道补齐真实采样，
+               否则本次能看到快照，重启后快照丢失又只剩空数组。手动图片/明确清除由合并逻辑保留。 */
+            if (!snap.ecgWaveSamples.isEmpty() || !snap.spo2WaveSamples.isEmpty() || !snap.respWaveSamples.isEmpty()) {
                 try {
-                    JSONObject waves = new JSONObject();
-                    waves.put("ecg", intListToJsonArray(snap.ecgWaveSamples));
-                    waves.put("pleth", intListToJsonArray(snap.spo2WaveSamples));
-                    waves.put("resp", intListToJsonArray(snap.respWaveSamples));
-                    patient.sheetWaves = waves.toString();
+                    patient.sheetWaves = sheetWavesToJson(patient).toString();
                 } catch (JSONException ignored) {
                 }
             }
@@ -4954,6 +4984,10 @@ public class IcuDashboardView extends View {
                 return out;
             }
         }
+        return sheetWaveSnapshotSamples(patient, key);
+    }
+
+    private List<Integer> sheetWaveSnapshotSamples(PatientCase patient, String key) {
         if ("ecg".equals(key)) {
             return patient.monitorSnapshot.ecgWaveSamples;
         }
@@ -4961,6 +4995,33 @@ public class IcuDashboardView extends View {
             return patient.monitorSnapshot.spo2WaveSamples;
         }
         return patient.monitorSnapshot.respWaveSamples;
+    }
+
+    /** H5 记录单使用的完整三波形；不能只因存在空冻结对象就跳过实时快照。 */
+    private JSONObject sheetWavesToJson(PatientCase patient) throws JSONException {
+        JSONObject waves = new JSONObject();
+        if (patient == null) {
+            return waves;
+        }
+        JSONObject frozen = parseSheetWavesJson(patient.sheetWaves);
+        synchronized (patient.monitorSnapshot) {
+            String[] keys = {"ecg", "pleth", "resp"};
+            for (String key : keys) {
+                Object stored = frozen == null ? null : frozen.opt(key);
+                if (stored instanceof String) {
+                    // 非空串是手动图片，空串是用户明确清除；两者都不回退实时数据。
+                    waves.put(key, stored);
+                    continue;
+                }
+                JSONArray frozenSamples = stored instanceof JSONArray ? (JSONArray) stored : null;
+                if (frozenSamples != null && frozenSamples.length() > 1) {
+                    waves.put(key, frozenSamples);
+                } else {
+                    waves.put(key, intListToJsonArray(sheetWaveSnapshotSamples(patient, key)));
+                }
+            }
+        }
+        return waves;
     }
 
     private JSONObject patientCaseToStorageJson(PatientCase patient) throws JSONException {

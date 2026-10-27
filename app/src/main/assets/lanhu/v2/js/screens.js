@@ -745,17 +745,17 @@
     const V = D.vitals || {};
     const hr = V.hr || '--', spo2 = V.spo2 || '--',
           pr = V.pr || '--', temp = V.temp || '--', rr = V.rr || '--';
-    /* ★ 任务22：血压条数据源 = BPM 血压仪（主机 BLE）。实时=自动模式(5min)、物理=手动单次，
-       数值都读 D.bpm（sys/dia + 平均压 mean）；on 高亮跟随 D.bpMode */
+    /* 血压 sys/dia 仍读 BPM 血压仪；平均压按模式分源：实时=AM4100 MAP，物理=BPM mean。
+       实时/物理键沿用既有自动/手动命令，on 高亮跟随 D.bpMode。 */
     const B = D.bpm || {};
     const bp = (B.sys && B.dia) ? (B.sys + '/' + B.dia) : '--/--';
-    const map = B.mean || '--';
     const bpMode = D.bpMode === 'physical' ? 'physical' : 'live';
+    const map = (bpMode === 'physical' ? B.mean : V.map) || '--';
     const bpSw = '<div class="bprow"><div class="bpsw"><button data-bpm="live"' + (bpMode === 'live' ? ' class="on"' : '') + '>' + T('live', '实时') + '</button>'
       + '<span class="arrow">⇄</span><button data-bpm="physical"' + (bpMode === 'physical' ? ' class="on"' : '') + '>' + T('physical', '物理') + '</button></div>'
-      + '<div class="avg">' + T('avgPressure', '平均压') + '：' + map + '</div></div>';
+      + '<div class="avg" data-bp-map>' + T('avgPressure', '平均压') + '：' + map + '</div></div>';
     const sets = [
-      [[T('monHr', '心率'), hr, 'v-ecg', u ? 'bpm' : '', '', 'hi'], ['', bp, 'v-ecg-lo', u ? 'mmHg' : '', '', 'lo', u ? bpSw : '<div class="bprow"><div class="avg">' + T('avgPressure', '平均压') + '：' + map + '</div></div>']],
+      [[T('monHr', '心率'), hr, 'v-ecg', u ? 'bpm' : '', '', 'hi'], ['', bp, 'v-ecg-lo', u ? 'mmHg' : '', '', 'lo', u ? bpSw : '<div class="bprow"><div class="avg" data-bp-map>' + T('avgPressure', '平均压') + '：' + map + '</div></div>']],
       [[T('monSpo2', '血氧'), spo2, 'v-pleth', u ? '%' : '', '', 'hi'], [T('monPr', '脉率'), pr, 'v-pleth-lo', u ? 'bpm' : '', '', 'lo']],
       [[T('monTemp', '体温'), temp, 'v-resp', u ? '℃' : '', '', 'hi'], [T('monRr', '呼吸率'), rr, 'v-resp-lo', u ? 'brpm' : '', '', 'lo']],
     ][row];

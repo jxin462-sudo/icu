@@ -134,6 +134,12 @@
       var key = el.getAttribute('data-vital');
       if (V[key] != null) el.textContent = V[key];
     });
+    var mapEl = document.querySelector('[data-bp-map]');
+    if (mapEl) {
+      var B = D.bpm || {};
+      var map = D.bpMode === 'physical' ? B.mean : V.map;
+      mapEl.textContent = TT('avgPressure', '平均压') + '：' + (map || '--');
+    }
     var WL = D.waveLive || {};
     var kinds = ['ecg', 'pleth', 'resp'], want = 0;
     for (var i = 0; i < kinds.length; i++) { var s = WL[kinds[i]]; if (s && s.length > 1) want++; }
@@ -529,7 +535,7 @@
       var pscan = S.printerScan || {};
       D.printerScan = { scanning: !!pscan.scanning, printers: Array.isArray(pscan.printers) ? pscan.printers : [] };
       /* ★ 任务22：BPM 血压仪（监护页「实时⇄物理」）。S.bpm 由原生 buildFirstPhaseStateJson 下发；
-         mode: 'manual'=物理 / 'auto'=实时，数值实时/物理同数据源（设备侧模式不同） */
+         mode: 'manual'=物理 / 'auto'=实时；sys/dia 始终读 BPM，平均压实时读 AM4100、物理读 BPM mean */
       var bpm = S.bpm || {};
       D.bpm = {
         sys: text(bpm.sys, ''), dia: text(bpm.dia, ''), mean: text(bpm.mean, ''),
