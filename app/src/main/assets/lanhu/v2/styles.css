@@ -246,7 +246,7 @@ input.inp::placeholder{color:var(--ink3)}
 .th-picker{position:fixed;inset:0;z-index:60;background:rgba(12,18,28,.45);display:flex;align-items:center;justify-content:center}
 .th-picker-box{width:560px;padding:24px;border-radius:12px;background:#fff;box-shadow:0 18px 50px rgba(0,0,0,.28)}
 .th-picker-hd{font-size:26px;color:var(--ink);margin-bottom:14px}
-.th-list{max-height:360px;overflow:auto;margin-bottom:8px}
+.th-list{max-height:360px;overflow:auto;margin-bottom:8px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;overflow-anchor:none}
 .th-row-dev{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;border-radius:8px;background:var(--card-2);color:var(--ink);font-size:22px;margin-bottom:10px;cursor:pointer}
 .th-row-dev i{font-style:normal;color:var(--ink3);font-size:19px}
 .th-row-dev:active{background:var(--rowsel)}
@@ -471,6 +471,10 @@ input.inp::placeholder{color:var(--ink3)}
 .wave-strip .cap{font-size:21px;color:var(--ink2);margin:4px 0 4px}
 .wave-strip .wp{height:88px;background:#000;border-radius:3px;overflow:hidden}
 .wave-strip .wp svg{width:100%;height:100%;display:block}
+.wave-strip .wp{position:relative}
+.wave-strip .wp.pickable{cursor:pointer;box-shadow:inset 0 0 0 2px #009dff}
+.wave-no-data{height:100%;display:flex;align-items:center;justify-content:center;color:#8b95a6;font-size:15px;background:#f4f7fa}
+.waveclear{position:absolute;top:1px;right:1px;width:22px;height:22px;line-height:20px;text-align:center;background:rgba(0,0,0,.62);color:#fff;border-radius:11px;font-size:16px;z-index:2}
 
 /* 记录单 · 版面压缩（对齐设计图「报告.png」下半部，需在 1920x996 内容带内完整呈现） */
 .sheet{padding:0 40px 12px}
@@ -744,7 +748,7 @@ input.inp::placeholder{color:var(--ink3)}
 input.logdate{border:none;font-family:inherit;outline:none}
 /* 蓝牙设备选择弹窗（主机/监护通用，2026-10-08） */
 .modal.blepick{width:900px}
-.modal.blepick .mbody{padding:26px 48px 30px;max-height:560px;overflow-y:auto}
+.modal.blepick .mbody{padding:26px 48px 30px;max-height:560px;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;overflow-anchor:none}
 .blelist{display:flex;flex-direction:column;gap:14px}
 .bledev{display:flex;align-items:center;justify-content:space-between;padding:20px 26px;border:1px solid #dde3ec;border-radius:14px;background:#f7f9fc;cursor:pointer}
 .bledev:active{background:#e8f0fe}

@@ -436,7 +436,7 @@
     window.__waveAnimKick = function () { if (!running) { running = true; last = 0; requestAnimationFrame(tick); } };
   })();
   /* ★ 2026-10-12：waveStrip 支持真实采样数据（data 数组）——记录单三条波形用
-     治疗结束前同一时间段的监护数据绘制；无数据时回退本地演示波形 */
+     治疗结束前同一时间段的监护数据绘制；无数据时明确显示空态 */
   function waveDataPath(data, w, h) {
     if (!data || data.length < 2) return '';
     var min = Infinity, max = -Infinity;
@@ -450,15 +450,25 @@
     }
     return pts.join(' ');
   }
-  function waveStrip(kind, color, cap, data) {
-    /* ★ 2026-10-13 V30：data 为字符串时按图片渲染（后续「波形替换为图片」入口直接给 URI 即可） */
-    if (typeof data === 'string' && data) {
-      return '<div class="wave-strip"><div class="cap">' + cap + '</div><div class="wp">'
-        + '<img src="' + data + '" style="width:100%;height:100%;object-fit:fill;display:block"/></div></div>';
+  function waveStrip(kind, color, cap, data, edit) {
+    var isImage = typeof data === 'string' && !!data;
+    var hasSamples = Array.isArray(data) && data.length >= 2;
+    var inner = '';
+    if (isImage) {
+      inner = '<img src="' + data + '" style="width:100%;height:100%;object-fit:fill;display:block" alt="">';
+    } else if (hasSamples) {
+      inner = '<svg viewBox="0 0 900 120" preserveAspectRatio="none">'
+        + '<polyline points="' + waveDataPath(data, 900, 120) + '" fill="none" stroke="' + color + '" stroke-width="3"/></svg>';
+    } else {
+      /* 记录单没有真实采样时保持空态，不能用演示波形冒充患者数据。 */
+      inner = '<div class="wave-no-data">' + T('waveNoData', '暂无真实波形数据') + '</div>';
     }
-    var points = (data && data.length >= 2) ? waveDataPath(data, 900, 120) : wavePath(kind, 900, 120);
-    return '<div class="wave-strip"><div class="cap">' + cap + '</div><div class="wp"><svg viewBox="0 0 900 120" preserveAspectRatio="none">'
-      + '<polyline points="' + points + '" fill="none" stroke="' + color + '" stroke-width="3"/></svg></div></div>';
+    var clear = edit && (isImage || hasSamples)
+      ? '<span class="waveclear" data-waveclear="' + kind + '">×</span>' : '';
+    return '<div class="wave-strip" data-wavekind="' + kind + '"><div class="cap">' + cap
+      + (edit ? ' · ' + T('sheetWaveHint', '点波形插入/更换图片') : '') + '</div>'
+      + '<div class="wp' + (edit ? ' pickable' : '') + '"' + (edit ? ' data-wavepick="' + kind + '"' : '') + '>'
+      + inner + clear + '</div></div>';
   }
 
   function fisheye(ts) {

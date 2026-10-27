@@ -51,7 +51,20 @@
   function render() {
     const sc = SCREENS[current];
     if (!sc) { current = 'splash'; return render(); }
+    /* 设备弹窗的兜底保护：个别主动 render（如切页恢复）仍可能重建 DOM，
+       至少把滚动位置带过去；常规扫描推送由 bridge 改为只更新设备行，不走这里。 */
+    const oldBleBox = root.querySelector('.modal.blepick .mbody');
+    const oldThermalPicker = root.querySelector('[data-th-picker]');
+    const oldThermalList = oldThermalPicker && !oldThermalPicker.hidden
+      ? oldThermalPicker.querySelector('[data-th-list]') : null;
+    const bleScrollTop = oldBleBox ? oldBleBox.scrollTop : 0;
+    const thermalScrollTop = oldThermalList ? oldThermalList.scrollTop : 0;
     root.innerHTML = sc.render();
+    const newBleBox = root.querySelector('.modal.blepick .mbody');
+    if (oldBleBox && newBleBox) newBleBox.scrollTop = bleScrollTop;
+    const newThermalPicker = root.querySelector('[data-th-picker]');
+    const newThermalList = newThermalPicker && newThermalPicker.querySelector('[data-th-list]');
+    if (oldThermalList && newThermalList) newThermalList.scrollTop = thermalScrollTop;
     hudPage.textContent = sc.name;
     drawer.querySelectorAll('a').forEach(function (a) { a.classList.toggle('on', a.dataset.id === current); });
     /* ★ 嵌入 App 后：渲染完成回调，桥接层据此注入实时数据 / 表单 */

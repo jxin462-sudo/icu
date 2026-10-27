@@ -34,6 +34,9 @@
   }
   /* 打开设备选择弹窗：开始扫描 + 置 D.blePick（'host'|'monitor'），扫描结果随 icu-native-state 自动刷新 */
   function openBlePick(target) {
+    /* 刚切页尚未收到状态推送时，prevScreen 可能还是旧页；打开时同步当前页，
+       避免下一次刷新把这次打开误判成切页并立即关掉弹窗。 */
+    prevScreen = IcuApp.current();
     D.blePick = target;
     bleAct(target, 'scan', '');
     IcuApp.render();
@@ -53,14 +56,14 @@
   /* ★ 2026-10-13 V31：多个 toast 同时出现时纵向堆叠（此前都钉在屏幕正中央，
      结束治疗瞬间「主机已连接」+「监护已连接」两个弹窗重叠在一起互相遮挡） */
   var toastLive = 0;
-  function toast(msg) {
+  function toast(msg, durationMs) {
     if (!msg) return;
     var el = document.createElement('div');
     var idx = toastLive++;
     el.style.cssText = 'position:fixed;left:50%;top:calc(50% + ' + (idx * 64) + 'px);transform:translate(-50%,-50%);background:rgba(0,0,0,.78);color:#fff;padding:18px 36px;border-radius:10px;font-size:24px;z-index:9999;white-space:nowrap';
     el.textContent = msg;
     document.body.appendChild(el);
-    setTimeout(function () { toastLive = Math.max(0, toastLive - 1); if (el.parentNode) el.parentNode.removeChild(el); }, 2000);
+    setTimeout(function () { toastLive = Math.max(0, toastLive - 1); if (el.parentNode) el.parentNode.removeChild(el); }, durationMs || 1000);
   }
 
   /* i18n 助手：window.T 未就绪时回退中文 */
@@ -77,6 +80,28 @@
   /* ★ 2026-10-14 V40：整页重渲染后立刻回填系统时钟，消除「时间先闪回占位符、下一秒才恢复」的数值闪烁 */
   function refillSysClock() { if (window.__tickSysClock) window.__tickSysClock(); if (window.IcuApp && IcuApp.current && IcuApp.current() === 'sending') positionSendMenu(); }
   var lastRenderAt = 0, renderTimer = 0, lastFullRenderAt = 0;
+  /* ★ 2026-10-27：设备选择弹窗打开时，扫描状态推送只更新弹窗里的设备行。
+     不能重建整页，否则 WebView 会销毁正在触摸的滚动容器并把列表带回顶部。 */
+  function patchDevicePickers() {
+    var patched = false;
+    if (D.blePick && window.IcuRefreshBlePick) {
+      patched = window.IcuRefreshBlePick() || patched;
+    }
+    var thermal = window.IcuThermal;
+    var thermalEl = document.querySelector('[data-th-picker]');
+    if (thermal && thermal.state && thermal.state.pickerOpen && thermalEl && !thermalEl.hidden) {
+      if (thermal.refreshPicker) thermal.refreshPicker();
+      patched = true;
+    }
+    return patched;
+  }
+  function renderNow() {
+    lastRenderAt = Date.now();
+    if (patchDevicePickers()) { refillSysClock(); return; }
+    lastFullRenderAt = lastRenderAt;
+    IcuApp.render();
+    refillSysClock();
+  }
   function scheduleRender() {
     /* ★ 2026-10-09 新建/编辑样本弹窗打开期间跳过后台重渲染：
        表单内容只存在于 DOM（未持久化到 S.patient），原生状态推送触发整页重绘
@@ -95,17 +120,26 @@
       return;
     }
     var now = Date.now();
-    if (now - lastRenderAt >= 120 && !renderTimer) { lastRenderAt = now; lastFullRenderAt = now; IcuApp.render(); refillSysClock(); return; }
+    if (now - lastRenderAt >= 120 && !renderTimer) { renderNow(); return; }
     if (renderTimer) return;
-    renderTimer = setTimeout(function () { renderTimer = 0; lastRenderAt = Date.now(); lastFullRenderAt = lastRenderAt; IcuApp.render(); refillSysClock(); }, 120);
+    renderTimer = setTimeout(function () { renderTimer = 0; renderNow(); }, 120);
   }
 
   /* ★ 2026-10-09：监护页实时波形"打点"刷新。
-     监护宝连接后原生 ≈8次/秒推 icu-native-state，每次都整页 innerHTML 重建太重——
-     波形卡顿、看起来像"不是实时的"。这里直接更新已上屏 polyline 的 points（平滑滚动），
-     体征数值/连接态等仍按 ≤1次/秒 整页刷新。
+     原生每帧同时刷新 polyline 与右侧体征数值，避免波形已更新而数值仍停留在上一秒。
      返回 true=本帧已用打点方式处理；false=结构缺失（平线占位/未上屏），需整页渲染。 */
   function patchLiveWaves() {
+    var V = D.vitals || {};
+    document.querySelectorAll('[data-vital]').forEach(function (el) {
+      var key = el.getAttribute('data-vital');
+      if (V[key] != null) el.textContent = V[key];
+    });
+    var mapEl = document.querySelector('[data-bp-map]');
+    if (mapEl) {
+      var B = D.bpm || {};
+      var map = D.bpMode === 'physical' ? B.mean : V.map;
+      mapEl.textContent = TT('avgPressure', '平均压') + '：' + (map || '--');
+    }
     var WL = D.waveLive || {};
     var kinds = ['ecg', 'pleth', 'resp'], want = 0;
     for (var i = 0; i < kinds.length; i++) { var s = WL[kinds[i]]; if (s && s.length > 1) want++; }
@@ -167,6 +201,7 @@
   var pendingNavAfterSave = null; // 保存后要跳的屏
   var splashTimer = null; // 开机动画自动跳转计时器
   var sheetPreviewCase = null; // 任务23：回顾页双击预览治疗记录单时覆盖 S.patient 的历史病例对象
+  var reviewSelCaseId = '';    // 回顾选中独立保存，不能被当前舱 S.patient 的周期推送覆盖
 
   function pad(n) { return (n < 10 ? '0' : '') + n; }
   function num(txt, def) { if (txt == null) return def; var m = String(txt).replace(/[^0-9.]/g, ''); return m === '' ? def : m; }
@@ -205,11 +240,10 @@
     if (!arr || !arr.length) return out;
     for (var i = 0; i < arr.length; i++) {
       var p = arr[i] || {};
-      /* ★ 2026-10-15 V48：状态列语义按用户定义 —— 未开治疗=''（新建未开始，currentTreatment 占位不算）、
-         已开始且结束时间=进行中 → ok(护疗中)；已开始且结束时间已落具体时刻 → err(已结束)。
-         不用 currentTreatment 判定：新建样本占位时它也为 true，会误显「护疗中」。 */
+      /* 未开始但已填写病症=待护疗；已开始按结束时间区分护疗中/已结束。 */
       var st = '';
       if (p.treatmentStarted) st = (p.treatmentEndTime && p.treatmentEndTime !== '进行中') ? 'err' : 'ok';
+      else if (String(p.disease || '').trim()) st = 'pending';
       out.push({
         caseId: p.caseId || '',
         no: p.caseNo || '', name: p.petName || '', sp: p.species || '',
@@ -240,7 +274,7 @@
       D.accountRole = S.accountRole || '';
       D.canSwitchZone = !!S.canSwitchZone;
       D.zone = S.zone || '';
-      /* ★ 任务18：蓝牙连接态（监护页波形门控）—— 未连蓝牙时默认演示波形，不再需要「演示数据」开关 */
+      /* 监护连接态驱动实时数据；App 未连接时显示空态，桌面原型才保留演示波形。 */
       D.bleConnected = !!(S.ble && S.ble.host && S.ble.host.connected);
       D.users = D.accounts.map(function (a) {
         return {
@@ -300,11 +334,17 @@
       var sip = S.sheetImgPick || {};
       if (sip.seq && sip.seq !== lastSheetImgPickSeq) {
         lastSheetImgPickSeq = sip.seq;
-        if (D.sheetEdit && sip.uri && (sip.which === 'before' || sip.which === 'after')) {
-          if (sip.which === 'before') D.sheetEdit.imgBefore = sip.uri;
-          else D.sheetEdit.imgAfter = sip.uri;
-          applySheetImgDom(sip.which, sip.uri);
-          toast(TT('sheetImgPicked', '图片已选择，保存后生效'));
+        if (D.sheetEdit && sip.uri) {
+          if (sip.which === 'before' || sip.which === 'after') {
+            if (sip.which === 'before') D.sheetEdit.imgBefore = sip.uri;
+            else D.sheetEdit.imgAfter = sip.uri;
+            applySheetImgDom(sip.which, sip.uri);
+            toast(TT('sheetImgPicked', '图片已选择，保存后生效'));
+          } else if (D.sheetEdit.waves && ['ecg', 'pleth', 'resp'].indexOf(sip.which) >= 0) {
+            D.sheetEdit.waves[sip.which] = sip.uri;
+            applySheetWaveDom(sip.which, sip.uri);
+            toast(TT('sheetImgPicked', '图片已选择，保存后生效'));
+          }
         }
       }
       /* ★ 2026-10-08 日志页：用户/操作日志（原生 userOpLog，倒序最新在前） */
@@ -343,8 +383,19 @@
          + 平板基础信息（关于页基础信息卡，原生 Build.* 真实值） */
       D.deviceProfile = S.deviceProfile || {};
       D.padInfo = S.padInfo || {};
-      // 当前选中的病例 caseId（用于表格行 sel 类）
-      D.selCaseId = (S.patient && S.patient.caseId) || '';
+      // 当前舱选中与回顾选中是两套上下文；历史病例不在 S.cases，不能每次都被 S.patient 覆盖。
+      var nativeSelCaseId = (S.patient && S.patient.caseId) || '';
+      var selScreen = IcuApp.current();
+      var reviewContext = selScreen === 'review' || selScreen === 'del-confirm'
+        || (selScreen === 'sending' && D.sendFrom !== 'care')
+        || (selScreen === 'printing' && D.printFrom !== 'care')
+        || (selScreen === 'record-sheet' && D.sheetFrom === 'review');
+      if (reviewContext) {
+        var reviewSelOk = (D.reviewRows || []).some(function (r) { return r.caseId && r.caseId === reviewSelCaseId; });
+        D.selCaseId = reviewSelOk ? reviewSelCaseId : '';
+      } else {
+        D.selCaseId = nativeSelCaseId;
+      }
 
       var h = S.host || {}, c = h.controls || {};
       // ★ V56b:补偿(校准)偏移应用到显示读数——仅影响界面呈现,不改设备原始值/不改下发。
@@ -484,7 +535,7 @@
       var pscan = S.printerScan || {};
       D.printerScan = { scanning: !!pscan.scanning, printers: Array.isArray(pscan.printers) ? pscan.printers : [] };
       /* ★ 任务22：BPM 血压仪（监护页「实时⇄物理」）。S.bpm 由原生 buildFirstPhaseStateJson 下发；
-         mode: 'manual'=物理 / 'auto'=实时，数值实时/物理同数据源（设备侧模式不同） */
+         mode: 'manual'=物理 / 'auto'=实时；sys/dia 始终读 BPM，平均压实时读 AM4100、物理读 BPM mean */
       var bpm = S.bpm || {};
       D.bpm = {
         sys: text(bpm.sys, ''), dia: text(bpm.dia, ''), mean: text(bpm.mean, ''),
@@ -567,8 +618,7 @@
       D.sheet.vitalsRows = (p.vitals || []).map(function (r) {
         return [r[0] || '', r[1] || '', r[2] || '', r[3] || '', r[4] || ''];
       });
-      /* ★ 2026-10-12：记录单三条波形用样本监护快照的尾部窗口数据（与生命体征记录同一时间段），
-         无数据时 H5 端回退演示波形 */
+      /* 记录单三条波形只使用样本真实采样或用户手动插入的图片，无数据保持空态。 */
       var sw = p.sheetWaves || {};
       /* ★ 2026-10-13 V30：波形值允许是图片 URI 字符串（替换图片场景），数组仍走采样点 */
       var waveVal = function (v) { return (typeof v === 'string') ? v : arrNums(v); };
@@ -627,10 +677,12 @@
   /* ★ 2026-10-11 中危修复③：发送页两种发送方式也带上目标样本住院号，供原生按号定位，
      避免 patient_select 被监护拦截后 H5 与原生选中不一致导致发错样本的报告 */
   function sendSelCaseNo() {
-    var c = (sheetPreviewCase && sheetPreviewCase.caseId) ? sheetPreviewCase : null;
-    if (!c && D.selCaseId) {
+    var c = null;
+    if (D.selCaseId) {
       c = (S.cases || []).filter(function (x) { return x && x.caseId === D.selCaseId; })[0] || null;
+      if (!c) c = (S.historyCases || []).filter(function (x) { return x && x.caseId === D.selCaseId; })[0] || null;
     }
+    if (!c && sheetPreviewCase && sheetPreviewCase.caseId) c = sheetPreviewCase;
     return (c && (c.caseNo || c.recordNo)) || '';
   }
   /* 治疗已结束 = 已开始过 + 结束时间为具体时刻（非「进行中」） */
@@ -719,6 +771,19 @@
     }
   }
 
+  /* 三个波形区域也只替换自身 DOM，避免选图/移除时冲掉记录单其他未保存输入。 */
+  function applySheetWaveDom(kind, data) {
+    var old = document.querySelector('.sheet .wave-strip[data-wavekind="' + kind + '"]');
+    if (!old || !window.P || !P.waveStrip) return;
+    var colors = { ecg: '#3dff6b', pleth: '#ff6b6b', resp: '#4aa3ff' };
+    var caps = {
+      ecg: TT('waveEcg', '【心电图】'), pleth: TT('wavePleth', '【脉搏波形图】'), resp: TT('waveResp', '【呼吸率图】')
+    };
+    var host = document.createElement('div');
+    host.innerHTML = P.waveStrip(kind, colors[kind], caps[kind], data, true);
+    if (host.firstChild) old.parentNode.replaceChild(host.firstChild, old);
+  }
+
   /* ★ 任务26a：记录单编辑态 —— 进入编辑：把 D.sheet 可编辑字段快照进 D.sheetEdit */
   function openSheetEdit() {
     var s = D.sheet || {};
@@ -734,7 +799,13 @@
       vitals: (s.vitalsRows || []).map(function (r) { return [r[0] || '', r[1] || '', r[2] || '', r[3] || '', r[4] || '']; }),
       /* ★ 2026-10-23 V80：影像记录图片 URI（空=未插入；保存写回病例，取消丢弃） */
       imgBefore: (s.imgs && s.imgs[0] && s.imgs[0].uri) || '',
-      imgAfter: (s.imgs && s.imgs[1] && s.imgs[1].uri) || ''
+      imgAfter: (s.imgs && s.imgs[1] && s.imgs[1].uri) || '',
+      /* 三波形同样暂存：数组=真实采样，字符串=手动图片 URI，空串=明确移除。 */
+      waves: {
+        ecg: typeof (s.waves || {}).ecg === 'string' ? s.waves.ecg : ((s.waves || {}).ecg || []).slice(),
+        pleth: typeof (s.waves || {}).pleth === 'string' ? s.waves.pleth : ((s.waves || {}).pleth || []).slice(),
+        resp: typeof (s.waves || {}).resp === 'string' ? s.waves.resp : ((s.waves || {}).resp || []).slice()
+      }
     };
     IcuApp.render();
   }
@@ -789,6 +860,7 @@
       if (err) { toast(err + TT('vrFix', '，请修改后再保存')); return; }
     }
     s.vitalsRows = rows;
+    var editedWaves = D.sheetEdit.waves || {};
     /* ★ #26c：落本地 —— 组装 payload 发原生，Java 侧写入病例并持久化到 SharedPreferences */
     var payload = {
       caseId: (sheetPreviewCase && sheetPreviewCase.caseId) || (S.patient && S.patient.caseId) || D.selCaseId || '',
@@ -801,8 +873,13 @@
       vitals: rows,
       /* ★ 2026-10-23 V80：影像图片随编辑保存落盘（has 语义，空串=移除） */
       imgBefore: D.sheetEdit.imgBefore || '',
-      imgAfter: D.sheetEdit.imgAfter || ''
+      imgAfter: D.sheetEdit.imgAfter || '',
+      waves: {
+        ecg: editedWaves.ecg || '', pleth: editedWaves.pleth || '', resp: editedWaves.resp || ''
+      }
     };
+    /* 同步回预览，保存后立即显示新图/真实采样（不等下一次原生推送）。 */
+    s.waves = payload.waves;
     /* 同步回 D.sheet.imgs，保存后立即按新图渲染（不等原生回推） */
     if (s.imgs && s.imgs[0]) s.imgs[0].uri = D.sheetEdit.imgBefore || '';
     if (s.imgs && s.imgs[1]) s.imgs[1].uri = D.sheetEdit.imgAfter || '';
@@ -1218,6 +1295,18 @@
     var cur = IcuApp.current();
     var n = N();
 
+    /* 已结束样本只读：禁止从任何入口再进状态/主控/监护/视频（含视频回放）。
+       「开始护疗」按钮例外，由下方按实际高亮样本判断，避免误用原生当前样本。 */
+    var navHit = e.target.closest('[data-go]');
+    var navTarget = navHit ? navHit.getAttribute('data-go') : '';
+    var treatmentTargets = ['status', 'control', 'monitor', 'monitor-unit', 'video', 'video-play'];
+    if (navHit && treatmentTargets.indexOf(navTarget) >= 0 && navHit.getAttribute('data-key') !== 'startCare'
+        && careEndedOK(S.patient)) {
+      stop(e);
+      toast(TT('careEndedNoRestart', '治疗已结束，不可重复开始'));
+      return;
+    }
+
     /* ★ 2026-10-09 教程页：槽位 选择/播放/清除（clear/pick 优先于 play，工具钮在槽位内部） */
     var tClear = e.target.closest('[data-tslot-clear]');
     if (tClear) { stop(e); act('tutorial_slot_clear_' + tClear.dataset.tslotClear); return; }
@@ -1290,7 +1379,8 @@
       if (e.target.closest('[data-blepick-rescan]')) {
         stop(e);
         bleAct(D.blePick, 'scan', '');
-        IcuApp.render();
+        /* 重新搜索也只刷新设备行，保留当前滚动位置与触摸手势 */
+        renderNow();
         return;
       }
       if (e.target.closest('[data-blepick-close]')) {
@@ -1517,27 +1607,31 @@
       return;
     }
 
-    // 表格行点击 → patient_select_<zone>_<index>（让"选中的样本"真实切换，编辑/开始护疗/删除作用于该行）
-    /* ★ 2026-10-10 #74：发送数据页也要能点行切换选中（勾选框随 sel 态翻转），此前漏了 'sending' */
+    // 表格行点击：当前舱样本同步原生选中；回顾历史样本只保存独立预览/打印选中态。
     if (cur === 'care' || cur === 'care-data' || cur === 'review' || cur === 'care-record' || cur === 'sending') {
       var trHit = e.target.closest('tr[data-caseid]');
       if (trHit && !e.target.closest('input')) {
         var cid = trHit.dataset.caseid;
+        if (!cid) return;
+        if (cur === 'review' || (cur === 'sending' && D.sendFrom !== 'care')) {
+          stop(e);
+          reviewSelCaseId = cid;
+          D.selCaseId = cid;
+          IcuApp.render();
+          return;
+        }
         var idx = indexOfCase(cid);
         if (idx >= 0 && S.zone) {
           act('patient_select_' + S.zone + '_' + idx);
-          // ★ 任务18：护理页/护理列表点行立即记录选中样本（供「编辑」按钮门禁用，无需等原生回推）
-          // ★ 2026-10-10 #74：发送页点行也立即置选中（护疗/回顾来源列表都能重选）
           if (cur === 'care' || cur === 'care-data' || cur === 'sending') { D.selCaseId = cid; }
           if (cur === 'sending') { stop(e); if (window.IcuApp) IcuApp.render(); return; }
-          // ★ 任务16(#5)：护疗记录页点行 → 选中后跳转到「治疗记录数据表」（11-1.png 表单页）
           if (cur === 'care-record') {
             stop(e);
-            D.selCaseId = cid;             // 立即高亮，不等原生回推
+            D.selCaseId = cid;
             IcuApp.go('record-data');
             return;
           }
-          // 不 stop，让 app.js 继续切 'sel' 视觉态
+          // 当前舱列表保留 app.js 的即时高亮，原生回推后再校准。
         }
       }
     }
@@ -1569,9 +1663,8 @@
           var scIdx = indexOfCase(sc.caseId);
           if (scIdx >= 0 && S.zone) { act('patient_select_' + S.zone + '_' + scIdx); }
           if (sc.treatmentStarted && sc.treatmentEndTime && sc.treatmentEndTime !== '进行中') {
-            /* ★ V15 ④：已结束的样本不重启治疗，但仍可进入状态/主控等页面查看 */
-            toast(TT('careEndedNoRestart', '该记录已结束，不能重复开始护疗'));
-            IcuApp.go('status');
+            /* 已结束样本只能查看记录/打印/导出，不再进入任何治疗功能页。 */
+            toast(TT('careEndedNoRestart', '治疗已结束，不可重复开始'));
             return;
           }
           /* ★ #79：不填病症不能开始护疗 */ if (sc && !String(sc.disease || sc.illness || '').trim()) { toast(TT('careNeedDisease', '请先填写病症再开始护疗')); return; }
@@ -1617,6 +1710,7 @@
           if (!rows.length) { stop(e); toast(Tg('reviewNoData', '暂无样本数据，无法执行该操作')); return; }
           var picked = rows.some(function (r) { return r.caseId && r.caseId === D.selCaseId; });
           if (!picked) { stop(e); toast(Tg('reviewNoSel', '请先选择一个样本')); return; }
+          reviewSelCaseId = D.selCaseId;
         }
         if (key === 'query') { /* 交给 app.js 跳 query */ return; }
         /* ★ 2026-10-10 #53：回顾页「打印」→ 打开选中样本的治疗记录单预览（选中校验由上方 needSel 门完成），真实打印在记录单页执行 */
@@ -1624,7 +1718,7 @@
         if (key === 'exportReport') { stop(e); /* ★ 2026-10-14 V40：文件助手/蓝牙选择列表移到「导出报告」点击弹出，不再直接调系统分享 */ sendingCard = null; D.sendFrom = 'review'; D.sendMenuHide = false; IcuApp.go('sending'); setTimeout(positionSendMenu, 0); return; }
         if (key === 'sendData') { stop(e); /* ★ V40：已置灰留二期（底栏 dis 不可点），保留逻辑兜底 */ sendingCard = null; D.sendFrom = 'review'; D.sendMenuHide = false; IcuApp.go('sending'); setTimeout(positionSendMenu, 0); return; }
         if (key === 'careRecord') { /* 交给 app.js */ return; }
-        if (key === 'del') { stop(e); act('patient_delete'); return; }
+        if (key === 'del') { stop(e); act('patient_delete_case_' + D.selCaseId); return; }
       }
     }
 
@@ -1702,6 +1796,23 @@
           IcuApp.render();
           return;
         }
+        /* 三波形可编辑：× 只清空当前波形；点区域调 SAF 选择图片替换。 */
+        var waveClear = e.target.closest('[data-waveclear]');
+        if (waveClear) {
+          stop(e);
+          var wk = waveClear.getAttribute('data-waveclear');
+          if (D.sheetEdit.waves && ['ecg', 'pleth', 'resp'].indexOf(wk) >= 0) {
+            D.sheetEdit.waves[wk] = '';
+            applySheetWaveDom(wk, '');
+          }
+          return;
+        }
+        var wavePick = e.target.closest('[data-wavepick]');
+        if (wavePick) {
+          stop(e);
+          act('sheet_img_pick_' + wavePick.getAttribute('data-wavepick'));
+          return;
+        }
         /* ★ 2026-10-23 V80：影像记录 —— × 移除（先于图框判断，× 在图框内）；点图框调 SAF 选图。
            两者都只改编辑暂存+原地 DOM，保存才随病例落盘、取消丢弃 */
         var imgClear = e.target.closest('.imgclear');
@@ -1735,7 +1846,7 @@
       if (rb) {
         var rk = rb.dataset.key || (function () { var rsp = rb.querySelector('span'); return rsp ? rsp.textContent : ''; })();
         /* ★ 任务26a：编辑 / 保存 / 取消（★ 2026-10-10 #54 修复：底栏实际 key 是 edit/cancel，此前只对 recordEdit/recordCancel 响应导致点击无反应） */
-        if (rk === 'recordEdit' || rk === 'edit') { stop(e); openSheetEdit(); toast(TT('sheetEditHint', '编辑模式：高亮区域可修改，完成后点保存')); return; }
+        if (rk === 'recordEdit' || rk === 'edit') { stop(e); openSheetEdit(); toast(TT('sheetEditHint', '编辑模式：高亮区域可修改，完成后点保存'), 2000); return; }
         if (rk === 'recordCancel' || rk === 'cancel') { stop(e); D.sheetEdit = null; IcuApp.render(); return; }
         if (rk === 'recordSave') { stop(e); saveSheetEdit(); return; }
         /* ★ V15 ⑤⑥：打印/导出按记录单来源（护疗/回顾）保持上下文；并把当前预览样本的住院号传给原生，
@@ -1787,6 +1898,7 @@
               if (full2 && full2.caseId) hc2 = full2;
             } catch (e2) { /* 保持列表项兜底 */ }
             sheetPreviewCase = hc2;
+            reviewSelCaseId = hc2.caseId;
             D.selCaseId = hc2.caseId; // 立即更新，回顾列表选中行同步
             if (D.sheet.foot) D.sheet.foot.time = localNowText(); // 检验时间按本次查看重取（同打开记录单）
             syncD();
@@ -1897,7 +2009,7 @@
       }
     }
 
-    /* ★ 任务18：常规页「演示数据」开关已移除（未连蓝牙时默认演示波形，见 syncD + monitorBody） */
+    /* ★ 任务18：常规页「演示数据」开关已移除；App 内未连接时显示真实空态。 */
 
     /* ★ 任务15(#12)：调试页第 6 个模块 —— 恢复出厂设置（二次确认）
        ★ 2026-09-30 用户确认：仅工程师可用，其余角色拦截 */
@@ -2196,8 +2308,26 @@
 
   /* ---------- 渲染后回调：注入实时数据 + 表单补丁 ---------- */
   var lastScreenLogged = '';
+  var lastSheetWaveDiagCase = '';
+  function sheetWaveDiagText(v) {
+    if (typeof v === 'string') return v ? '手动图片' : '明确清除';
+    if (!Array.isArray(v) || !v.length) return '0[--]';
+    var min = Infinity, max = -Infinity;
+    for (var i = 0; i < v.length; i++) { min = Math.min(min, v[i]); max = Math.max(max, v[i]); }
+    return v.length + '[' + min + '..' + max + ']';
+  }
+  function logSheetWaveDiagnostic(entered) {
+    var caseNo = String((D.sheet && D.sheet.no) || '');
+    if (!entered && caseNo === lastSheetWaveDiagCase) return;
+    lastSheetWaveDiagCase = caseNo;
+    var w = (D.sheet && D.sheet.waves) || {};
+    feLog('INFO', '记录单波形', 'caseNo=' + caseNo + ' ecg=' + sheetWaveDiagText(w.ecg)
+      + ' pleth=' + sheetWaveDiagText(w.pleth) + ' resp=' + sheetWaveDiagText(w.resp));
+  }
   function onRender(cur) {
-    if (cur !== lastScreenLogged) { lastScreenLogged = cur; feLog('INFO', 'screen', '→ ' + cur); }
+    var enteredScreen = cur !== lastScreenLogged;
+    if (enteredScreen) { lastScreenLogged = cur; feLog('INFO', 'screen', '→ ' + cur); }
+    if (cur === 'record-sheet') logSheetWaveDiagnostic(enteredScreen);
     // 离开启动页时清理自动跳转计时器（用户点击跳过）
     if (cur !== 'splash' && splashTimer) { clearTimeout(splashTimer); splashTimer = null; }
     // 把当前屏的会话标识同步显示
@@ -2259,6 +2389,7 @@
     if (!cid) return;
     /* ★ 2026-10-10 #62：记录来源页 —— 记录单顶栏高亮跟随来源（回顾→回顾，护疗→护疗），不再固定护疗 */
     D.sheetFrom = IcuApp.current();
+    if (D.sheetFrom === 'review') reviewSelCaseId = cid;
     var idx = indexOfCase(cid);
     if (idx >= 0 && S.zone) {
       sheetPreviewCase = null;
@@ -2365,7 +2496,7 @@
         }
       }, 5200);
       // 让顶栏时钟动起来（每 30s 刷一次时间显示）
-      setInterval(function () { if (!pendingEditor && !pendingNavAfterSave) { syncD(); var c = IcuApp.current(); if (c !== 'new-sample' && c !== 'query' && c !== 'login' && c !== 'splash' && c !== 'set-user-edit') { IcuApp.render(); refillSysClock(); } } }, 30000);
+      setInterval(function () { if (!pendingEditor && !pendingNavAfterSave) { syncD(); var c = IcuApp.current(); if (c !== 'new-sample' && c !== 'query' && c !== 'login' && c !== 'splash' && c !== 'set-user-edit') { scheduleRender(); refillSysClock(); } } }, 30000);
     } else {
       // 桌面浏览器预览：保持原型 splash
     }

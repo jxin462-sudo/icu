@@ -962,6 +962,8 @@ public class IcuDashboardView extends View {
     private String cameraStreamUrl = "";
     private CameraPreviewHost cameraPreviewHost;
     private String currentLanhuPath = "";
+    private long respUnavailableSinceMs;
+    private boolean respUnavailableDiagnosticWritten;
     private final boolean[] monitorLimitEnabled = {true, true, true, true, true, true, true};
     private final float[] monitorLimitHigh = {120f, 140f, 90f, 120f, 100f, 38f, 40f};
     private final float[] monitorLimitLow = {60f, 90f, 60f, 60f, 94f, 35f, 8f};
@@ -1133,13 +1135,52 @@ public class IcuDashboardView extends View {
     }
 
     void syncCurrentPatientMonitorSnapshot() {
+        trackRespUnavailableDiagnostic();
         PatientCase patient = currentCase();
-        if (patient == null || !am4100Manager.hasVitals()) {
+        if (patient == null || !am4100Manager.hasMonitorData()) {
             return;
         }
         fillMonitorSnapshot(patient.monitorSnapshot);
         // 同步检查实时报警阈值，越界时自动播放报警音
         checkMonitorAlarmThresholds();
+    }
+
+    /** 呼吸率持续无效时留存一次原始接收帧；不改协议判定，也不拿旧值冒充实时测量。 */
+    private void trackRespUnavailableDiagnostic() {
+        if (!am4100Manager.isConnected() || !"--".equals(am4100Manager.getRespText())) {
+            respUnavailableSinceMs = 0L;
+            respUnavailableDiagnosticWritten = false;
+            return;
+        }
+        long now = System.currentTimeMillis();
+        if (respUnavailableSinceMs == 0L) {
+            respUnavailableSinceMs = now;
+            return;
+        }
+        if (respUnavailableDiagnosticWritten || now - respUnavailableSinceMs < 15000L) {
+            return;
+        }
+        respUnavailableDiagnosticWritten = true;
+        StringBuilder recent = new StringBuilder();
+        List<String> logs = am4100Manager.getLogs();
+        int count = 0;
+        for (String line : logs) {
+            if (line == null || (!line.contains("AM4100 收到") && !line.contains("呼吸"))) {
+                continue;
+            }
+            if (recent.length() > 0) {
+                recent.append('\n');
+            }
+            recent.append(line);
+            if (++count >= 6) {
+                break;
+            }
+        }
+        appendDebugLog("WARN", "监护呼吸率无有效值", "已持续15秒；state="
+                + safeText(am4100Manager.getStateText()) + "；最近帧摘要="
+                + safeText(am4100Manager.getLastFrameSummary())
+                + "。以下原始日志用于核对 HR/RESP 状态位、帧长及是否被异常值检查拦截：\n"
+                + (recent.length() == 0 ? "（暂无接收日志）" : recent.toString()));
     }
 
     void syncCurrentTreatmentEntryStatesFromDevice() {
@@ -1190,8 +1231,14 @@ public class IcuDashboardView extends View {
         }
     }
 
+    private boolean isTreatmentEnded(PatientCase patient) {
+        return patient != null && patient.treatmentStarted && !patient.pendingInitialEntry
+                && !TextUtils.isEmpty(patient.treatmentEndTime) && !"进行中".equals(patient.treatmentEndTime);
+    }
+
     private boolean blockPatientSwitchIfNeeded() {
-        if (am4100Manager.isConnected() && am4100Manager.hasVitals()) {
+        /* 已结束样本可以切换下一样本；监护仪仍连着不代表上一段治疗仍在进行。 */
+        if (!isTreatmentEnded(currentCase()) && am4100Manager.isConnected() && am4100Manager.hasMonitorData()) {
             Toast.makeText(activity, "实时监护已有数据，不能切换宠物", Toast.LENGTH_SHORT).show();
             return true;
         }
@@ -1596,6 +1643,42 @@ public class IcuDashboardView extends View {
             if (json.has("imgAfter")) {
                 patient.imgAfterUri = json.optString("imgAfter", "");
             }
+            /* 三波形编辑：JSONArray=真实采样，字符串=图片 URI（空串=明确移除）。
+               保留未提交的另外两路，数值点和 URI 长度均做服务端兜底限制。 */
+            JSONObject waveEdits = json.optJSONObject("waves");
+            if (waveEdits != null) {
+                JSONObject storedWaves = parseSheetWavesJson(patient.sheetWaves);
+                if (storedWaves == null) {
+                    storedWaves = new JSONObject();
+                }
+                String[] waveKeys = {"ecg", "pleth", "resp"};
+                for (String key : waveKeys) {
+                    if (!waveEdits.has(key)) {
+                        continue;
+                    }
+                    Object value = waveEdits.opt(key);
+                    if (value instanceof JSONArray) {
+                        JSONArray source = (JSONArray) value;
+                        JSONArray cleanWave = new JSONArray();
+                        for (int i = 0; i < source.length() && cleanWave.length() < 1500; i++) {
+                            double sample = source.optDouble(i, Double.NaN);
+                            if (!Double.isNaN(sample) && !Double.isInfinite(sample)) {
+                                cleanWave.put((int) Math.round(sample));
+                            }
+                        }
+                        storedWaves.put(key, cleanWave);
+                    } else if (value instanceof String) {
+                        String uri = ((String) value).trim();
+                        if (uri.length() > 2048) {
+                            return "保存失败：波形图片地址过长";
+                        }
+                        storedWaves.put(key, uri);
+                    } else {
+                        storedWaves.put(key, "");
+                    }
+                }
+                patient.sheetWaves = storedWaves.toString();
+            }
             // 治疗项目勾选 + 显示值（值写回 lastValue；开启采样项后续可能被实时采样覆盖）
             JSONArray proj = json.optJSONArray("proj");
             if (proj != null) {
@@ -1754,6 +1837,16 @@ public class IcuDashboardView extends View {
             createNewTreatmentRecord();
             invalidate();
             activity.openLanhuPatientEditorAfterNew();
+            return true;
+        }
+        if (action.startsWith("patient_delete_case_")) {
+            String caseId = action.substring("patient_delete_case_".length());
+            PatientCase patient = findPatientCase(bleManager.getCurrentZone(), caseId, -1);
+            if (patient == null) {
+                Toast.makeText(activity, "未找到要删除的样本", Toast.LENGTH_SHORT).show();
+            } else {
+                confirmDeletePatient(patient);
+            }
             return true;
         }
         if ("patient_delete".equals(action)) {
@@ -2115,7 +2208,8 @@ public class IcuDashboardView extends View {
         /* ★ 2026-10-23 V80：记录单「影像记录」手动插图入口（编辑态点图框 → SAF 选图，全员可用与记录单编辑一致） */
         if (action.startsWith("sheet_img_pick_")) {
             String which = action.substring("sheet_img_pick_".length());
-            if ("before".equals(which) || "after".equals(which)) {
+            if ("before".equals(which) || "after".equals(which)
+                    || "ecg".equals(which) || "pleth".equals(which) || "resp".equals(which)) {
                 activity.pickSheetImage(which);
             }
             return true;
@@ -3313,20 +3407,12 @@ public class IcuDashboardView extends View {
             }
         }
         json.put("vitals", vitals);
-        /* ★ 2026-10-13 V30：优先用结束护疗时冻结的波形（重启后仍有数据），无冻结再回落实时缓冲 */
+        /* 记录单三路波形逐通道合并：有效冻结采样/手动图片优先，空数组或恒定旧冻结可回退该病例起伏快照；
+           空串仍是编辑态 × 的明确清除，不能重新填回。 */
         if (light) {
             json.put("sheetWaves", new JSONObject());
         } else {
-            JSONObject sheetWaves = parseSheetWavesJson(patient.sheetWaves);
-            if (sheetWaves == null) {
-                synchronized (patient.monitorSnapshot) {
-                    sheetWaves = new JSONObject();
-                    sheetWaves.put("ecg", intListToJsonArray(patient.monitorSnapshot.ecgWaveSamples));
-                    sheetWaves.put("pleth", intListToJsonArray(patient.monitorSnapshot.spo2WaveSamples));
-                    sheetWaves.put("resp", intListToJsonArray(patient.monitorSnapshot.respWaveSamples));
-                }
-            }
-            json.put("sheetWaves", sheetWaves);
+            json.put("sheetWaves", sheetWavesToJson(patient));
         }
         return json;
     }
@@ -4838,21 +4924,18 @@ public class IcuDashboardView extends View {
                     patient.sheetVitals = arr.toString();
                 }
             }
-            if (TextUtils.isEmpty(patient.sheetWaves)
-                    && (!snap.ecgWaveSamples.isEmpty() || !snap.spo2WaveSamples.isEmpty() || !snap.respWaveSamples.isEmpty())) {
+            /* 旧病例可能已保存空数组或恒定数组；结束护疗时仍按通道补齐同病例真实起伏采样。
+               手动图片/明确清除由合并逻辑保留，真实起伏的历史冻结仍优先。 */
+            if (!snap.ecgWaveSamples.isEmpty() || !snap.spo2WaveSamples.isEmpty() || !snap.respWaveSamples.isEmpty()) {
                 try {
-                    JSONObject waves = new JSONObject();
-                    waves.put("ecg", intListToJsonArray(snap.ecgWaveSamples));
-                    waves.put("pleth", intListToJsonArray(snap.spo2WaveSamples));
-                    waves.put("resp", intListToJsonArray(snap.respWaveSamples));
-                    patient.sheetWaves = waves.toString();
+                    patient.sheetWaves = sheetWavesToJson(patient).toString();
                 } catch (JSONException ignored) {
                 }
             }
             appendDebugLog("INFO", "记录单冻结", "caseNo=" + safeText(patient.caseNo)
-                    + " ecg=" + snap.ecgWaveSamples.size()
-                    + " pleth=" + snap.spo2WaveSamples.size()
-                    + " resp=" + snap.respWaveSamples.size()
+                    + " ecg=" + snap.ecgWaveSamples.size() + waveRangeSuffix(snap.ecgWaveSamples)
+                    + " pleth=" + snap.spo2WaveSamples.size() + waveRangeSuffix(snap.spo2WaveSamples)
+                    + " resp=" + snap.respWaveSamples.size() + waveRangeSuffix(snap.respWaveSamples)
                     + " hrHistory=" + snap.heartRateHistory.size()
                     + " sheetWaves=" + (TextUtils.isEmpty(patient.sheetWaves) ? "空" : "已冻结")
                     + " sheetVitals=" + (TextUtils.isEmpty(patient.sheetVitals) ? "空" : "已冻结"));
@@ -4871,22 +4954,86 @@ public class IcuDashboardView extends View {
         }
     }
 
-    /** 记录单/PDF 取波形采样：优先冻结数据，其次实时快照。 */
+    /** 手动波形图片 URI；只有字符串值才是图片，JSONArray 不能转成字符串误判。 */
+    private String sheetWaveImageUri(PatientCase patient, String key) {
+        JSONObject frozen = patient == null ? null : parseSheetWavesJson(patient.sheetWaves);
+        Object value = frozen == null ? null : frozen.opt(key);
+        return value instanceof String ? (String) value : "";
+    }
+
+    /** 编辑态 × 会写入空串；报告必须尊重这个明确清空，不能再回退到实时/历史采样。 */
+    private boolean sheetWaveExplicitlyCleared(PatientCase patient, String key) {
+        JSONObject frozen = patient == null ? null : parseSheetWavesJson(patient.sheetWaves);
+        Object value = frozen == null ? null : frozen.opt(key);
+        return value instanceof String && TextUtils.isEmpty(((String) value).trim());
+    }
+
+    /** 记录单/PDF 取波形采样：有效冻结数据优先；恒定旧冻结不妨碍同病例真实起伏快照。 */
     private List<Integer> sheetWaveSamples(PatientCase patient, String key) {
         if (patient == null) {
             return null;
         }
-        JSONObject frozen = parseSheetWavesJson(patient.sheetWaves);
-        if (frozen != null) {
-            JSONArray arr = frozen.optJSONArray(key);
-            if (arr != null && arr.length() > 1) {
-                ArrayList<Integer> out = new ArrayList<>(arr.length());
-                for (int i = 0; i < arr.length(); i++) {
-                    out.add(arr.optInt(i));
+        synchronized (patient.monitorSnapshot) {
+            List<Integer> snapshotSamples = sheetWaveSnapshotSamples(patient, key);
+            JSONObject frozen = parseSheetWavesJson(patient.sheetWaves);
+            if (frozen != null) {
+                JSONArray arr = frozen.optJSONArray(key);
+                if (arr != null && arr.length() > 1
+                        && (hasWaveVariation(arr) || !hasWaveVariation(snapshotSamples))) {
+                    ArrayList<Integer> out = new ArrayList<>(arr.length());
+                    for (int i = 0; i < arr.length(); i++) {
+                        out.add(arr.optInt(i));
+                    }
+                    return out;
                 }
-                return out;
+            }
+            return snapshotSamples;
+        }
+    }
+
+    private boolean hasWaveVariation(JSONArray samples) {
+        if (samples == null || samples.length() < 2) {
+            return false;
+        }
+        int first = samples.optInt(0);
+        for (int i = 1; i < samples.length(); i++) {
+            if (samples.optInt(i) != first) {
+                return true;
             }
         }
+        return false;
+    }
+
+    private boolean hasWaveVariation(List<Integer> samples) {
+        if (samples == null || samples.size() < 2) {
+            return false;
+        }
+        int first = samples.get(0);
+        for (int i = 1; i < samples.size(); i++) {
+            if (samples.get(i) != first) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String waveRangeSuffix(List<Integer> samples) {
+        if (samples == null || samples.isEmpty()) {
+            return "[--]";
+        }
+        int min = Integer.MAX_VALUE;
+        int max = Integer.MIN_VALUE;
+        for (Integer sample : samples) {
+            if (sample == null) {
+                continue;
+            }
+            min = Math.min(min, sample);
+            max = Math.max(max, sample);
+        }
+        return min == Integer.MAX_VALUE ? "[--]" : "[" + min + ".." + max + "]";
+    }
+
+    private List<Integer> sheetWaveSnapshotSamples(PatientCase patient, String key) {
         if ("ecg".equals(key)) {
             return patient.monitorSnapshot.ecgWaveSamples;
         }
@@ -4894,6 +5041,36 @@ public class IcuDashboardView extends View {
             return patient.monitorSnapshot.spo2WaveSamples;
         }
         return patient.monitorSnapshot.respWaveSamples;
+    }
+
+    /** H5 记录单使用的完整三波形；不能只因存在空冻结对象就跳过实时快照。 */
+    private JSONObject sheetWavesToJson(PatientCase patient) throws JSONException {
+        JSONObject waves = new JSONObject();
+        if (patient == null) {
+            return waves;
+        }
+        JSONObject frozen = parseSheetWavesJson(patient.sheetWaves);
+        synchronized (patient.monitorSnapshot) {
+            String[] keys = {"ecg", "pleth", "resp"};
+            for (String key : keys) {
+                Object stored = frozen == null ? null : frozen.opt(key);
+                if (stored instanceof String) {
+                    // 非空串是手动图片，空串是用户明确清除；两者都不回退实时数据。
+                    waves.put(key, stored);
+                    continue;
+                }
+                JSONArray frozenSamples = stored instanceof JSONArray ? (JSONArray) stored : null;
+                List<Integer> snapshotSamples = sheetWaveSnapshotSamples(patient, key);
+                if (frozenSamples != null && frozenSamples.length() > 1
+                        && (hasWaveVariation(frozenSamples) || !hasWaveVariation(snapshotSamples))) {
+                    // 有起伏的冻结数据保留；恒定的旧冻结仅在快照也无起伏时保留。
+                    waves.put(key, frozenSamples);
+                } else {
+                    waves.put(key, intListToJsonArray(snapshotSamples));
+                }
+            }
+        }
+        return waves;
     }
 
     private JSONObject patientCaseToStorageJson(PatientCase patient) throws JSONException {
@@ -6853,9 +7030,10 @@ public class IcuDashboardView extends View {
             return;
         }
         // 已结束的记录（治疗结束时间已落为具体时间、且非待录入）不可重复开始护疗。
-        boolean alreadyEnded = !"进行中".equals(patient.treatmentEndTime) && !patient.pendingInitialEntry;
+        boolean alreadyEnded = isTreatmentEnded(patient)
+                || (!"进行中".equals(patient.treatmentEndTime) && !patient.pendingInitialEntry);
         if (alreadyEnded) {
-            Toast.makeText(activity, "该记录已结束，不能重复开始护疗", Toast.LENGTH_SHORT).show();
+            Toast.makeText(activity, "治疗已结束，不可重复开始", Toast.LENGTH_SHORT).show();
             return;
         }
         String now = currentTimeText();
@@ -6907,6 +7085,10 @@ public class IcuDashboardView extends View {
     }
 
     private void enterCarePage(PatientCase patient) {
+        if (isTreatmentEnded(patient)) {
+            Toast.makeText(activity, "治疗已结束，不可重复开始", Toast.LENGTH_SHORT).show();
+            return;
+        }
         if (patient != null) {
             String zone = zoneOfPatient(patient);
             PatientZoneState state = patientStateForZone(zone);
@@ -7959,6 +8141,16 @@ public class IcuDashboardView extends View {
             }
             String[] parts = statusLine.split(" ");
             int code = parts.length > 1 ? Integer.parseInt(parts[1].trim()) : 0;
+            // 部分打印机会先回 100 Continue，再回正式 IPP 响应；100 没有响应体。
+            while (code == 100) {
+                discardHttpHeaders(in);
+                statusLine = readHttpStatusLine(in);
+                if (statusLine == null || !statusLine.startsWith("HTTP/")) {
+                    throw new IOException("IPP 响应无法解析");
+                }
+                parts = statusLine.split(" ");
+                code = parts.length > 1 ? Integer.parseInt(parts[1].trim()) : 0;
+            }
             if (code < 200 || code >= 300) {
                 throw new IppRefusedException("HTTP " + code + " @ " + path, code, -1);
             }
@@ -7983,17 +8175,41 @@ public class IcuDashboardView extends View {
         }
     }
 
-    /* ★ V82：跳过剩余 HTTP 头（空行结束）后读全部响应体（Connection: close；不关连接的按超时收尾）。 */
+    /* 读取 HTTP 头与响应体：支持 Content-Length、Transfer-Encoding: chunked 和连接关闭三种形式。
+       不能按旧逻辑直接把分块字节当 IPP 内容，否则 CRLF 会被误读成 status-code 0x0d0a。 */
     private byte[] readHttpResponseBody(java.io.InputStream in) throws IOException {
-        int prev = -1, prevprev = -1, prev3 = -1;
-        int c;
-        while ((c = in.read()) >= 0) {
-            if (prev3 == '\r' && prevprev == '\n' && prev == '\r' && c == '\n') {
+        java.util.Map<String, String> headers = new java.util.HashMap<>();
+        while (true) {
+            String line = readHttpHeaderLine(in);
+            if (line == null) {
+                throw new IOException("HTTP 响应头不完整");
+            }
+            if (line.isEmpty()) {
                 break;
             }
-            prev3 = prevprev;
-            prevprev = prev;
-            prev = c;
+            int colon = line.indexOf(':');
+            if (colon > 0) {
+                headers.put(line.substring(0, colon).trim().toLowerCase(Locale.US), line.substring(colon + 1).trim());
+            }
+        }
+        String transferEncoding = headers.get("transfer-encoding");
+        if (transferEncoding != null && transferEncoding.toLowerCase(Locale.US).contains("chunked")) {
+            return readChunkedHttpBody(in);
+        }
+        String contentLength = headers.get("content-length");
+        if (contentLength != null) {
+            final long remaining;
+            try {
+                remaining = Long.parseLong(contentLength);
+            } catch (NumberFormatException e) {
+                throw new IOException("HTTP Content-Length 无效: " + contentLength);
+            }
+            if (remaining < 0 || remaining > 16 * 1024 * 1024) {
+                throw new IOException("HTTP 响应体长度异常: " + remaining);
+            }
+            java.io.ByteArrayOutputStream respBuf = new java.io.ByteArrayOutputStream((int) remaining);
+            copyHttpBytes(in, respBuf, remaining);
+            return respBuf.toByteArray();
         }
         java.io.ByteArrayOutputStream respBuf = new java.io.ByteArrayOutputStream();
         byte[] buf = new byte[4096];
@@ -8003,9 +8219,79 @@ public class IcuDashboardView extends View {
                 respBuf.write(buf, 0, n);
             }
         } catch (java.net.SocketTimeoutException ignored) {
-            // 部分打印机不关连接，超时后已收到的数据照常解析
+            // 没有长度且打印机不关连接时，保留已经收到的完整响应供 IPP 解析。
         }
         return respBuf.toByteArray();
+    }
+
+    private byte[] readChunkedHttpBody(java.io.InputStream in) throws IOException {
+        java.io.ByteArrayOutputStream respBuf = new java.io.ByteArrayOutputStream();
+        while (true) {
+            String line = readHttpHeaderLine(in);
+            if (line == null) {
+                throw new IOException("HTTP 分块大小缺失");
+            }
+            int extension = line.indexOf(';');
+            String hex = (extension >= 0 ? line.substring(0, extension) : line).trim();
+            final long chunkSize;
+            try {
+                chunkSize = Long.parseLong(hex, 16);
+            } catch (NumberFormatException e) {
+                throw new IOException("HTTP 分块大小无效: " + hex);
+            }
+            if (chunkSize < 0 || chunkSize > 16 * 1024 * 1024 || respBuf.size() + chunkSize > 16 * 1024 * 1024) {
+                throw new IOException("HTTP 分块响应体过大");
+            }
+            if (chunkSize == 0) {
+                // 跳过可选 trailer 头。
+                discardHttpHeaders(in);
+                return respBuf.toByteArray();
+            }
+            copyHttpBytes(in, respBuf, chunkSize);
+            String terminator = readHttpHeaderLine(in);
+            if (terminator == null || !terminator.isEmpty()) {
+                throw new IOException("HTTP 分块结束符无效");
+            }
+        }
+    }
+
+    private void copyHttpBytes(java.io.InputStream in, java.io.ByteArrayOutputStream out, long count) throws IOException {
+        byte[] buf = new byte[4096];
+        long remaining = count;
+        while (remaining > 0) {
+            int n = in.read(buf, 0, (int) Math.min(buf.length, remaining));
+            if (n < 0) {
+                throw new java.io.EOFException("HTTP 响应体不完整");
+            }
+            out.write(buf, 0, n);
+            remaining -= n;
+        }
+    }
+
+    private String readHttpHeaderLine(java.io.InputStream in) throws IOException {
+        java.io.ByteArrayOutputStream line = new java.io.ByteArrayOutputStream();
+        int c;
+        while ((c = in.read()) >= 0) {
+            if (c == '\n') {
+                return new String(line.toByteArray(), "US-ASCII");
+            }
+            if (c != '\r') {
+                line.write(c);
+            }
+            if (line.size() > 8192) {
+                throw new IOException("HTTP 响应头行过长");
+            }
+        }
+        return line.size() == 0 ? null : new String(line.toByteArray(), "US-ASCII");
+    }
+
+    private void discardHttpHeaders(java.io.InputStream in) throws IOException {
+        while (true) {
+            String line = readHttpHeaderLine(in);
+            if (line == null || line.isEmpty()) {
+                return;
+            }
+        }
     }
 
     /* ★ V82：Get-Printer-Attributes 查 document-format-supported —— 在响应体里直接检索已知格式串
@@ -8751,20 +9037,23 @@ public class IcuDashboardView extends View {
         //   否则一律用该样本自身快照——避免给已结束样本打印时嵌入正在监护的其他患者的波形/数值。
         boolean pdfLive = pdfUseLiveMonitor(patient);
         drawPdfTemplateWave(canvas, pdfPaint, "\u3010\u5fc3\u7535\u56fe\u3011", 333, Color.rgb(55, 220, 92), 0,
+                sheetWaveImageUri(patient, "ecg"),
                 pdfWaveSamples(pdfLive ? am4100Manager.getEcgWaveSamples() : null, pdfLive ? am4100Manager.getHeartRateHistory() : null,
                         sheetWaveSamples(patient, "ecg"), patient.monitorSnapshot.heartRateHistory),
                 pdfFirstNonZero(pdfLive ? am4100Manager.getHeartRateValue() : 0,
-                        pdfVitalsNumber(patient.monitorSnapshot.heartRate)));
+                        pdfVitalsNumber(patient.monitorSnapshot.heartRate)), sheetWaveExplicitlyCleared(patient, "ecg"));
         drawPdfTemplateWave(canvas, pdfPaint, "\u3010\u8109\u640f\u6ce2\u5f62\u56fe\u3011", 387, Color.rgb(245, 74, 72), 1,
+                sheetWaveImageUri(patient, "pleth"),
                 pdfWaveSamples(pdfLive ? am4100Manager.getSpo2WaveSamples() : null, pdfLive ? am4100Manager.getSpo2History() : null,
                         sheetWaveSamples(patient, "pleth"), patient.monitorSnapshot.spo2History),
                 pdfFirstNonZero(pdfLive ? am4100Manager.getSpo2Value() : 0,
-                        pdfVitalsNumber(patient.monitorSnapshot.spo2)));
+                        pdfVitalsNumber(patient.monitorSnapshot.spo2)), sheetWaveExplicitlyCleared(patient, "pleth"));
         drawPdfTemplateWave(canvas, pdfPaint, "\u3010\u547c\u5438\u7387\u56fe\u3011", 441, Color.rgb(53, 176, 232), 2,
+                sheetWaveImageUri(patient, "resp"),
                 pdfWaveSamples(pdfLive ? am4100Manager.getRespWaveSamples() : null, pdfLive ? am4100Manager.getRespHistory() : null,
                         sheetWaveSamples(patient, "resp"), patient.monitorSnapshot.respHistory),
                 pdfFirstNonZero(pdfLive ? am4100Manager.getRespValue() : 0,
-                        pdfVitalsNumber(patient.monitorSnapshot.resp)));
+                        pdfVitalsNumber(patient.monitorSnapshot.resp)), sheetWaveExplicitlyCleared(patient, "resp"));
         drawPdfTemplateEnvironment(canvas, pdfPaint);
         drawPdfTemplateImageAlarm(canvas, pdfPaint, patient);
         drawPdfTemplateConclusion(canvas, pdfPaint, patient, org, createdAt);
@@ -9242,14 +9531,25 @@ public class IcuDashboardView extends View {
     }
 
     private void drawPdfTemplateWave(Canvas canvas, Paint pdfPaint, String label, float top, int color, int type,
-                                     List<Integer> samples, int numericValue) {
+                                     String imageUri, List<Integer> samples, int numericValue, boolean explicitlyCleared) {
         float labelLeft = 54;
         float boxLeft = 98;
         float boxRight = 568;
         float boxHeight = 48;
         pdfTextRight(canvas, pdfPaint, label, labelLeft + 34, top + 24, 10, Color.rgb(96, 101, 108), true);
         pdfRoundRect(canvas, pdfPaint, boxLeft, top, boxRight, top + boxHeight, 2, Color.BLACK, Color.TRANSPARENT, 0);
-        if (pdfHasWaveSamples(samples)) {
+        /* 手动图片优先于采样；即使图片日后读取失败也不拿另一条波形似的数据顶替。 */
+        if (!pdfIsBlankValue(imageUri)) {
+            Bitmap waveImage = pdfLoadLogoBitmap(imageUri);
+            if (waveImage != null) {
+                pdfPaint.setShader(null);
+                pdfPaint.setStyle(Paint.Style.FILL);
+                canvas.drawBitmap(waveImage, null, new RectF(boxLeft + 1, top + 1, boxRight - 1, top + boxHeight - 1), pdfPaint);
+                waveImage.recycle();
+            }
+            return;
+        }
+        if (!explicitlyCleared && pdfHasWaveSamples(samples)) {
             drawReportWave(canvas, boxLeft + 5, top + boxHeight / 2f, boxRight - 5, boxHeight * 0.34f,
                     color, type, samples, numericValue, 1.05f);
         }
@@ -9678,8 +9978,8 @@ public class IcuDashboardView extends View {
 
     /** ★ 2026-10-11 高危修复：仅被打印样本就是当前监护样本（且监护在线有数据）时才允许报告使用实时数据。 */
     private boolean pdfUseLiveMonitor(PatientCase patient) {
-        return patient != null && patient == currentCase()
-                && am4100Manager.isConnected() && am4100Manager.hasVitals();
+        return patient != null && patient == currentCase() && !isTreatmentEnded(patient)
+                && am4100Manager.isConnected() && am4100Manager.hasMonitorData();
     }
 
     /** 波形采样优先实时，其次病例快照。 */

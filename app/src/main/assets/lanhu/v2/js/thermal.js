@@ -205,23 +205,27 @@
   }
   function openPicker() {
     var p = document.querySelector('[data-th-picker]');
-    if (!p) return;
+    if (!p) return false;
     var list = p.querySelector('[data-th-list]');
     if (list) {
+      var oldScrollTop = list.scrollTop;
       var html = st.devices.map(function (d, i) {
         return '<div class="th-row-dev" data-th-dev="' + i + '">'
           + '<span>' + esc(d.name || '未知设备') + '</span>'
           + '<i>RSSI ' + (d.rssi === undefined ? '--' : d.rssi) + '</i></div>';
       }).join('') || '<div class="th-row-dev disabled">未搜索到设备</div>';
-      /* ★ V27：扫描结果流式推送时只在列表内容真正变化时才重建，根治弹窗闪烁 */
+      /* ★ V27：扫描结果流式推送时只在列表内容真正变化时才重建，根治弹窗闪烁
+         ★ 2026-10-27：即使 RSSI 变化必须更新，也保留列表滚动位置。 */
       if (list.getAttribute('data-th-html') !== html) {
         list.innerHTML = html;
         list.setAttribute('data-th-html', html);
+        list.scrollTop = st.devices.length ? oldScrollTop : 0;
       }
     }
-    if (!p.hidden) { st.pickerOpen = true; return; }  // 已开着就别重复触发显示
+    if (!p.hidden) { st.pickerOpen = true; return true; }  // 已开着就别重复触发显示
     p.hidden = false;
     st.pickerOpen = true;
+    return true;
   }
   function esc(s) {
     return String(s).replace(/[&<>"]/g, function (c) {
@@ -271,6 +275,8 @@
       if (st.logs.length > 60) st.logs.shift();
     },
     state: st,
+    /* 状态推送期间由桥接层调用：只刷新设备行，不重建状态页 */
+    refreshPicker: function () { return st.pickerOpen ? openPicker() : false; },
     /* 无真机时的自演示帧（供 headless 验证样式/渲染，不自动调用） */
     demoFrame: function () {
       var w = 32, h = 24, d = new Int16Array(w * h);

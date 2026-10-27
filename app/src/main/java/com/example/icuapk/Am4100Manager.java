@@ -329,6 +329,18 @@ public class Am4100Manager {
                 || !"--".equals(bodyTemp) || !"--".equals(earTemp);
     }
 
+    /** 纯波形帧也属于有效监护数据，不能只凭数值帧判断后再写入样本快照。 */
+    public boolean hasMonitorData() {
+        if (hasVitals()) {
+            return true;
+        }
+        synchronized (waveLock) {
+            return !ecgWaveSamples.isEmpty() || !spo2WaveSamples.isEmpty() || !respWaveSamples.isEmpty()
+                    || !heartRateHistory.isEmpty() || !spo2History.isEmpty() || !pulseRateHistory.isEmpty()
+                    || !bloodPressureHistory.isEmpty() || !temperatureHistory.isEmpty() || !respHistory.isEmpty();
+        }
+    }
+
     @SuppressLint("MissingPermission")
     public void requestEnableBluetooth(Activity activity) {
         if (bluetoothAdapter == null) {

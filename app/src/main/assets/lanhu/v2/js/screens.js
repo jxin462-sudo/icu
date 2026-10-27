@@ -103,8 +103,11 @@
   }
   window.dTxt = dTxt;
   window.dTxtReverse = dTxtReverse;
-  /* ★ V48：护疗/回顾列表「状态」列文本：护疗中 / 已结束 / 未开始（空） */
-  function stTxt(st) { return st === 'ok' ? T('stTreating', '护疗中') : (st === 'err' ? T('stEnded', '已结束') : ''); }
+  /* 护疗/回顾列表状态：待护疗 / 护疗中 / 已结束；新建但未填病症仍留空。 */
+  function stTxt(st) {
+    return st === 'ok' ? T('stTreating', '护疗中')
+      : (st === 'err' ? T('stEnded', '已结束') : (st === 'pending' ? T('stPending', '待护疗') : ''));
+  }
   /* 补充翻译键（菜单 / 控制 / 监护 / 视频 / 弹窗 / 补偿 / 关于 / 日志） */
   (function () {
     var more = {
@@ -158,7 +161,7 @@
         tuFixed: '固定教程', tuCustom: '自定义教程', tuInstall: '装机教程', tuGuide: '使用操作指南',
         tuManual: '临床应用手册', tuOther: '其他教程', tuMissing: '固定资源缺失，请联系厂家导入',
         tuOpenDoc: '打开文件', tuNetTodo: '网络更新通道待云平台二期开通',
-        careEndedNoRestart: '该记录已结束，不能重复开始护疗',
+        careEndedNoRestart: '治疗已结束，不可重复开始',
         careNeedDisease: '请先填写病症再开始护疗', careNotEndedPrint: '该样本治疗未结束，不能打印', careNotEndedSend: '该样本治疗未结束，不能发送数据',
         careNoSample: '暂无样本数据，无法开始治疗',
         /* ★ 任务14：打印页 */
@@ -173,7 +176,7 @@
         scanningPrinters: '正在扫描打印机…', noPrinterFound: '未发现打印机，请点「扫描」或手动输入地址',
         printerAdded: '已添加打印机', printerRenamed: '已更新打印机名称', printOk: '打印成功', printFail: '打印失败',
         /* ★ 2026-10-15 V48 */
-        printerSelected: '已选择该打印机', colStatus: '状态', stTreating: '护疗中', stEnded: '已结束',
+        printerSelected: '已选择该打印机', colStatus: '状态', stTreating: '护疗中', stEnded: '已结束', stPending: '待护疗',
         errAgeReq: '年龄不能为空', errSexReq: '请选择性别',
         disSpay: '绝育', disFracture: '骨折', disHeart: '心脏病', disInfant: '幼儿护理',
         sheetEditHint: '编辑模式：高亮区域可修改，完成后点保存'
@@ -228,7 +231,7 @@
         tuFixed: 'Built-in Tutorials', tuCustom: 'Custom Tutorials', tuInstall: 'Installation', tuGuide: 'Operation Guide',
         tuManual: 'Clinical Manual', tuOther: 'More Tutorials', tuMissing: 'Bundled resource missing — contact vendor',
         tuOpenDoc: 'Open', tuNetTodo: 'Online update channel planned for cloud phase 2',
-        careEndedNoRestart: 'This record has ended and cannot be restarted',
+        careEndedNoRestart: 'Treatment has ended and cannot be restarted',
         careNeedDisease: 'Enter the diagnosis before starting treatment', careNotEndedPrint: 'Treatment not finished; printing is unavailable', careNotEndedSend: 'Treatment not finished; sending is unavailable',
         /* ★ 任务14：打印页 */
         printerAvail: 'Available Printers', printerAddr: 'Printer Address', scanPrinter: 'Scan', printerAutoName: 'Printer',
@@ -241,7 +244,7 @@
         scanningPrinters: 'Scanning for printers…', noPrinterFound: 'No printer found; tap "Scan" or enter the address manually',
         printerAdded: 'Printer added', printerRenamed: 'Printer name updated', printOk: 'Print succeeded', printFail: 'Print failed',
         /* ★ 2026-10-15 V48 */
-        printerSelected: 'Printer selected', colStatus: 'Status', stTreating: 'Treating', stEnded: 'Ended',
+        printerSelected: 'Printer selected', colStatus: 'Status', stTreating: 'Treating', stEnded: 'Ended', stPending: 'Pending care',
         errAgeReq: 'Age is required', errSexReq: 'Please select sex',
         disSpay: 'Spay/Neuter', disFracture: 'Fracture', disHeart: 'Heart Disease', disInfant: 'Infant Care',
         sheetEditHint: 'Edit mode: highlighted areas are editable; tap Save when done'
@@ -266,6 +269,7 @@
         secImgs: '【影像记录】', secAlarm: '【报警事件】', secConcl: '【治疗结论】',
         sheetImgPh: '图片', sheetBefore: '治疗前', sheetAfter: '治疗后', sheetQrBox: '二维码', sheetQrView: '扫码查看原图',
         sheetImgHint: '点图片插入/更换', sheetImgPicked: '图片已选择，保存后生效',
+        sheetWaveHint: '点波形插入/更换图片', waveNoData: '暂无真实波形数据',
         sheetEffect: '治疗效果：', sheetAdvice: '出院建议：',
         conclGood: '良好', conclFair: '一般', conclPoor: '差',
         sheetLabDoc: '检验医师：', sheetLabTime: '检验时间：', sheetPage: '页码',
@@ -328,6 +332,7 @@
         secImgs: '[Images]', secAlarm: '[Alarm Events]', secConcl: '[Conclusion]',
         sheetImgPh: 'Photo', sheetBefore: 'Before', sheetAfter: 'After', sheetQrBox: 'QR Code', sheetQrView: 'Scan to view',
         sheetImgHint: 'Tap image to insert/replace', sheetImgPicked: 'Image selected, takes effect after save',
+        sheetWaveHint: 'Tap wave to insert/replace image', waveNoData: 'No real wave data',
         sheetEffect: 'Outcome: ', sheetAdvice: 'Discharge Advice: ',
         conclGood: 'Good', conclFair: 'Fair', conclPoor: 'Poor',
         sheetLabDoc: 'Lab Doctor: ', sheetLabTime: 'Lab Time: ', sheetPage: 'Page',
@@ -708,10 +713,9 @@
       + '</div>';
   }
   function monitorBody(units) {
-    /* ★ 任务19：未连蓝牙时默认演示波形（动态滚动，不显示平线）；标签固定英文（ECG/PLETH/RESP）
-       ★ 任务33/41：监护宝 BLE 一连接即退出演示模式，切到读取 AM4100 实时采样：
-       有采样画实时波形；已连接但采样未到画平线占位；只有未连接才跑演示滚动波形
-       ★ 2026-10-09：血氧/脉率行波形标签按用户要求由 SpO₂ 改为 PLETH */
+    /* 未连接监护蓝牙时保留虚拟滚动波形；连接成功后立即停用演示，
+       有真实 AM4100 采样就画真实波形，尚未收到采样则显示平线空态。
+       演示只用于监护页待机，数值仍为 --，记录单/报告不使用演示数据。 */
     var WL = D.waveLive || {};
     var live = !!D.monitorLive;
     var flat = function (c, lab) {
@@ -741,24 +745,26 @@
     const V = D.vitals || {};
     const hr = V.hr || '--', spo2 = V.spo2 || '--',
           pr = V.pr || '--', temp = V.temp || '--', rr = V.rr || '--';
-    /* ★ 任务22：血压条数据源 = BPM 血压仪（主机 BLE）。实时=自动模式(5min)、物理=手动单次，
-       数值都读 D.bpm（sys/dia + 平均压 mean）；on 高亮跟随 D.bpMode */
+    /* 血压 sys/dia 仍读 BPM 血压仪；平均压按模式分源：实时=AM4100 MAP，物理=BPM mean。
+       实时/物理键沿用既有自动/手动命令，on 高亮跟随 D.bpMode。 */
     const B = D.bpm || {};
     const bp = (B.sys && B.dia) ? (B.sys + '/' + B.dia) : '--/--';
-    const map = B.mean || '--';
     const bpMode = D.bpMode === 'physical' ? 'physical' : 'live';
+    const map = (bpMode === 'physical' ? B.mean : V.map) || '--';
     const bpSw = '<div class="bprow"><div class="bpsw"><button data-bpm="live"' + (bpMode === 'live' ? ' class="on"' : '') + '>' + T('live', '实时') + '</button>'
       + '<span class="arrow">⇄</span><button data-bpm="physical"' + (bpMode === 'physical' ? ' class="on"' : '') + '>' + T('physical', '物理') + '</button></div>'
-      + '<div class="avg">' + T('avgPressure', '平均压') + '：' + map + '</div></div>';
+      + '<div class="avg" data-bp-map>' + T('avgPressure', '平均压') + '：' + map + '</div></div>';
     const sets = [
-      [[T('monHr', '心率'), hr, 'v-ecg', u ? 'bpm' : '', '', 'hi'], ['', bp, 'v-ecg-lo', u ? 'mmHg' : '', '', 'lo', u ? bpSw : '<div class="bprow"><div class="avg">' + T('avgPressure', '平均压') + '：' + map + '</div></div>']],
+      [[T('monHr', '心率'), hr, 'v-ecg', u ? 'bpm' : '', '', 'hi'], ['', bp, 'v-ecg-lo', u ? 'mmHg' : '', '', 'lo', u ? bpSw : '<div class="bprow"><div class="avg" data-bp-map>' + T('avgPressure', '平均压') + '：' + map + '</div></div>']],
       [[T('monSpo2', '血氧'), spo2, 'v-pleth', u ? '%' : '', '', 'hi'], [T('monPr', '脉率'), pr, 'v-pleth-lo', u ? 'bpm' : '', '', 'lo']],
       [[T('monTemp', '体温'), temp, 'v-resp', u ? '℃' : '', '', 'hi'], [T('monRr', '呼吸率'), rr, 'v-resp-lo', u ? 'brpm' : '', '', 'lo']],
     ][row];
-    return '<div class="vitals">' + sets.map(function (b) {
+    const vitalKeys = [['hr', ''], ['spo2', 'pr'], ['temp', 'rr']][row];
+    return '<div class="vitals">' + sets.map(function (b, bi) {
+      var vitalKey = vitalKeys[bi];
       return '<div class="v ' + (b[5] || '') + '">'
         + (b[6] ? b[6] : (b[0] ? '<div class="vt ' + b[2] + '">' + b[0] + '</div>' : '<div class="vt"></div>'))
-        + '<div class="vv ' + b[2] + '"><span>' + b[1] + '</span>' + (b[3] ? '<span class="u">' + b[3] + '</span>' : '') + '</div>'
+        + '<div class="vv ' + b[2] + '"><span' + (vitalKey ? ' data-vital="' + vitalKey + '"' : '') + '>' + b[1] + '</span>' + (b[3] ? '<span class="u">' + b[3] + '</span>' : '') + '</div>'
         + (b[4] ? '<div class="sub">' + b[4] + '</div>' : '') + '</div>';
     }).join('') + '</div>';
   }
@@ -1075,12 +1081,11 @@
         if (!vr.length) { for (let i = 0; i < 4; i++) vs += '<tr><td>&nbsp;</td><td></td><td></td><td></td><td></td></tr>'; }
         vs += '</table>';
       }
-      /* 三条波形（对齐设计图：心电图 / 脉搏波形图 / 呼吸率图）
-         ★ 2026-10-12：优先用样本监护快照尾部窗口真实数据（与上方生命体征记录同一时间段），无数据回退演示波形 */
-      const sheetWaves = D.sheet.waves || {};
-      const ws = P.waveStrip('ecg', '#3dff6b', T('waveEcg', '【心电图】'), sheetWaves.ecg)
-        + P.waveStrip('pleth', '#ff6b6b', T('wavePleth', '【脉搏波形图】'), sheetWaves.pleth)
-        + P.waveStrip('resp', '#4aa3ff', T('waveResp', '【呼吸率图】'), sheetWaves.resp);
+      /* 三条波形：真实采样或手动图片；编辑态使用独立暂存，取消不会污染原病例。 */
+      const sheetWaves = ed ? (ed.waves || {}) : (D.sheet.waves || {});
+      const ws = P.waveStrip('ecg', '#3dff6b', T('waveEcg', '【心电图】'), sheetWaves.ecg, !!ed)
+        + P.waveStrip('pleth', '#ff6b6b', T('wavePleth', '【脉搏波形图】'), sheetWaves.pleth, !!ed)
+        + P.waveStrip('resp', '#4aa3ff', T('waveResp', '【呼吸率图】'), sheetWaves.resp, !!ed);
       /* 【环境参数】舱内温度 / 湿度 / CO₂浓度 / 氧浓度 */
       const env = '<div class="sheet-env">' + s.env.map(function (e, i) {
         if (ed) {
@@ -1407,22 +1412,44 @@
   /* p20 设置·连接 */
   /* ★ 2026-10-08 蓝牙设备选择弹窗：主机/监护分开（D.blePick='host'|'monitor'）
      数据源 S.host.devices / S.ble.monitor.devices（原生扫描实时推送），点行即连接 */
-  function blePickModal() {
-    if (!D.blePick) return '';
+  function blePickDevices() {
     const isHost = D.blePick === 'host';
     const st = window.S || {};
     const ch = isHost ? (st.host || (st.ble && st.ble.host) || {}) : ((st.ble && st.ble.monitor) || {});
-    const devs = Array.isArray(ch.devices) ? ch.devices : [];
-    const title = isHost ? T('blePickHost', '选择主机设备') : T('blePickMon', '选择监护设备');
-    const rows = devs.length
+    return Array.isArray(ch.devices) ? ch.devices : [];
+  }
+  function bleDeviceRows(devs) {
+    return devs.length
       ? devs.map(function (d) {
         return '<div class="bledev" data-bledev="' + esc(d.deviceId || d.id || '') + '">'
           + '<span class="bn">' + esc(d.deviceName || d.name || '--') + '</span>'
           + '<span class="br">RSSI ' + esc(d.rssi == null ? '--' : d.rssi) + '</span></div>';
       }).join('')
       : '<div class="logempty">' + T('bleScanning', '正在搜索附近设备…') + '</div>';
+  }
+  /* ★ 2026-10-27：扫描推送只更新列表内容，不重建整个弹窗/页面。
+     保留滚动容器及其 scrollTop，避免用户向下滑动时被下一次扫描刷新拉回顶部。 */
+  function refreshBlePickModal() {
+    if (!D.blePick) return false;
+    const list = document.querySelector('.modal.blepick .blelist');
+    if (!list) return false;
+    const scrollBox = list.closest('.mbody') || list;
+    const oldScrollTop = scrollBox.scrollTop;
+    const devs = blePickDevices();
+    const html = bleDeviceRows(devs);
+    if (list.getAttribute('data-ble-html') !== html) {
+      list.innerHTML = html;
+      list.setAttribute('data-ble-html', html);
+      scrollBox.scrollTop = devs.length ? oldScrollTop : 0;
+    }
+    return true;
+  }
+  window.IcuRefreshBlePick = refreshBlePickModal;
+  function blePickModal() {
+    if (!D.blePick) return '';
+    const title = D.blePick === 'host' ? T('blePickHost', '选择主机设备') : T('blePickMon', '选择监护设备');
     return P.mask('<div class="modal blepick"><div class="mhead">' + title + '</div>'
-      + '<div class="mbody"><div class="blelist">' + rows + '</div></div>'
+      + '<div class="mbody"><div class="blelist">' + bleDeviceRows(blePickDevices()) + '</div></div>'
       + '<div class="mfoot"><div class="btn" data-blepick-rescan>' + T('bleRescan', '重新搜索') + '</div>'
       + '<div class="btn primary" data-blepick-close>' + T('cancel', '取消') + '</div></div></div>');
   }
