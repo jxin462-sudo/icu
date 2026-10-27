@@ -34,6 +34,9 @@
   }
   /* 打开设备选择弹窗：开始扫描 + 置 D.blePick（'host'|'monitor'），扫描结果随 icu-native-state 自动刷新 */
   function openBlePick(target) {
+    /* 刚切页尚未收到状态推送时，prevScreen 可能还是旧页；打开时同步当前页，
+       避免下一次刷新把这次打开误判成切页并立即关掉弹窗。 */
+    prevScreen = IcuApp.current();
     D.blePick = target;
     bleAct(target, 'scan', '');
     IcuApp.render();
@@ -77,6 +80,28 @@
   /* ★ 2026-10-14 V40：整页重渲染后立刻回填系统时钟，消除「时间先闪回占位符、下一秒才恢复」的数值闪烁 */
   function refillSysClock() { if (window.__tickSysClock) window.__tickSysClock(); if (window.IcuApp && IcuApp.current && IcuApp.current() === 'sending') positionSendMenu(); }
   var lastRenderAt = 0, renderTimer = 0, lastFullRenderAt = 0;
+  /* ★ 2026-10-27：设备选择弹窗打开时，扫描状态推送只更新弹窗里的设备行。
+     不能重建整页，否则 WebView 会销毁正在触摸的滚动容器并把列表带回顶部。 */
+  function patchDevicePickers() {
+    var patched = false;
+    if (D.blePick && window.IcuRefreshBlePick) {
+      patched = window.IcuRefreshBlePick() || patched;
+    }
+    var thermal = window.IcuThermal;
+    var thermalEl = document.querySelector('[data-th-picker]');
+    if (thermal && thermal.state && thermal.state.pickerOpen && thermalEl && !thermalEl.hidden) {
+      if (thermal.refreshPicker) thermal.refreshPicker();
+      patched = true;
+    }
+    return patched;
+  }
+  function renderNow() {
+    lastRenderAt = Date.now();
+    if (patchDevicePickers()) { refillSysClock(); return; }
+    lastFullRenderAt = lastRenderAt;
+    IcuApp.render();
+    refillSysClock();
+  }
   function scheduleRender() {
     /* ★ 2026-10-09 新建/编辑样本弹窗打开期间跳过后台重渲染：
        表单内容只存在于 DOM（未持久化到 S.patient），原生状态推送触发整页重绘
@@ -95,9 +120,9 @@
       return;
     }
     var now = Date.now();
-    if (now - lastRenderAt >= 120 && !renderTimer) { lastRenderAt = now; lastFullRenderAt = now; IcuApp.render(); refillSysClock(); return; }
+    if (now - lastRenderAt >= 120 && !renderTimer) { renderNow(); return; }
     if (renderTimer) return;
-    renderTimer = setTimeout(function () { renderTimer = 0; lastRenderAt = Date.now(); lastFullRenderAt = lastRenderAt; IcuApp.render(); refillSysClock(); }, 120);
+    renderTimer = setTimeout(function () { renderTimer = 0; renderNow(); }, 120);
   }
 
   /* ★ 2026-10-09：监护页实时波形"打点"刷新。
@@ -1348,7 +1373,8 @@
       if (e.target.closest('[data-blepick-rescan]')) {
         stop(e);
         bleAct(D.blePick, 'scan', '');
-        IcuApp.render();
+        /* 重新搜索也只刷新设备行，保留当前滚动位置与触摸手势 */
+        renderNow();
         return;
       }
       if (e.target.closest('[data-blepick-close]')) {
@@ -2446,7 +2472,7 @@
         }
       }, 5200);
       // 让顶栏时钟动起来（每 30s 刷一次时间显示）
-      setInterval(function () { if (!pendingEditor && !pendingNavAfterSave) { syncD(); var c = IcuApp.current(); if (c !== 'new-sample' && c !== 'query' && c !== 'login' && c !== 'splash' && c !== 'set-user-edit') { IcuApp.render(); refillSysClock(); } } }, 30000);
+      setInterval(function () { if (!pendingEditor && !pendingNavAfterSave) { syncD(); var c = IcuApp.current(); if (c !== 'new-sample' && c !== 'query' && c !== 'login' && c !== 'splash' && c !== 'set-user-edit') { scheduleRender(); refillSysClock(); } } }, 30000);
     } else {
       // 桌面浏览器预览：保持原型 splash
     }

@@ -1412,22 +1412,44 @@
   /* p20 设置·连接 */
   /* ★ 2026-10-08 蓝牙设备选择弹窗：主机/监护分开（D.blePick='host'|'monitor'）
      数据源 S.host.devices / S.ble.monitor.devices（原生扫描实时推送），点行即连接 */
-  function blePickModal() {
-    if (!D.blePick) return '';
+  function blePickDevices() {
     const isHost = D.blePick === 'host';
     const st = window.S || {};
     const ch = isHost ? (st.host || (st.ble && st.ble.host) || {}) : ((st.ble && st.ble.monitor) || {});
-    const devs = Array.isArray(ch.devices) ? ch.devices : [];
-    const title = isHost ? T('blePickHost', '选择主机设备') : T('blePickMon', '选择监护设备');
-    const rows = devs.length
+    return Array.isArray(ch.devices) ? ch.devices : [];
+  }
+  function bleDeviceRows(devs) {
+    return devs.length
       ? devs.map(function (d) {
         return '<div class="bledev" data-bledev="' + esc(d.deviceId || d.id || '') + '">'
           + '<span class="bn">' + esc(d.deviceName || d.name || '--') + '</span>'
           + '<span class="br">RSSI ' + esc(d.rssi == null ? '--' : d.rssi) + '</span></div>';
       }).join('')
       : '<div class="logempty">' + T('bleScanning', '正在搜索附近设备…') + '</div>';
+  }
+  /* ★ 2026-10-27：扫描推送只更新列表内容，不重建整个弹窗/页面。
+     保留滚动容器及其 scrollTop，避免用户向下滑动时被下一次扫描刷新拉回顶部。 */
+  function refreshBlePickModal() {
+    if (!D.blePick) return false;
+    const list = document.querySelector('.modal.blepick .blelist');
+    if (!list) return false;
+    const scrollBox = list.closest('.mbody') || list;
+    const oldScrollTop = scrollBox.scrollTop;
+    const devs = blePickDevices();
+    const html = bleDeviceRows(devs);
+    if (list.getAttribute('data-ble-html') !== html) {
+      list.innerHTML = html;
+      list.setAttribute('data-ble-html', html);
+      scrollBox.scrollTop = devs.length ? oldScrollTop : 0;
+    }
+    return true;
+  }
+  window.IcuRefreshBlePick = refreshBlePickModal;
+  function blePickModal() {
+    if (!D.blePick) return '';
+    const title = D.blePick === 'host' ? T('blePickHost', '选择主机设备') : T('blePickMon', '选择监护设备');
     return P.mask('<div class="modal blepick"><div class="mhead">' + title + '</div>'
-      + '<div class="mbody"><div class="blelist">' + rows + '</div></div>'
+      + '<div class="mbody"><div class="blelist">' + bleDeviceRows(blePickDevices()) + '</div></div>'
       + '<div class="mfoot"><div class="btn" data-blepick-rescan>' + T('bleRescan', '重新搜索') + '</div>'
       + '<div class="btn primary" data-blepick-close>' + T('cancel', '取消') + '</div></div></div>');
   }
