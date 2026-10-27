@@ -3407,7 +3407,7 @@ public class IcuDashboardView extends View {
             }
         }
         json.put("vitals", vitals);
-        /* 记录单三路波形逐通道合并：有效冻结采样/手动图片优先，空数组回退该病例实时快照；
+        /* 记录单三路波形逐通道合并：有效冻结采样/手动图片优先，空数组或恒定旧冻结可回退该病例起伏快照；
            空串仍是编辑态 × 的明确清除，不能重新填回。 */
         if (light) {
             json.put("sheetWaves", new JSONObject());
@@ -4924,8 +4924,8 @@ public class IcuDashboardView extends View {
                     patient.sheetVitals = arr.toString();
                 }
             }
-            /* 旧病例可能已保存 {"ecg":[],...}；结束护疗时仍要按通道补齐真实采样，
-               否则本次能看到快照，重启后快照丢失又只剩空数组。手动图片/明确清除由合并逻辑保留。 */
+            /* 旧病例可能已保存空数组或恒定数组；结束护疗时仍按通道补齐同病例真实起伏采样。
+               手动图片/明确清除由合并逻辑保留，真实起伏的历史冻结仍优先。 */
             if (!snap.ecgWaveSamples.isEmpty() || !snap.spo2WaveSamples.isEmpty() || !snap.respWaveSamples.isEmpty()) {
                 try {
                     patient.sheetWaves = sheetWavesToJson(patient).toString();
@@ -4933,9 +4933,9 @@ public class IcuDashboardView extends View {
                 }
             }
             appendDebugLog("INFO", "记录单冻结", "caseNo=" + safeText(patient.caseNo)
-                    + " ecg=" + snap.ecgWaveSamples.size()
-                    + " pleth=" + snap.spo2WaveSamples.size()
-                    + " resp=" + snap.respWaveSamples.size()
+                    + " ecg=" + snap.ecgWaveSamples.size() + waveRangeSuffix(snap.ecgWaveSamples)
+                    + " pleth=" + snap.spo2WaveSamples.size() + waveRangeSuffix(snap.spo2WaveSamples)
+                    + " resp=" + snap.respWaveSamples.size() + waveRangeSuffix(snap.respWaveSamples)
                     + " hrHistory=" + snap.heartRateHistory.size()
                     + " sheetWaves=" + (TextUtils.isEmpty(patient.sheetWaves) ? "空" : "已冻结")
                     + " sheetVitals=" + (TextUtils.isEmpty(patient.sheetVitals) ? "空" : "已冻结"));
@@ -4968,23 +4968,69 @@ public class IcuDashboardView extends View {
         return value instanceof String && TextUtils.isEmpty(((String) value).trim());
     }
 
-    /** 记录单/PDF 取波形采样：优先冻结数据，其次实时快照。 */
+    /** 记录单/PDF 取波形采样：有效冻结数据优先；恒定旧冻结不妨碍同病例真实起伏快照。 */
     private List<Integer> sheetWaveSamples(PatientCase patient, String key) {
         if (patient == null) {
             return null;
         }
-        JSONObject frozen = parseSheetWavesJson(patient.sheetWaves);
-        if (frozen != null) {
-            JSONArray arr = frozen.optJSONArray(key);
-            if (arr != null && arr.length() > 1) {
-                ArrayList<Integer> out = new ArrayList<>(arr.length());
-                for (int i = 0; i < arr.length(); i++) {
-                    out.add(arr.optInt(i));
+        synchronized (patient.monitorSnapshot) {
+            List<Integer> snapshotSamples = sheetWaveSnapshotSamples(patient, key);
+            JSONObject frozen = parseSheetWavesJson(patient.sheetWaves);
+            if (frozen != null) {
+                JSONArray arr = frozen.optJSONArray(key);
+                if (arr != null && arr.length() > 1
+                        && (hasWaveVariation(arr) || !hasWaveVariation(snapshotSamples))) {
+                    ArrayList<Integer> out = new ArrayList<>(arr.length());
+                    for (int i = 0; i < arr.length(); i++) {
+                        out.add(arr.optInt(i));
+                    }
+                    return out;
                 }
-                return out;
+            }
+            return snapshotSamples;
+        }
+    }
+
+    private boolean hasWaveVariation(JSONArray samples) {
+        if (samples == null || samples.length() < 2) {
+            return false;
+        }
+        int first = samples.optInt(0);
+        for (int i = 1; i < samples.length(); i++) {
+            if (samples.optInt(i) != first) {
+                return true;
             }
         }
-        return sheetWaveSnapshotSamples(patient, key);
+        return false;
+    }
+
+    private boolean hasWaveVariation(List<Integer> samples) {
+        if (samples == null || samples.size() < 2) {
+            return false;
+        }
+        int first = samples.get(0);
+        for (int i = 1; i < samples.size(); i++) {
+            if (samples.get(i) != first) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String waveRangeSuffix(List<Integer> samples) {
+        if (samples == null || samples.isEmpty()) {
+            return "[--]";
+        }
+        int min = Integer.MAX_VALUE;
+        int max = Integer.MIN_VALUE;
+        for (Integer sample : samples) {
+            if (sample == null) {
+                continue;
+            }
+            min = Math.min(min, sample);
+            max = Math.max(max, sample);
+        }
+        return min == Integer.MAX_VALUE ? "[--]" : "[" + min + ".." + max + "]";
     }
 
     private List<Integer> sheetWaveSnapshotSamples(PatientCase patient, String key) {
@@ -5014,10 +5060,13 @@ public class IcuDashboardView extends View {
                     continue;
                 }
                 JSONArray frozenSamples = stored instanceof JSONArray ? (JSONArray) stored : null;
-                if (frozenSamples != null && frozenSamples.length() > 1) {
+                List<Integer> snapshotSamples = sheetWaveSnapshotSamples(patient, key);
+                if (frozenSamples != null && frozenSamples.length() > 1
+                        && (hasWaveVariation(frozenSamples) || !hasWaveVariation(snapshotSamples))) {
+                    // 有起伏的冻结数据保留；恒定的旧冻结仅在快照也无起伏时保留。
                     waves.put(key, frozenSamples);
                 } else {
-                    waves.put(key, intListToJsonArray(sheetWaveSnapshotSamples(patient, key)));
+                    waves.put(key, intListToJsonArray(snapshotSamples));
                 }
             }
         }
@@ -8092,6 +8141,16 @@ public class IcuDashboardView extends View {
             }
             String[] parts = statusLine.split(" ");
             int code = parts.length > 1 ? Integer.parseInt(parts[1].trim()) : 0;
+            // 部分打印机会先回 100 Continue，再回正式 IPP 响应；100 没有响应体。
+            while (code == 100) {
+                discardHttpHeaders(in);
+                statusLine = readHttpStatusLine(in);
+                if (statusLine == null || !statusLine.startsWith("HTTP/")) {
+                    throw new IOException("IPP 响应无法解析");
+                }
+                parts = statusLine.split(" ");
+                code = parts.length > 1 ? Integer.parseInt(parts[1].trim()) : 0;
+            }
             if (code < 200 || code >= 300) {
                 throw new IppRefusedException("HTTP " + code + " @ " + path, code, -1);
             }
@@ -8116,17 +8175,41 @@ public class IcuDashboardView extends View {
         }
     }
 
-    /* ★ V82：跳过剩余 HTTP 头（空行结束）后读全部响应体（Connection: close；不关连接的按超时收尾）。 */
+    /* 读取 HTTP 头与响应体：支持 Content-Length、Transfer-Encoding: chunked 和连接关闭三种形式。
+       不能按旧逻辑直接把分块字节当 IPP 内容，否则 CRLF 会被误读成 status-code 0x0d0a。 */
     private byte[] readHttpResponseBody(java.io.InputStream in) throws IOException {
-        int prev = -1, prevprev = -1, prev3 = -1;
-        int c;
-        while ((c = in.read()) >= 0) {
-            if (prev3 == '\r' && prevprev == '\n' && prev == '\r' && c == '\n') {
+        java.util.Map<String, String> headers = new java.util.HashMap<>();
+        while (true) {
+            String line = readHttpHeaderLine(in);
+            if (line == null) {
+                throw new IOException("HTTP 响应头不完整");
+            }
+            if (line.isEmpty()) {
                 break;
             }
-            prev3 = prevprev;
-            prevprev = prev;
-            prev = c;
+            int colon = line.indexOf(':');
+            if (colon > 0) {
+                headers.put(line.substring(0, colon).trim().toLowerCase(Locale.US), line.substring(colon + 1).trim());
+            }
+        }
+        String transferEncoding = headers.get("transfer-encoding");
+        if (transferEncoding != null && transferEncoding.toLowerCase(Locale.US).contains("chunked")) {
+            return readChunkedHttpBody(in);
+        }
+        String contentLength = headers.get("content-length");
+        if (contentLength != null) {
+            final long remaining;
+            try {
+                remaining = Long.parseLong(contentLength);
+            } catch (NumberFormatException e) {
+                throw new IOException("HTTP Content-Length 无效: " + contentLength);
+            }
+            if (remaining < 0 || remaining > 16 * 1024 * 1024) {
+                throw new IOException("HTTP 响应体长度异常: " + remaining);
+            }
+            java.io.ByteArrayOutputStream respBuf = new java.io.ByteArrayOutputStream((int) remaining);
+            copyHttpBytes(in, respBuf, remaining);
+            return respBuf.toByteArray();
         }
         java.io.ByteArrayOutputStream respBuf = new java.io.ByteArrayOutputStream();
         byte[] buf = new byte[4096];
@@ -8136,9 +8219,79 @@ public class IcuDashboardView extends View {
                 respBuf.write(buf, 0, n);
             }
         } catch (java.net.SocketTimeoutException ignored) {
-            // 部分打印机不关连接，超时后已收到的数据照常解析
+            // 没有长度且打印机不关连接时，保留已经收到的完整响应供 IPP 解析。
         }
         return respBuf.toByteArray();
+    }
+
+    private byte[] readChunkedHttpBody(java.io.InputStream in) throws IOException {
+        java.io.ByteArrayOutputStream respBuf = new java.io.ByteArrayOutputStream();
+        while (true) {
+            String line = readHttpHeaderLine(in);
+            if (line == null) {
+                throw new IOException("HTTP 分块大小缺失");
+            }
+            int extension = line.indexOf(';');
+            String hex = (extension >= 0 ? line.substring(0, extension) : line).trim();
+            final long chunkSize;
+            try {
+                chunkSize = Long.parseLong(hex, 16);
+            } catch (NumberFormatException e) {
+                throw new IOException("HTTP 分块大小无效: " + hex);
+            }
+            if (chunkSize < 0 || chunkSize > 16 * 1024 * 1024 || respBuf.size() + chunkSize > 16 * 1024 * 1024) {
+                throw new IOException("HTTP 分块响应体过大");
+            }
+            if (chunkSize == 0) {
+                // 跳过可选 trailer 头。
+                discardHttpHeaders(in);
+                return respBuf.toByteArray();
+            }
+            copyHttpBytes(in, respBuf, chunkSize);
+            String terminator = readHttpHeaderLine(in);
+            if (terminator == null || !terminator.isEmpty()) {
+                throw new IOException("HTTP 分块结束符无效");
+            }
+        }
+    }
+
+    private void copyHttpBytes(java.io.InputStream in, java.io.ByteArrayOutputStream out, long count) throws IOException {
+        byte[] buf = new byte[4096];
+        long remaining = count;
+        while (remaining > 0) {
+            int n = in.read(buf, 0, (int) Math.min(buf.length, remaining));
+            if (n < 0) {
+                throw new java.io.EOFException("HTTP 响应体不完整");
+            }
+            out.write(buf, 0, n);
+            remaining -= n;
+        }
+    }
+
+    private String readHttpHeaderLine(java.io.InputStream in) throws IOException {
+        java.io.ByteArrayOutputStream line = new java.io.ByteArrayOutputStream();
+        int c;
+        while ((c = in.read()) >= 0) {
+            if (c == '\n') {
+                return new String(line.toByteArray(), "US-ASCII");
+            }
+            if (c != '\r') {
+                line.write(c);
+            }
+            if (line.size() > 8192) {
+                throw new IOException("HTTP 响应头行过长");
+            }
+        }
+        return line.size() == 0 ? null : new String(line.toByteArray(), "US-ASCII");
+    }
+
+    private void discardHttpHeaders(java.io.InputStream in) throws IOException {
+        while (true) {
+            String line = readHttpHeaderLine(in);
+            if (line == null || line.isEmpty()) {
+                return;
+            }
+        }
     }
 
     /* ★ V82：Get-Printer-Attributes 查 document-format-supported —— 在响应体里直接检索已知格式串

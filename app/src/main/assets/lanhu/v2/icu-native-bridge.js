@@ -56,14 +56,14 @@
   /* ★ 2026-10-13 V31：多个 toast 同时出现时纵向堆叠（此前都钉在屏幕正中央，
      结束治疗瞬间「主机已连接」+「监护已连接」两个弹窗重叠在一起互相遮挡） */
   var toastLive = 0;
-  function toast(msg) {
+  function toast(msg, durationMs) {
     if (!msg) return;
     var el = document.createElement('div');
     var idx = toastLive++;
     el.style.cssText = 'position:fixed;left:50%;top:calc(50% + ' + (idx * 64) + 'px);transform:translate(-50%,-50%);background:rgba(0,0,0,.78);color:#fff;padding:18px 36px;border-radius:10px;font-size:24px;z-index:9999;white-space:nowrap';
     el.textContent = msg;
     document.body.appendChild(el);
-    setTimeout(function () { toastLive = Math.max(0, toastLive - 1); if (el.parentNode) el.parentNode.removeChild(el); }, 1000);
+    setTimeout(function () { toastLive = Math.max(0, toastLive - 1); if (el.parentNode) el.parentNode.removeChild(el); }, durationMs || 1000);
   }
 
   /* i18n 助手：window.T 未就绪时回退中文 */
@@ -1846,7 +1846,7 @@
       if (rb) {
         var rk = rb.dataset.key || (function () { var rsp = rb.querySelector('span'); return rsp ? rsp.textContent : ''; })();
         /* ★ 任务26a：编辑 / 保存 / 取消（★ 2026-10-10 #54 修复：底栏实际 key 是 edit/cancel，此前只对 recordEdit/recordCancel 响应导致点击无反应） */
-        if (rk === 'recordEdit' || rk === 'edit') { stop(e); openSheetEdit(); toast(TT('sheetEditHint', '编辑模式：高亮区域可修改，完成后点保存')); return; }
+        if (rk === 'recordEdit' || rk === 'edit') { stop(e); openSheetEdit(); toast(TT('sheetEditHint', '编辑模式：高亮区域可修改，完成后点保存'), 2000); return; }
         if (rk === 'recordCancel' || rk === 'cancel') { stop(e); D.sheetEdit = null; IcuApp.render(); return; }
         if (rk === 'recordSave') { stop(e); saveSheetEdit(); return; }
         /* ★ V15 ⑤⑥：打印/导出按记录单来源（护疗/回顾）保持上下文；并把当前预览样本的住院号传给原生，
@@ -2308,8 +2308,26 @@
 
   /* ---------- 渲染后回调：注入实时数据 + 表单补丁 ---------- */
   var lastScreenLogged = '';
+  var lastSheetWaveDiagCase = '';
+  function sheetWaveDiagText(v) {
+    if (typeof v === 'string') return v ? '手动图片' : '明确清除';
+    if (!Array.isArray(v) || !v.length) return '0[--]';
+    var min = Infinity, max = -Infinity;
+    for (var i = 0; i < v.length; i++) { min = Math.min(min, v[i]); max = Math.max(max, v[i]); }
+    return v.length + '[' + min + '..' + max + ']';
+  }
+  function logSheetWaveDiagnostic(entered) {
+    var caseNo = String((D.sheet && D.sheet.no) || '');
+    if (!entered && caseNo === lastSheetWaveDiagCase) return;
+    lastSheetWaveDiagCase = caseNo;
+    var w = (D.sheet && D.sheet.waves) || {};
+    feLog('INFO', '记录单波形', 'caseNo=' + caseNo + ' ecg=' + sheetWaveDiagText(w.ecg)
+      + ' pleth=' + sheetWaveDiagText(w.pleth) + ' resp=' + sheetWaveDiagText(w.resp));
+  }
   function onRender(cur) {
-    if (cur !== lastScreenLogged) { lastScreenLogged = cur; feLog('INFO', 'screen', '→ ' + cur); }
+    var enteredScreen = cur !== lastScreenLogged;
+    if (enteredScreen) { lastScreenLogged = cur; feLog('INFO', 'screen', '→ ' + cur); }
+    if (cur === 'record-sheet') logSheetWaveDiagnostic(enteredScreen);
     // 离开启动页时清理自动跳转计时器（用户点击跳过）
     if (cur !== 'splash' && splashTimer) { clearTimeout(splashTimer); splashTimer = null; }
     // 把当前屏的会话标识同步显示
