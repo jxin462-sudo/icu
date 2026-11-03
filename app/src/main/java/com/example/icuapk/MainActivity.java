@@ -1834,6 +1834,19 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
         return array;
     }
 
+    private boolean dismissThermalFullscreen() {
+        if (!thermalFullscreenVisible) {
+            return false;
+        }
+        if (lanhuWebView != null) {
+            lanhuWebView.evaluateJavascript(
+                    "window.IcuThermal&&window.IcuThermal.exitFullscreen&&window.IcuThermal.exitFullscreen();", null);
+        } else {
+            setThermalFullscreenVisible(false);
+        }
+        return true;
+    }
+
     @Override
     public void onBackPressed() {
         if (updateOverlay != null && updateOverlay.getVisibility() == View.VISIBLE) {
@@ -1849,6 +1862,9 @@ public class MainActivity extends Activity implements BleManager.Listener, Am410
             return;
         }
         if (dismissCameraFullscreenOverlay()) {
+            return;
+        }
+        if (dismissThermalFullscreen()) {
             return;
         }
         if (lanhuWebView != null && lanhuWebView.canGoBack()) {

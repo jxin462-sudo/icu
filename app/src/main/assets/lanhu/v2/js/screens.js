@@ -25,7 +25,7 @@
       loginErrEmpty: '请输入账号和密码', loginErrWrong: '账号或密码错误，还可尝试 {n} 次',
       loginErrLock: '已连续输错 5 次，账号锁定 10 分钟', loginErrLocked: '账号已锁定，请 {t} 后再试',
       navCare: '护疗', navReview: '回顾', navMenu: '菜单',
-      newSample: '新建', careRecord: '护疗记录', startCare: '开始护疗', edit: '编辑', dataSend: '数据发送', del: '删除', tutorial: '教程',
+      newSample: '新建', careRecord: '护疗记录', startCare: '开始护疗', edit: '编辑', dataSend: '导出报告', del: '删除', tutorial: '教程',
       query: '查询', print: '打印', exportReport: '导出报告', sendData: '发送数据',
       status: '状态', control: '主控', monitor: '监护', video: '视频', finish: '结束',
       statusTemp: '舱内温度（℃）', statusO2: '氧浓度（%）', statusHum: '湿度（%）', statusIr: '红外体温 ℃',
@@ -55,7 +55,7 @@
       loginErrEmpty: 'Please enter username and password', loginErrWrong: 'Incorrect username or password, {n} attempt(s) left',
       loginErrLock: '5 consecutive wrong attempts, account locked for 10 minutes', loginErrLocked: 'Account locked, try again in {t}',
       navCare: 'Care', navReview: 'Review', navMenu: 'Menu',
-      newSample: 'New', careRecord: 'Care Record', startCare: 'Start Care', edit: 'Edit', dataSend: 'Send Data', del: 'Delete', tutorial: 'Tutorial',
+      newSample: 'New', careRecord: 'Care Record', startCare: 'Start Care', edit: 'Edit', dataSend: 'Export Report', del: 'Delete', tutorial: 'Tutorial',
       query: 'Query', print: 'Print', exportReport: 'Export', sendData: 'Send Data',
       status: 'Status', control: 'Control', monitor: 'Monitor', video: 'Video', finish: 'Finish',
       statusTemp: 'Cabin Temp (℃)', statusO2: 'O₂ (%)', statusHum: 'Humidity (%)', statusIr: 'IR Temp ℃',
@@ -456,7 +456,7 @@
     { id: 'rec', label: '护疗记录', key: 'careRecord', icon: 'doc', go: 'care-record' },
     { id: 'start', label: '开始护疗', key: 'startCare', icon: 'play', go: 'status' },
     { id: 'edit', label: '编辑', key: 'edit', icon: 'pencil', go: 'new-sample' },
-    { id: 'send', label: '数据发送', key: 'dataSend', icon: 'upload', go: 'sending' },
+    { id: 'send', label: '导出报告', key: 'dataSend', icon: 'upload', go: 'sending' },
     { id: 'del', label: '删除', key: 'del', icon: 'trash', go: 'del-confirm' },
     /* ★ 2026-10-10：护疗页加「打印」，复用回顾页打印（act print_report + printing 页） */
     { id: 'pr', label: '打印', key: 'print', icon: 'print', go: 'printing' },
@@ -617,8 +617,9 @@
   /* 卡片统一结构：左上名称 / 数值 / 进度条 / 左下「设置」/ 右上「开·关」/ 右侧设备图标
      —— 所有卡片的「设置」按钮位置完全一致（左 34 / 下 24），不再出现偏移 */
   /* 卡内药丸开关：默认 右下；pos='bl' 时 左下（开关卡 / 模式卡 / 监护等级卡） */
-  function pill(on, pos) {
-    return '<div class="toggle sw' + (pos === 'bl' ? ' bl' : '') + (on ? ' on' : '') + '" data-sw>'
+  function pill(on, pos, locked) {
+    return '<div class="toggle sw' + (pos === 'bl' ? ' bl' : '') + (on ? ' on' : '') + (locked ? ' locked' : '') + '"'
+      + (locked ? ' aria-disabled="true"' : ' data-sw') + '>'
       + '<span class="l">' + (on ? T('on', '开') : T('off', '关')) + '</span></div>';
   }
   /* 图标落位：window.TP 给出每个矢量图标的精确 right/top/尺寸（相对卡片）。
@@ -665,14 +666,14 @@
         + '<div class="setbtn tr">' + T('ctrlSetting', '设置') + '</div></div>';
     }
     if (c.v) {
-      /* ★ 2026-10-13 V31：ro=只读卡（湿度按协议无开关/无设置），不渲染药丸开关与「设置」，整卡点击=重新读取 */
-      return '<div class="ctrl v' + (row === 1 ? ' r1v r2c' : '') + (c.on ? ' on' : '') + (c.ro ? ' ro' : '') + '" data-tkey="' + tk + '">'
+      /* ro 隐藏开关与设置；locked 保留开/关状态显示，但不可点击，供湿度等只读传感器使用。 */
+      return '<div class="ctrl v' + (row === 1 ? ' r1v r2c' : '') + (c.on ? ' on' : '') + (c.ro ? ' ro' : '') + (c.locked ? ' locked' : '') + '" data-tkey="' + tk + '">'
         + '<div class="ct">' + T(tk, c.t) + '</div>'
         + '<div class="cv' + (/^[0-9:.]+$/.test(c.v || '') ? '' : ' vs') + '">' + c.v + '</div>'
         + (c.p ? '<div class="cbar"><i style="width:' + c.p + '%"></i></div>' : '')
-        + (c.ro ? '' : '<div class="setbtn">' + T('ctrlSetting', '设置') + '</div>')
+        + (c.ro || c.locked ? '' : '<div class="setbtn">' + T('ctrlSetting', '设置') + '</div>')
         + icoSpan(c.ico)
-        + (c.ro ? '' : pill(c.on)) + '</div>';
+        + (c.ro ? '' : pill(c.on, '', c.locked)) + '</div>';
     }
     /* 开关卡（照明 / 循环）：仅 标题 + 设备图标（右侧）+ 药丸开关（左下），无「设置」 */
     return '<div class="ctrl s' + (c.on ? ' on' : '') + '" data-tkey="' + tk + '">'
@@ -745,11 +746,13 @@
     const V = D.vitals || {};
     const hr = V.hr || '--', spo2 = V.spo2 || '--',
           pr = V.pr || '--', temp = V.temp || '--', rr = V.rr || '--';
-    /* 血压 sys/dia 仍读 BPM 血压仪；平均压按模式分源：实时=AM4100 MAP，物理=BPM mean。
-       实时/物理键沿用既有自动/手动命令，on 高亮跟随 D.bpMode。 */
+    /* 实时模式的上压/下压直接读监护宝 AM4100；物理模式读 BPM 血压仪。
+       平均压同样按模式分源：实时=AM4100 MAP，物理=BPM mean。 */
     const B = D.bpm || {};
-    const bp = (B.sys && B.dia) ? (B.sys + '/' + B.dia) : '--/--';
     const bpMode = D.bpMode === 'physical' ? 'physical' : 'live';
+    const bp = bpMode === 'physical'
+      ? ((B.sys && B.dia) ? (B.sys + '/' + B.dia) : '--/--')
+      : (V.bp || '--/--');
     const map = (bpMode === 'physical' ? B.mean : V.map) || '--';
     const bpSw = '<div class="bprow"><div class="bpsw"><button data-bpm="live"' + (bpMode === 'live' ? ' class="on"' : '') + '>' + T('live', '实时') + '</button>'
       + '<span class="arrow">⇄</span><button data-bpm="physical"' + (bpMode === 'physical' ? ' class="on"' : '') + '>' + T('physical', '物理') + '</button></div>'
@@ -762,9 +765,10 @@
     const vitalKeys = [['hr', ''], ['spo2', 'pr'], ['temp', 'rr']][row];
     return '<div class="vitals">' + sets.map(function (b, bi) {
       var vitalKey = vitalKeys[bi];
+      var valueAttr = vitalKey ? ' data-vital="' + vitalKey + '"' : (row === 0 && bi === 1 ? ' data-bp-value' : '');
       return '<div class="v ' + (b[5] || '') + '">'
         + (b[6] ? b[6] : (b[0] ? '<div class="vt ' + b[2] + '">' + b[0] + '</div>' : '<div class="vt"></div>'))
-        + '<div class="vv ' + b[2] + '"><span' + (vitalKey ? ' data-vital="' + vitalKey + '"' : '') + '>' + b[1] + '</span>' + (b[3] ? '<span class="u">' + b[3] + '</span>' : '') + '</div>'
+        + '<div class="vv ' + b[2] + '"><span' + valueAttr + '>' + b[1] + '</span>' + (b[3] ? '<span class="u">' + b[3] + '</span>' : '') + '</div>'
         + (b[4] ? '<div class="sub">' + b[4] + '</div>' : '') + '</div>';
     }).join('') + '</div>';
   }
@@ -1034,21 +1038,21 @@
          可编辑字段（主人/体重/科室/操作医师、治疗项目勾选+参数、环境参数、体征表增删行、治疗结论）渲染为输入框/可点选框，
          值取自 D.sheetEdit 暂存；底栏切换为 保存/取消。保存经 act('update_record') 落本地存储（#26c）。 */
       const ed = D.sheetEdit || null;
-      /* 文本字段：只读态原样输出；编辑态渲染输入框
-         ★ 任务32：字段限制 —— 主人/科室/医师30、体重6(数字+小数点)、建议100 */
-      var SE_LIMITS = { owner: 30, weight: 6, dept: 30, doc: 30, advice: 100 };
+      /* 文本字段：只读态原样输出；编辑态渲染输入框。
+         体重允许数字、单位及中文描述，保存/PDF 均沿用字符串，不做数值转换。 */
+      var SE_LIMITS = { owner: 30, weight: 30, dept: 30, doc: 30, advice: 100 };
       function seTxt(key, val) {
         if (!ed) return val;
         var mx = SE_LIMITS[key] ? ' maxlength="' + SE_LIMITS[key] + '"' : '';
-        var num = key === 'weight' ? ' data-num2="1"' : '';
-        return '<input class="sheet-in" data-se="' + key + '"' + mx + num + ' value="' + (val || '') + '">';
+        return '<input type="text" class="sheet-in" data-se="' + key + '"' + mx + ' value="' + esc(val || '') + '">';
       }
       const info = '<div class="sheet-info">'
         + '<div><b>' + T('sheetAnimal', '动物名称') + '：</b>' + s.animal + '</div><div><b>' + T('fieldCaseNo', '住院号') + '：</b>' + s.no + '</div>'
         + '<div><b>' + T('sheetOwner', '主人') + '：</b>' + seTxt('owner', s.owner) + '</div><div><b>' + T('sheetTreatDate', '治疗日期') + '：</b>' + s.date + '</div><div><b>' + T('sheetCage', '舱位') + '：</b>' + s.cage + '</div>'
         + '<div><b>' + T('sheetSpecies', '动物种类') + '：</b>' + spTxt(s.sp) + '</div><div><b>' + T('sheetWeight', '体重') + '：</b>' + seTxt('weight', s.weight) + '</div>'
-        /* ★ 2026-10-12：科室栏先注释掉不显示（保留数据字段，后续要恢复把下面这行加回即可） */
-        + /* '<div><b>' + T('sheetDept', '科室') + '：</b>' + seTxt('dept', s.dept) + '</div>' */ '<div><b>' + T('sheetDur', '治疗时长') + '：</b>' + s.dur + '</div><div><b>' + T('sheetDoctor', '操作医师') + '：</b>' + seTxt('doc', s.doc) + '</div>'
+        /* 原科室显示位改为病症；体重、病症、治疗时长分占三个等宽网格列。 */
+        + '<div><b>' + T('fieldDisease', '病症') + '：</b>' + esc(s.disease || '--') + '</div>'
+        + '<div><b>' + T('sheetDur', '治疗时长') + '：</b>' + s.dur + '</div><div><b>' + T('sheetDoctor', '操作医师') + '：</b>' + seTxt('doc', s.doc) + '</div>'
         + '</div>';
       const proj = '<div class="tproj">' + s.proj.map(function (p, i) {
         if (ed) {
@@ -1199,7 +1203,8 @@
   SCREENS['review'] = {
     name: '回顾列表', group: '3 回顾', render() {
       return PAGE(P.topbar('review'),
-        '<div class="listwrap">' + reviewTable(true) + '</div>'
+        /* 首次进入不默认勾选首行；仅显示用户实际点击产生的 D.selCaseId 选中态。 */
+        '<div class="listwrap">' + reviewTable(false) + '</div>'
         + A(300, 42, '表头同步【护理】列表保持一致', 'plain')
         + A(150, 560, '（注：该页面表格，显示除【护理】列表中的，所有护疗记录）', 'plain'),
         P.bottombar(REVIEW_BAR, ''));
@@ -1552,6 +1557,11 @@
       } else {
         plist = '<div class="inp flex" style="align-items:center;color:#9aa6b6">' + T('noPrinterFound', '未发现打印机，请点「扫描」或手动输入地址') + '</div>';
       }
+      var printMode = st.printerMode === 'system' ? 'system' : 'direct';
+      var printModeSelect = '<div class="inp flex"><select class="icu-input" data-print-mode>'
+        + '<option value="direct"' + (printMode === 'direct' ? ' selected' : '') + '>' + T('printModeDirect', '标准协议直连（IPP/PCL）') + '</option>'
+        + '<option value="system"' + (printMode === 'system' ? ' selected' : '') + '>' + T('printModeSystem', '系统/厂商驱动打印') + '</option>'
+        + '</select></div>';
       /* ★ 任务15(#5)：整页包一层 .print-fields，让字段输入框保持平铺、不凸显 */
       var body = '<div class="print-fields" style="width:1180px;margin:0 auto">'
         + frow(T('printerAvail', '可用打印机'), plist + '<div class="btn sm" data-print="scan">' + T('scanPrinter', '扫描') + '</div>')
@@ -1560,6 +1570,9 @@
           /* ★ 2026-10-22 V74：删除名称输入框（用户要求）——名称只走自动查询
              （IPP Get-Printer-Attributes→PJL 兜底，查询中显「正在获取名称…」，失败显「未知打印机」） */
           + '<div class="btn sm" data-print="addPrinter">' + T('addPrinter', '添加打印机') + '</div><div class="btn sm" data-print="test">' + T('printTest', '打印测试页') + '</div>')
+        + frow(T('printerMode', '打印方式'), printModeSelect
+          + '<div class="btn sm" data-print="services">' + T('printServices', '打印服务设置') + '</div>'
+          + '<span style="font-size:17px;color:#7e8a9b;white-space:nowrap">' + T('printModeHint', '主机驱动型打印机请选系统模式') + '</span>')
         + frow(T('hospitalName', '医院名称'), pf('name', org.name) + setBtn)
         + frow(T('hospitalPhone', '医院电话'), pf('phone', org.phone) + setBtn)
         + frow(T('hospitalAddr', '医院地址'), pf('address', org.address) + setBtn)

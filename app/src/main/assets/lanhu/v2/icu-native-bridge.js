@@ -134,12 +134,17 @@
       var key = el.getAttribute('data-vital');
       if (V[key] != null) el.textContent = V[key];
     });
-    var mapEl = document.querySelector('[data-bp-map]');
-    if (mapEl) {
-      var B = D.bpm || {};
+    var B = D.bpm || {};
+    document.querySelectorAll('[data-bp-value]').forEach(function (el) {
+      var bp = D.bpMode === 'physical'
+        ? ((B.sys && B.dia) ? (B.sys + '/' + B.dia) : '--/--')
+        : (V.bp || '--/--');
+      el.textContent = bp;
+    });
+    document.querySelectorAll('[data-bp-map]').forEach(function (mapEl) {
       var map = D.bpMode === 'physical' ? B.mean : V.map;
       mapEl.textContent = TT('avgPressure', '平均压') + '：' + (map || '--');
-    }
+    });
     var WL = D.waveLive || {};
     var kinds = ['ecg', 'pleth', 'resp'], want = 0;
     for (var i = 0; i < kinds.length; i++) { var s = WL[kinds[i]]; if (s && s.length > 1) want++; }
@@ -424,6 +429,12 @@
       if (typeof D.levelIdx !== 'number') D.levelIdx = 0;
       /* ★ V22：主机蓝牙未连接时状态页/主控页主机数据全部空值+关闭态 */
       var hostUp = !!((S.host && S.host.connected) || (S.ble && S.ble.host && S.ble.host.connected));
+      /* 环境卡以真实读数呈现开关态：0 也是有效读数，空串、-- 和非数值占位不算。 */
+      function hasReading(raw) {
+        if (raw == null || (typeof raw === 'string' && !raw.trim())) return false;
+        var value = Number(raw);
+        return isFinite(value) && !isNaN(value);
+      }
       /* ★ 2026-10-22 V69：状态页定时控件（红外/蓝光）与主控页同一判定——
          未连接-- / 关→关 / 不限时→24h常开 / 有剩余→mm:ss 倒计时。
          此前状态页直接显示原生文本：设备回包 65535≠65536 漏判不限时后，
@@ -548,16 +559,13 @@
          注：ctrlRow1 是环境传感器实时读数（温/氧/湿/CO2），非样本设定项，故保留不清空。 */
       var curPat = S.patient || {};
       var treatOK = (curPat.treatmentEndTime === '进行中');
-      /* ★ V15 ⑦：row1 环境卡带开关态（temp/氧气/CO2 的 enable 由主机回包驱动；湿度只读，值存在即视为开）
-         ★ V22：未连接主机蓝牙时全部空值+关闭态 */
+      /* 环境卡读数有效即高亮并显示「开」，不再依赖设备 enable 标志；
+         温/氧/CO2 保留控制与设置，湿度只显示只读开关，不允许关闭或设值。 */
       D.ctrlRow1 = [
-        { tKey: 'ctrlTemp', t: '舱内温度 ℃', v: hostUp ? num(comped(h.temp, 0), '--') : '--', p: 60, set: 1, on: hostUp ? !!c.tempOn : false, ico: 'thermo' },
-        { tKey: 'ctrlO2', t: '氧浓度 %', v: hostUp ? num(comped(h.oxygen, 1), '--') : '--', p: 43, set: 1, on: hostUp ? !!c.oxygenOn : false, ico: 'o2' },
-        /* ★ 2026-10-13：恢复湿度开关/设置（用户要求加回）。协议上固件忽略 set_humidity，
-           但产品需要入口：开关态由主机回包 controls.humidityOn 驱动，未连接显示关闭态。
-           整卡点击走 .ctrl.ro 分支（主动 get_humidity 回显）——该分支已无 ro 卡时自然失效。 */
-        { tKey: 'ctrlHum', t: '湿度 %', v: hostUp ? num(comped(h.humidity, 2), '--') : '--', p: 35, set: 1, on: hostUp ? !!c.humidityOn : false, ico: 'drop' },
-        { tKey: 'ctrlCo2', t: '二氧化碳浓度 PPM', v: hostUp ? num(comped(h.co2, 3), '--') : '--', p: 66, set: 1, on: hostUp ? !!c.co2On : false, ico: 'co2' },
+        { tKey: 'ctrlTemp', t: '舱内温度 ℃', v: hostUp ? num(comped(h.temp, 0), '--') : '--', p: 60, set: 1, on: hostUp && hasReading(h.temp), ico: 'thermo' },
+        { tKey: 'ctrlO2', t: '氧浓度 %', v: hostUp ? num(comped(h.oxygen, 1), '--') : '--', p: 43, set: 1, on: hostUp && hasReading(h.oxygen), ico: 'o2' },
+        { tKey: 'ctrlHum', t: '湿度 %', v: hostUp ? num(comped(h.humidity, 2), '--') : '--', p: 35, on: hostUp && hasReading(h.humidity), locked: 1, ico: 'drop' },
+        { tKey: 'ctrlCo2', t: '二氧化碳浓度 PPM', v: hostUp ? num(comped(h.co2, 3), '--') : '--', p: 66, set: 1, on: hostUp && hasReading(h.co2), ico: 'co2' },
         { tKey: 'ctrlLevel', t: '监护等级', v: '', level: 1 }
       ];
       /* ★ V22：定时控件显示态 —— 未连接/无样本→'--'；关闭→'关'（不再显示遗留时长）；
@@ -595,7 +603,7 @@
       if (D.sheet.foot) D.sheet.foot.doc = p.labDoctor || '';
       D.sheet.date = fmtDT((p.visitDate || '').slice(0, 10));
       D.sheet.cage = (S.zone === 'left') ? TT('cabinA', 'A舱') : (S.zone === 'right' ? TT('cabinB', 'B舱') : '');
-      D.sheet.weight = p.weight || '--'; D.sheet.dept = p.department || '--';
+      D.sheet.weight = p.weight || '--'; D.sheet.dept = p.department || '--'; D.sheet.disease = p.disease || '--';
       /* ★ 2026-10-10 #64：治疗时长显示「X小时Y分钟」，不再用「开始 ~ 结束」时间段；
          进行中的按当前时间实时算 */
       D.sheet.dur = fmtDurText(p.treatmentStartTime, p.treatmentEndTime);
@@ -1275,7 +1283,7 @@
   /* ★ V15 ⑦：row1 环境卡（温/氧/湿/CO2）的开关走 *_switch —— 开/关功能并主动读取主机数据；
      「设置」按钮仍走原 action（弹数值框 → 确定后下发主机蓝牙命令）。 */
   var CTRL_ACT_BY_TKEY = {
-    ctrlTemp: 'control_temp_switch', ctrlO2: 'control_oxygen_switch', ctrlHum: 'control_humidity_switch', ctrlCo2: 'control_co2_switch', ctrlLevel: '',
+    ctrlTemp: 'control_temp_switch', ctrlO2: 'control_oxygen_switch', ctrlHum: '', ctrlCo2: 'control_co2_switch', ctrlLevel: '',
     ctrlRed: 'control_red', ctrlBlue: 'control_blue', ctrlUv: 'control_uv', ctrlNeb: 'control_nebulizer', ctrlAnion: 'control_anion',
     ctrlCold: 'control_cold_light', ctrlWarm: 'control_warm_light', ctrlOuter: 'control_outer', ctrlInner: 'control_inner', ctrlTime: 'control_time'
   };
@@ -1283,7 +1291,7 @@
      走原生 *_time 动作（IcuDashboardView.handleControlButtonTap → showNumberDialog“设置X时间·分钟”
      → BleManager.startTimedControlWithConfiguredDuration，按蓝牙协议下发时长并开启倒计时） */
   var CTRL_SET_BY_TKEY = {
-    ctrlTemp: 'control_temp', ctrlO2: 'control_oxygen', ctrlHum: 'control_humidity', ctrlCo2: 'control_co2', ctrlTime: 'control_time',
+    ctrlTemp: 'control_temp', ctrlO2: 'control_oxygen', ctrlHum: '', ctrlCo2: 'control_co2', ctrlTime: 'control_time',
     ctrlRed: 'control_red_time', ctrlBlue: 'control_blue_time', ctrlUv: 'control_uv_time',
     ctrlNeb: 'control_nebulizer_time', ctrlAnion: 'control_anion_time'
   };
@@ -2094,6 +2102,7 @@
           return;
         }
         if (pk === 'test') { act('print_test'); return; }
+        if (pk === 'services') { act('print_service_settings'); return; }
         /* ★ 任务32：医院信息保存前校验电话格式（可空；非空须为电话字符 5~20 位） */
         if (pk === 'org') {
           var oph = val('input[data-org="phone"]');
@@ -2465,6 +2474,19 @@
       D.lang = v;                                  // 即时生效，不等原生回推
       try { localStorage.setItem('icu_lang', v); } catch (e2) {} /* ★ V48：语言选择双保险持久化 */
       act('settings_save', JSON.stringify({ language: v }));
+      IcuApp.render();
+    }, true);
+    /* 打印通道由用户显式选择；直连失败不得再自动打开系统打印界面。 */
+    document.getElementById('app-root').addEventListener('change', function (e) {
+      var sel = e.target.closest ? e.target.closest('[data-print-mode]') : null;
+      if (!sel) return;
+      var mode = sel.value === 'system' ? 'system' : 'direct';
+      if (!D.settings) D.settings = {};
+      D.settings.printerMode = mode;
+      act('settings_save', JSON.stringify({ printerMode: mode }));
+      if (mode === 'system') {
+        toast('系统模式需启用 HP Print Service Plugin、Mopria 或对应厂商打印服务', 2600);
+      }
       IcuApp.render();
     }, true);
     /* ★ 任务32：输入框字符过滤（委托到 app-root，弹窗/页面重渲染后仍生效）

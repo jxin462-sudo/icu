@@ -34,6 +34,7 @@
     devices: [],
     pickerOpen: false,
     connecting: false,
+    fullscreen: false,
     logs: []
   };
 
@@ -116,16 +117,15 @@
   var lastMaxIdx = -1;
 
   function draw() {
-    var cv = document.querySelector('.th-canvas');
-    if (!cv) return;
-    var ctx = cv.getContext('2d');
-    if (!ctx) return;
-    if (!st.centi || !st.w || !st.h) { ctx.clearRect(0, 0, cv.width, cv.height); return; }
-
-    /* ★ V26：铺满模式下画布分辨率跟随可视区，避免 CSS 拉伸糊掉 */
-    var vw = cv.parentElement ? cv.parentElement.clientWidth : 0;
-    var vh = cv.parentElement ? cv.parentElement.clientHeight : 0;
-    if (vw > 0 && vh > 0 && (cv.width !== vw || cv.height !== vh)) { cv.width = vw; cv.height = vh; }
+    var canvases = document.querySelectorAll('.th-canvas');
+    if (!canvases.length) return;
+    if (!st.centi || !st.w || !st.h) {
+      for (var ci = 0; ci < canvases.length; ci++) {
+        var clearCtx = canvases[ci].getContext('2d');
+        if (clearCtx) clearCtx.clearRect(0, 0, canvases[ci].width, canvases[ci].height);
+      }
+      return;
+    }
 
     var w = st.w, h = st.h, d = st.centi;
     var mn = Infinity, mx = -Infinity, maxIdx = 0;
@@ -148,21 +148,30 @@
     }
     offCtx.putImageData(img, 0, 0);
 
-    ctx.imageSmoothingEnabled = true;
-    ctx.clearRect(0, 0, cv.width, cv.height);
-    ctx.drawImage(offCanvas, 0, 0, cv.width, cv.height);
+    /* 同一真实帧同时画到状态页和全屏画布；全屏不依赖摄像头或静态截图。 */
+    for (var j = 0; j < canvases.length; j++) {
+      var cv = canvases[j];
+      var ctx = cv.getContext('2d');
+      if (!ctx) continue;
+      var vw = cv.parentElement ? cv.parentElement.clientWidth : 0;
+      var vh = cv.parentElement ? cv.parentElement.clientHeight : 0;
+      if (vw > 0 && vh > 0 && (cv.width !== vw || cv.height !== vh)) { cv.width = vw; cv.height = vh; }
+      ctx.imageSmoothingEnabled = true;
+      ctx.clearRect(0, 0, cv.width, cv.height);
+      ctx.drawImage(offCanvas, 0, 0, cv.width, cv.height);
 
-    // 最高温位置标记
-    lastMaxIdx = maxIdx;
-    var px = ((maxIdx % w) + 0.5) * cv.width / w;
-    var py = (Math.floor(maxIdx / w) + 0.5) * cv.height / h;
-    ctx.strokeStyle = 'rgba(255,255,255,.9)';
-    ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(px, py, Math.max(6, cv.width / 42), 0, Math.PI * 2); ctx.stroke();
+      lastMaxIdx = maxIdx;
+      var px = ((maxIdx % w) + 0.5) * cv.width / w;
+      var py = (Math.floor(maxIdx / w) + 0.5) * cv.height / h;
+      ctx.strokeStyle = 'rgba(255,255,255,.9)';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(px, py, Math.max(6, cv.width / 42), 0, Math.PI * 2); ctx.stroke();
+    }
 
     setText('[data-th-maxv]', fmtC(mx));
     setText('[data-th-minv]', fmtC(mn));
     setText('[data-th-badge]', fmtC(mx));
+    setText('[data-th-fps]', st.fps ? st.fps.toFixed(1) + ' fps' : '--');
 
     /* ★ V26：状态页「红外体温」卡数值 = 热图最高温（同步进 D.status，重渲染不丢） */
     var maxC = (mx / 100).toFixed(1);
@@ -173,8 +182,10 @@
 
   /* ---------- 状态文案刷新 ---------- */
   function setText(sel, txt) {
-    var el = document.querySelector(sel);
-    if (el && el.textContent !== txt) el.textContent = txt;
+    var els = document.querySelectorAll(sel);
+    for (var i = 0; i < els.length; i++) {
+      if (els[i].textContent !== txt) els[i].textContent = txt;
+    }
   }
   function isLive() { return st.centi && st.lastFrameAtMs && (Date.now() - st.lastFrameAtMs) < FRESH_MS; }
 
@@ -246,6 +257,43 @@
     if (st.devices.length && document.querySelector('[data-therm]') && !st.connecting && !isLive()) openPicker();
   }
 
+  /* ---------- 实时热图全屏 ---------- */
+  function notifyNativeFullscreen(visible) {
+    var n = N();
+    if (n && n.thermalFullscreen) {
+      try { n.thermalFullscreen(!!visible); } catch (e) { /* H5 全屏仍可独立退出 */ }
+    }
+  }
+  function setFullscreen(visible) {
+    if (visible && !isLive()) return false;
+    st.fullscreen = !!visible;
+    closePicker();
+    var old = document.querySelector('[data-th-fullscreen]');
+    if (old) old.parentNode.removeChild(old);
+    if (visible) {
+      /* 挂在 stage 而非热图卡内：覆盖整个 1920×1200 设计区，CSS zoom 会等比缩放，
+         状态页周期重渲染也只替换 app-root，不会销毁全屏画布。 */
+      var stage = document.getElementById('stage') || document.body;
+      stage.insertAdjacentHTML('beforeend', '<div class="th-fullscreen" data-th-fullscreen>'
+        + '<div class="th-full-view"><canvas class="th-canvas" width="960" height="600"></canvas>'
+        + '<div class="th-badge" data-th-badge>--</div></div>'
+        + '<div class="th-full-head"><span>红外成像 · 全屏</span>'
+        + '<button type="button" class="th-full-close" data-th-fullclose>退出全屏</button></div>'
+        + '<div class="th-full-stats"><span>最高温 <b data-th-maxv>--</b></span>'
+        + '<span>最低温 <b data-th-minv>--</b></span>'
+        + '<span>帧率 <b data-th-fps>--</b></span></div></div>');
+      var overlay = document.querySelector('[data-th-fullscreen]');
+      overlay.addEventListener('click', function (e) {
+        if (e.target.closest('[data-th-fullclose]')) setFullscreen(false);
+        e.stopPropagation();
+      });
+    }
+    notifyNativeFullscreen(visible);
+    draw();
+    paintStatus();
+    return true;
+  }
+
   /* ---------- 原生回调入口 ---------- */
   window.IcuThermal = {
     receiveFrame: function (base64, w, h, ts) {
@@ -267,7 +315,10 @@
     },
     setConnectionState: function (text) {
       st.connText = toText(text);
-      if (/未连接|断开|超时|失败/.test(st.connText)) { st.scanAtMs = 0; st.connecting = false; closePicker(); }
+      if (/未连接|断开|超时|失败/.test(st.connText)) {
+        st.scanAtMs = 0; st.connecting = false; closePicker();
+        if (st.fullscreen) setFullscreen(false);
+      }
       paintStatus();
     },
     addLog: function (msg) {
@@ -275,6 +326,7 @@
       if (st.logs.length > 60) st.logs.shift();
     },
     state: st,
+    exitFullscreen: function () { return setFullscreen(false); },
     /* 状态推送期间由桥接层调用：只刷新设备行，不重建状态页 */
     refreshPicker: function () { return st.pickerOpen ? openPicker() : false; },
     /* 无真机时的自演示帧（供 headless 验证样式/渲染，不自动调用） */
@@ -340,6 +392,7 @@
         if (a === 'scan' || a === 'rescan') doScan();
         else if (a === 'disconnect') {
           nativeCall('disconnect');
+          if (st.fullscreen) setFullscreen(false);
           st.connecting = false;
           st.connText = '红外测温已手动断开';
           st.centi = null; draw(); paintStatus();
@@ -355,14 +408,10 @@
         e.stopPropagation();
         return;
       }
-      // 点热图画面本身：未连接 → 搜索；已连接 → 放大到全屏
+      // 点热图画面本身：未连接 → 搜索；有实时帧 → 同一热图全屏显示
       if (e.target.closest('.th-view')) {
-        if (!isLive()) {
-          doScan();
-        } else {
-          var n2 = N();
-          if (n2 && n2.thermalFullscreen) { try { n2.thermalFullscreen(true); } catch (e2) { /* noop */ } }
-        }
+        if (!isLive()) doScan();
+        else setFullscreen(true);
         e.stopPropagation();
       }
     });
@@ -384,5 +433,8 @@
   window.addEventListener('icu-thermal-devices', function () { refreshDevices(); paintStatus(); });
   window.addEventListener('DOMContentLoaded', tryBind);
   setTimeout(tryBind, 0);
-  setInterval(function () { if (document.querySelector('[data-therm]')) paintStatus(); }, 1000);
+  setInterval(function () {
+    if (st.fullscreen && !isLive()) setFullscreen(false);
+    if (document.querySelector('[data-therm]')) paintStatus();
+  }, 1000);
 })();

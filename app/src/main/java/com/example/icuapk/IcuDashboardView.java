@@ -151,6 +151,8 @@ public class IcuDashboardView extends View {
     private static final String KEY_S5_PRINT_COPIES = "s5_print_copies";
     /** ★ 任务14（V1.02 R59）：打印机地址 */
     private static final String KEY_S5_PRINTER_ADDRESS = "s5_printer_address";
+    /** direct=标准协议直连；system=Android 打印服务/厂商驱动。 */
+    private static final String KEY_S5_PRINTER_MODE = "s5_printer_mode";
     /** ★ 任务16：演示数据开关（开=监护页显示默认 demo 波形；关=未连蓝牙时波形为空） */
     private static final String KEY_S5_DEMO_DATA = "s5_demo_data";
     private static final String KEY_S5_REPORT_TITLE = "s5_report_title";
@@ -164,6 +166,7 @@ public class IcuDashboardView extends View {
     private int s5PrintCopies = 1;
     /** ★ 任务14（V1.02 R59）：打印机地址 */
     private String s5PrinterAddress = "";
+    private String s5PrinterMode = "direct";
     /** ★ 任务16：演示数据开关 */
     private boolean s5DemoData = false;
     private String s5ReportTitle = "";
@@ -1908,6 +1911,10 @@ public class IcuDashboardView extends View {
             invalidate();
             return true;
         }
+        if ("print_service_settings".equals(action)) {
+            openPrintServiceSettings();
+            return true;
+        }
         // ★ 2026-10-10 #57：扫描局域网打印机（NSD 发现 _ipp._tcp / _pdl-datastream._tcp）
         if ("printer_scan".equals(action)) {
             startPrinterScan();
@@ -2331,14 +2338,9 @@ public class IcuDashboardView extends View {
             return true;
         }
         if ("control_humidity_switch".equals(action)) {
-            /* ★ 2026-10-13：恢复湿度开关。协议上固件忽略 set_humidity（只读），
-               但产品需要开关/设置入口：点击即把「上次设定的目标湿度」下发给主机并重新读取回显，
-               未连接时本地保存目标值，用户至少能得到明确反馈而非"点了没反应"。 */
-            Float lastHum = bleManager.getLastSetHumidityValue();
-            float targetHum = (lastHum != null && lastHum > 0f) ? lastHum : 55f;
-            boolean sent = bleManager.setHumidity(targetHum);
-            bleManager.requestHumidity();
-            showSendResult("湿度开关", sent);
+            /* 湿度只读：兼容旧页面/旧入口时只重新读取，绝不下发虚构的开关或目标值。 */
+            boolean sent = bleManager.requestHumidity();
+            showSendResult("读取湿度（只读）", sent);
             invalidate();
             return true;
         }
@@ -2357,9 +2359,10 @@ public class IcuDashboardView extends View {
             return true;
         }
         if ("control_humidity".equals(action)) {
-            /* ★ 2026-10-13：恢复湿度「设置」入口（此前按只读砍掉，用户要求加回）。
-               数值确定后走 setHumidity：连接时下发主机，未连接时本地保存目标值并提示。 */
-            showNumberDialog(14, "设置湿度", "%", bleManager.getLastSetHumidityValue(), false);
+            /* 湿度不提供数值设置；旧页面即使仍发出该 action，也只允许读取。 */
+            boolean sent = bleManager.requestHumidity();
+            showSendResult("读取湿度（只读，不可设置）", sent);
+            invalidate();
             return true;
         }
         if ("control_time".equals(action)) {
@@ -3823,6 +3826,7 @@ public class IcuDashboardView extends View {
                 .putString(KEY_S5_TIME_FORMAT, s5TimeFormat)
                 .putInt(KEY_S5_PRINT_COPIES, s5PrintCopies)
                 .putString(KEY_S5_PRINTER_ADDRESS, s5PrinterAddress)
+                .putString(KEY_S5_PRINTER_MODE, s5PrinterMode)
                 .putBoolean(KEY_S5_DEMO_DATA, s5DemoData)
                 .putString(KEY_S5_REPORT_TITLE, s5ReportTitle)
                 .putString(KEY_S5_REPORT_DECLARATION, s5ReportDeclaration)
@@ -3838,6 +3842,7 @@ public class IcuDashboardView extends View {
         s5TimeFormat = prefs.getString(KEY_S5_TIME_FORMAT, s5TimeFormat);
         s5PrintCopies = prefs.getInt(KEY_S5_PRINT_COPIES, s5PrintCopies);
         s5PrinterAddress = prefs.getString(KEY_S5_PRINTER_ADDRESS, s5PrinterAddress);
+        s5PrinterMode = "system".equals(prefs.getString(KEY_S5_PRINTER_MODE, s5PrinterMode)) ? "system" : "direct";
         s5DemoData = prefs.getBoolean(KEY_S5_DEMO_DATA, s5DemoData);
         s5ReportTitle = prefs.getString(KEY_S5_REPORT_TITLE, s5ReportTitle);
         s5ReportDeclaration = prefs.getString(KEY_S5_REPORT_DECLARATION, s5ReportDeclaration);
@@ -3852,6 +3857,7 @@ public class IcuDashboardView extends View {
         json.put("timeFormat", s5TimeFormat);
         json.put("printCopies", s5PrintCopies);
         json.put("printerAddress", s5PrinterAddress);
+        json.put("printerMode", s5PrinterMode);
         json.put("demoData", s5DemoData);
         json.put("reportTitle", s5ReportTitle);
         json.put("reportDeclaration", s5ReportDeclaration);
@@ -3874,6 +3880,7 @@ public class IcuDashboardView extends View {
             s5PrintCopies = obj.optInt("printCopies", s5PrintCopies);
             if (s5PrintCopies < 1) s5PrintCopies = 1;
             s5PrinterAddress = obj.optString("printerAddress", s5PrinterAddress);
+            s5PrinterMode = "system".equals(obj.optString("printerMode", s5PrinterMode)) ? "system" : "direct";
             s5DemoData = obj.optBoolean("demoData", s5DemoData);
             s5ReportTitle = obj.optString("reportTitle", s5ReportTitle);
             s5ReportDeclaration = obj.optString("reportDeclaration", s5ReportDeclaration);
@@ -3936,7 +3943,7 @@ public class IcuDashboardView extends View {
     void factoryResetSettings() {
         activity.getSharedPreferences(PREFS_NAME, 0).edit()
                 .remove(KEY_S5_LANGUAGE).remove(KEY_S5_TIME_FORMAT).remove(KEY_S5_PRINT_COPIES)
-                .remove(KEY_S5_PRINTER_ADDRESS)
+                .remove(KEY_S5_PRINTER_ADDRESS).remove(KEY_S5_PRINTER_MODE)
                 .remove(KEY_S5_DEMO_DATA)
                 .remove(KEY_S5_REPORT_TITLE).remove(KEY_S5_REPORT_DECLARATION).remove(KEY_S5_FOOTER_LOGO_URI)
                 .remove(KEY_S5_CLOUD_PLATFORM).remove(KEY_S5_LIS)
@@ -3946,6 +3953,7 @@ public class IcuDashboardView extends View {
                 .apply();
         s5Language = "zh"; s5TimeFormat = "yyyy-MM-dd HH:mm:ss"; s5PrintCopies = 1;
         s5PrinterAddress = "";
+        s5PrinterMode = "direct";
         s5DemoData = false;
         s5ReportTitle = ""; s5ReportDeclaration = "※本检测结果仅对该样本负责"; s5FooterLogoUri = ""; s5CloudPlatform = false; s5Lis = false;
         loadUiSettings();
@@ -4435,7 +4443,8 @@ public class IcuDashboardView extends View {
     }
 
     private String currentMonitorLevelColor() {
-        // ★ 修复 P1-1:设备回值优先,本地与设备不一致时以设备为准 + 同步本地 + Toast
+        // 设备回值优先并静默同步本地；状态轮询/结束护疗不能弹出被动同步提示。
+        // 用户主动切换监护等级时仍由 applyMonitorLevel() 给出明确结果。
         if (!isHostConnected()) {
             return normalizeMonitorLevelColor(selectedMonitorLevelColor);
         }
@@ -4446,18 +4455,8 @@ public class IcuDashboardView extends View {
         String normalized = normalizeMonitorLevelColor(live);
         String localStored = normalizeMonitorLevelColor(selectedMonitorLevelColor);
         if (!TextUtils.equals(localStored, normalized)) {
-            // 设备回值与本地不一致 → 以设备为准,同步本地
             selectedMonitorLevelColor = normalized;
             saveUiSettings();
-            final String deviceLabel = monitorLevelLabel(normalized);
-            activity.runOnUiThread(new Runnable() {
-                @Override
-                public void run() {
-                    android.widget.Toast.makeText(activity,
-                        "监护等级已与设备同步:" + deviceLabel,
-                        android.widget.Toast.LENGTH_SHORT).show();
-                }
-            });
         }
         return normalized;
     }
@@ -7899,10 +7898,9 @@ public class IcuDashboardView extends View {
                 pushPrintStatus(false, "当前环境不支持打印");
                 return;
             }
-            /* ★ 2026-10-20 V64（V1.02 R58）：S5 设置了打印机地址 → 优先直连该打印机
-               （IPP 631 → 连接失败回退 RAW 9100 → 再失败回退系统打印对话框）；
-               未设置地址维持原系统对话框路径。 */
-            if (!TextUtils.isEmpty(s5PrinterAddress)) {
+            /* 已配置地址且选择 direct 时走标准协议直连；system 或未配置地址时显式走
+               Android 打印服务。直连失败不再自动弹系统对话框，避免误选打印机和重复任务。 */
+            if (!TextUtils.isEmpty(s5PrinterAddress) && !"system".equals(s5PrinterMode)) {
                 printPdfToConfiguredPrinter(pdf);
                 return;
             }
@@ -7954,51 +7952,123 @@ public class IcuDashboardView extends View {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                /* ★ V83：整段兜 Throwable——光栅化大位图可能 OOM（Error 不是 Exception），
-                   此前线程内 OOM 未捕获直接把整个 App 打崩（闪退）；现在降级系统对话框 */
+                /* 光栅化可能抛 OOM（Error）；整段兜底防闪退，但不再自动改发系统任务。 */
                 try {
+                    /* 9100 是 RAW 端口：绝不能先向它发送 HTTP/IPP，否则部分打印机会把
+                       HTTP 请求当成打印数据并长时间停在初始化。 */
+                    if (isRaw9100Address(addr)) {
+                        appendDebugLog("INFO", "直连打印", "显式 9100 地址，跳过 IPP，直接发送 PCL 光栅");
+                        try {
+                            sendRawPclWithStatus(pdf, addr);
+                        } catch (Exception rawErr) {
+                            appendDebugLog("WARN", "直连打印", "RAW 失败: " + safeErrText(rawErr));
+                            finishDirectPrint(false, "无法连接 RAW 9100 打印机，请核对地址和端口；需要厂商驱动的机型请改用「系统/厂商驱动」打印。详情见后端调试日志");
+                        }
+                        return;
+                    }
                     try {
                         tryIppPrint(pdf, addr, "application/pdf", readFileBytes(pdf));
                         finishDirectPrint(true, "IPP 任务已发送到打印机 " + addr);
                         appendDebugLog("INFO", "直连打印", "成功 IPP/PDF → " + addr);
                         return;
                     } catch (IppRefusedException refused) {
-                        appendDebugLog("WARN", "直连打印", "IPP 被拒: " + refused.getMessage());
-                        /* PDF 被拒 → 查打印机支持的文档格式，支持 JPEG 则光栅化重发 */
+                        if (finishIfIppOutcomeUnknown(refused)) {
+                            return;
+                        }
+                        appendDebugLog("WARN", "直连打印", "IPP/PDF 被拒: " + refused.getMessage());
                         String formats = queryPrinterFormats(addr);
                         appendDebugLog("INFO", "直连打印", "打印机支持格式: " + (TextUtils.isEmpty(formats) ? "(查询失败)" : formats));
                         if (TextUtils.isEmpty(formats) || formats.contains("image/jpeg")) {
                             try {
                                 tryIppPrintJpegRaster(pdf, addr);
-                                finishDirectPrint(true, "已发送到打印机 " + addr + "（图像模式）");
+                                finishDirectPrint(true, "已发送到打印机 " + addr + "（JPEG 图像模式）");
                                 appendDebugLog("INFO", "直连打印", "成功 IPP/JPEG光栅 → " + addr);
                                 return;
                             } catch (Exception jpegErr) {
+                                if (finishIfIppOutcomeUnknown(jpegErr)) {
+                                    return;
+                                }
                                 appendDebugLog("WARN", "直连打印", "JPEG 光栅失败: " + safeErrText(jpegErr));
                             }
                         }
-                        fallbackToSystemDialog(pdf, "打印机拒绝打印（" + refused.getMessage()
-                                + (TextUtils.isEmpty(formats) ? "" : "；支持格式: " + formats) + "），已改用系统打印对话框");
-                        return;
+                        /* IPP Everywhere 的标准光栅格式；不能只靠 PDF/JPEG，否则一大批
+                           仅声明 image/pwg-raster 的打印机被错误降级到系统对话框。 */
+                        if (formats.contains("image/pwg-raster")) {
+                            try {
+                                tryIppPrintPwgRaster(pdf, addr);
+                                finishDirectPrint(true, "已发送到打印机 " + addr + "（PWG 标准光栅）");
+                                appendDebugLog("INFO", "直连打印", "成功 IPP/PWG光栅 → " + addr);
+                                return;
+                            } catch (Exception pwgErr) {
+                                if (finishIfIppOutcomeUnknown(pwgErr)) {
+                                    return;
+                                }
+                                appendDebugLog("WARN", "直连打印", "PWG 光栅失败: " + safeErrText(pwgErr));
+                            }
+                        }
+                        /* HP/Mopria PCLm：M1213nf 等设备原生声明 application/PCLm。
+                           该格式不是 PCL5，也不是把原 PDF 改名；必须生成规定的分条光栅 PDF。 */
+                        if (formats.toLowerCase(Locale.US).contains("application/pclm")) {
+                            try {
+                                tryIppPrintPclmRaster(pdf, addr);
+                                finishDirectPrint(true, "IPP/PCLm 任务已受理，请查看打印机是否出纸");
+                                appendDebugLog("INFO", "直连打印", "成功 IPP/PCLm光栅 → " + addr);
+                                return;
+                            } catch (Exception pclmErr) {
+                                if (finishIfIppOutcomeUnknown(pclmErr)) {
+                                    return;
+                                }
+                                appendDebugLog("WARN", "直连打印", "PCLm 光栅失败: " + safeErrText(pclmErr));
+                            }
+                        }
+                        /* AirPrint/Apple Raster：真机日志中只声明 image/urf 的设备，
+                           PDF 会返回 0x040A，向 9100 写 PCL 也只会被静默丢弃。 */
+                        if (formats.contains("image/urf")) {
+                            try {
+                                tryIppPrintUrfRaster(pdf, addr);
+                                finishDirectPrint(true, "IPP/URF 任务已受理，请查看打印机是否出纸");
+                                appendDebugLog("INFO", "直连打印", "成功 IPP/URF光栅 → " + addr);
+                                return;
+                            } catch (Exception urfErr) {
+                                if (finishIfIppOutcomeUnknown(urfErr)) {
+                                    return;
+                                }
+                                appendDebugLog("WARN", "直连打印", "URF 光栅失败: " + safeErrText(urfErr));
+                            }
+                        }
+                        appendDebugLog("INFO", "直连打印", "IPP 未受理任务，继续尝试 RAW9100/PCL");
                     } catch (Exception connErr) {
                         appendDebugLog("WARN", "直连打印", "IPP 连接失败: " + safeErrText(connErr));
-                        try {
-                            tryRaw9100Pcl(pdf, addr);
-                            finishDirectPrint(true, "RAW 任务已发送到打印机 " + addr);
-                            appendDebugLog("INFO", "直连打印", "成功 RAW9100/PCL光栅 → " + addr);
-                            return;
-                        } catch (Exception rawErr) {
-                            appendDebugLog("WARN", "直连打印", "RAW 失败: " + safeErrText(rawErr));
-                            fallbackToSystemDialog(pdf, "直连打印机失败（IPP: " + safeErrText(connErr)
-                                    + " / RAW: " + safeErrText(rawErr) + "），已改用系统打印对话框");
-                        }
+                    }
+                    try {
+                        sendRawPclWithStatus(pdf, addr);
+                    } catch (Exception rawErr) {
+                        appendDebugLog("WARN", "直连打印", "RAW 失败: " + safeErrText(rawErr));
+                        finishDirectPrint(false, "直连打印失败，请核对地址和端口；需要厂商驱动的机型请改用「系统/厂商驱动」打印。详情见后端调试日志");
                     }
                 } catch (Throwable t) {
                     appendDebugLog("ERROR", "直连打印", "未捕获异常（已拦截防闪退）: " + safeErrText(t));
-                    fallbackToSystemDialog(pdf, "打印过程异常（" + t.getClass().getSimpleName() + "），已改用系统打印对话框");
+                    finishDirectPrint(false, "打印过程异常（" + t.getClass().getSimpleName() + "），未自动重发；详情见后端调试日志");
                 }
             }
         }, "icu-direct-print").start();
+    }
+
+    private void sendRawPclWithStatus(File pdf, String addr) throws IOException {
+        tryRaw9100Pcl(pdf, addr);
+        finishDirectPrint(true, "PCL 任务已发送到打印机 " + addr + "；若仍不出纸，请改用「系统/厂商驱动」打印");
+        appendDebugLog("INFO", "直连打印", "RAW9100/PCL 数据已发送（仅确认 TCP 写入，不代表主机驱动型打印机已出纸）→ " + addr);
+    }
+
+    /** IPP 请求已经发出但响应不可确认时，禁止换协议重发，避免同一报告重复打印。 */
+    private boolean finishIfIppOutcomeUnknown(Exception error) {
+        if (!(error instanceof IppRefusedException)
+                || ((IppRefusedException) error).ippStatus != -2) {
+            return false;
+        }
+        appendDebugLog("WARN", "直连打印", "IPP 任务结果不确定，停止自动重发: " + safeErrText(error));
+        finishDirectPrint(false, "打印数据已发出，但打印机响应无法确认。请先核对是否出纸；为避免重复打印，本次未自动重发");
+        return true;
     }
 
     private String safeErrText(Throwable e) {
@@ -8014,20 +8084,6 @@ public class IcuDashboardView extends View {
             @Override
             public void run() {
                 pushPrintStatus(ok, msg);
-            }
-        });
-    }
-
-    private void fallbackToSystemDialog(final File pdf, final String msg) {
-        if (activity == null) {
-            return;
-        }
-        activity.runOnUiThread(new Runnable() {
-            @Override
-            public void run() {
-                Toast.makeText(activity, msg, Toast.LENGTH_LONG).show();
-                appendUserLog("打印", "直连打印机失败", msg);
-                printPdfViaSystemDialog(pdf);
             }
         });
     }
@@ -8071,12 +8127,30 @@ public class IcuDashboardView extends View {
         return new String[]{host, String.valueOf(port), path};
     }
 
+    /** 页面手输的 host:9100 明确表示 RAW；显式 ipp/http URI 仍尊重调用方协议。 */
+    private boolean isRaw9100Address(String addr) {
+        String a = addr == null ? "" : addr.trim().toLowerCase(Locale.US);
+        if (a.startsWith("ipp://") || a.startsWith("http://") || a.startsWith("ipps://") || a.startsWith("https://")) {
+            return false;
+        }
+        try {
+            return Integer.parseInt(parsePrinterAddr(a, 631, "/")[1]) == 9100;
+        } catch (Exception ignored) {
+            return false;
+        }
+    }
+
     /* ★ V82 重写：IPP 1.1 Print-Job（POST application/ipp 到 host:port/path）。
        ① 路径回退：默认 /ipp/print，HTTP 404 时依次试 /ipp、/（各品牌 IPP 路径不一）；
        ② 响应体 IPP status-code 真解析：>0x00FF 即拒绝（如 0x040A=document-format-not-supported），
           此前只看 HTTP 2xx 造成「假成功」；
        成功=任务已受理；IppRefusedException=打印机在线但拒绝；其他 IOException=连接级失败（回退 RAW）。 */
     private void tryIppPrint(File pdf, String addr, String docFormat, byte[] data) throws Exception {
+        tryIppPrint(pdf, addr, docFormat, data, 0, null);
+    }
+
+    private void tryIppPrint(File pdf, String addr, String docFormat, byte[] data,
+                             int pclmDpi, String mediaName) throws Exception {
         String[] hp = parsePrinterAddr(addr, 631, "/ipp/print");
         String host = hp[0];
         int port = Integer.parseInt(hp[1]);
@@ -8087,7 +8161,7 @@ public class IcuDashboardView extends View {
         IppRefusedException notFound = null;
         for (String path : candidates) {
             try {
-                ippPrintOnce(host, port, path, docFormat, data, pdf.getName());
+                ippPrintOnce(host, port, path, docFormat, data, pdf.getName(), pclmDpi, mediaName);
                 return;
             } catch (IppRefusedException refused) {
                 /* HTTP 404 或 IPP 0x0401(client-error-not-found) 都可能是路径不对 → 换下一个路径 */
@@ -8104,6 +8178,11 @@ public class IcuDashboardView extends View {
 
     /* 单路径 IPP Print-Job：发送并完整解析响应（HTTP 状态 + IPP status-code + status-message）。 */
     private void ippPrintOnce(String host, int port, String path, String docFormat, byte[] data, String jobName) throws Exception {
+        ippPrintOnce(host, port, path, docFormat, data, jobName, 0, null);
+    }
+
+    private void ippPrintOnce(String host, int port, String path, String docFormat, byte[] data,
+                              String jobName, int pclmDpi, String mediaName) throws Exception {
         String printerUri = "ipp://" + host + ":" + port + path;
         java.io.ByteArrayOutputStream headBuf = new java.io.ByteArrayOutputStream();
         java.io.DataOutputStream d = new java.io.DataOutputStream(headBuf);
@@ -8115,14 +8194,24 @@ public class IcuDashboardView extends View {
         writeIppAttr(d, 0x47, "attributes-charset", "utf-8");
         writeIppAttr(d, 0x48, "attributes-natural-language", "zh-cn");
         writeIppAttr(d, 0x45, "printer-uri", printerUri);
+        writeIppAttr(d, 0x42, "requesting-user-name", "ICU");
         writeIppAttr(d, 0x42, "job-name", jobName);
         writeIppAttr(d, 0x49, "document-format", docFormat);
+        if (pclmDpi > 0) {
+            writeIppResolutionAttr(d, "pclm-source-resolution", pclmDpi);
+            writeIppResolutionAttr(d, "printer-resolution", pclmDpi);
+            writeIppAttr(d, 0x44, "print-color-mode", "monochrome");
+        }
+        if (!TextUtils.isEmpty(mediaName)) {
+            writeIppAttr(d, 0x44, "media", mediaName);
+        }
         d.writeByte(0x03);           // end-of-attributes-tag
         d.flush();
         byte[] ippHead = headBuf.toByteArray();
         java.net.Socket socket = new java.net.Socket();
         socket.connect(new java.net.InetSocketAddress(host, port), 8000);
         socket.setSoTimeout(15000);
+        boolean requestSent = false;
         try {
             OutputStream out = socket.getOutputStream();
             String reqHead = "POST " + path + " HTTP/1.1\r\n"
@@ -8134,6 +8223,7 @@ public class IcuDashboardView extends View {
             out.write(ippHead);
             out.write(data);
             out.flush();
+            requestSent = true;
             java.io.InputStream in = socket.getInputStream();
             String statusLine = readHttpStatusLine(in);
             if (statusLine == null || !statusLine.startsWith("HTTP/")) {
@@ -8154,19 +8244,27 @@ public class IcuDashboardView extends View {
             if (code < 200 || code >= 300) {
                 throw new IppRefusedException("HTTP " + code + " @ " + path, code, -1);
             }
-            /* ★ V82：HTTP 2xx ≠ 成功——IPP status-code 在响应体里，必须解析（假成功病根） */
+            /* HTTP 2xx 仍不等于成功，必须取得合法 IPP status-code。响应缺失时任务
+               可能已被受理，标记 -2，调用方不得换协议自动重发。 */
             byte[] body = readHttpResponseBody(in);
-            if (body.length >= 4) {
-                int ippStatus = ((body[2] & 0xFF) << 8) | (body[3] & 0xFF);
-                if (ippStatus > 0x00FF) {
-                    String sm = extractIppAttrValue(body, "status-message");
-                    throw new IppRefusedException("IPP状态 0x" + Integer.toHexString(ippStatus)
-                            + (TextUtils.isEmpty(sm) ? "" : "（" + sm + "）"), code, ippStatus);
-                }
-                appendDebugLog("INFO", "直连打印", "IPP 受理 HTTP " + code + " status=0x" + Integer.toHexString(ippStatus) + " " + docFormat + " @ " + path);
-            } else {
-                appendDebugLog("INFO", "直连打印", "IPP 受理 HTTP " + code + "（响应体过短未取到状态）" + docFormat + " @ " + path);
+            if (body.length < 4 || (body[0] & 0xFF) < 1 || (body[0] & 0xFF) > 2) {
+                throw new IppRefusedException("IPP 响应不完整或格式无效，任务状态未知", code, -2);
             }
+            int ippStatus = ((body[2] & 0xFF) << 8) | (body[3] & 0xFF);
+            if (ippStatus > 0x00FF) {
+                String sm = extractIppAttrValue(body, "status-message");
+                throw new IppRefusedException("IPP状态 0x" + Integer.toHexString(ippStatus)
+                        + (TextUtils.isEmpty(sm) ? "" : "（" + sm + "）"), code, ippStatus);
+            }
+            appendDebugLog("INFO", "直连打印", "IPP 受理 HTTP " + code + " status=0x" + Integer.toHexString(ippStatus) + " " + docFormat + " @ " + path);
+        } catch (Exception error) {
+            if (error instanceof IppRefusedException) {
+                throw error;
+            }
+            if (requestSent) {
+                throw new IppRefusedException("IPP 请求已发出，但响应读取失败（" + safeErrText(error) + "）", 0, -2);
+            }
+            throw error;
         } finally {
             try {
                 socket.close();
@@ -8294,77 +8392,117 @@ public class IcuDashboardView extends View {
         }
     }
 
-    /* ★ V82：Get-Printer-Attributes 查 document-format-supported —— 在响应体里直接检索已知格式串
-       （多值属性逐个解析太啰嗦，格式枚举是封闭集合，子串匹配足够稳）；返回逗号串，查询失败返回 ""。 */
-    private String queryPrinterFormats(String addr) {
-        java.net.Socket socket = null;
-        try {
-            String[] hp = parsePrinterAddr(addr, 631, "/ipp/print");
-            String host = hp[0];
-            int port = Integer.parseInt(hp[1]);
-            String path = hp[2];
-            String printerUri = "ipp://" + host + ":" + port + path;
-            java.io.ByteArrayOutputStream headBuf = new java.io.ByteArrayOutputStream();
-            java.io.DataOutputStream d = new java.io.DataOutputStream(headBuf);
-            d.writeByte(1);
-            d.writeByte(1);
-            d.writeShort(0x000B);        // Get-Printer-Attributes
-            d.writeInt(1);
-            d.writeByte(0x01);
-            writeIppAttr(d, 0x47, "attributes-charset", "utf-8");
-            writeIppAttr(d, 0x48, "attributes-natural-language", "zh-cn");
-            writeIppAttr(d, 0x45, "printer-uri", printerUri);
-            writeIppAttr(d, 0x42, "requested-attributes", "document-format-supported");
-            d.writeByte(0x03);
-            d.flush();
-            byte[] body = headBuf.toByteArray();
-            socket = new java.net.Socket();
-            socket.connect(new java.net.InetSocketAddress(host, port), 4000);
-            socket.setSoTimeout(5000);
-            try {
-                OutputStream out = socket.getOutputStream();
-                String reqHead = "POST " + path + " HTTP/1.1\r\n"
-                        + "Host: " + host + ":" + port + "\r\n"
-                        + "Content-Type: application/ipp\r\n"
-                        + "Content-Length: " + body.length + "\r\n"
-                        + "Connection: close\r\n\r\n";
-                out.write(reqHead.getBytes("US-ASCII"));
-                out.write(body);
-                out.flush();
-                java.io.InputStream in = socket.getInputStream();
-                String statusLine = readHttpStatusLine(in);
-                if (statusLine == null || !statusLine.startsWith("HTTP/")) {
-                    return "";
-                }
-                byte[] resp = readHttpResponseBody(in);
-                String text = new String(resp, "ISO-8859-1");
-                String[] known = {"application/pdf", "image/jpeg", "image/pwg-raster",
-                        "application/postscript", "application/octet-stream", "image/urf"};
-                StringBuilder sb = new StringBuilder();
-                for (String fmt : known) {
-                    if (text.contains(fmt)) {
-                        if (sb.length() > 0) {
-                            sb.append(',');
-                        }
-                        sb.append(fmt);
-                    }
-                }
-                return sb.toString();
-            } finally {
-                try {
-                    socket.close();
-                } catch (Exception ignored) {
-                }
-            }
-        } catch (Exception ignored) {
-            try {
-                if (socket != null) {
-                    socket.close();
-                }
-            } catch (Exception ignored2) {
-            }
-            return "";
+    /* Get-Printer-Attributes 公共请求。requested-attributes 的 IPP 语法是 keyword(0x44)，
+       多值后续项必须使用空属性名；旧代码误用 0x42 且重复属性名，部分打印机会直接拒绝。 */
+    private byte[] queryPrinterAttributes(String addr, String[] requestedAttributes) {
+        if (isRaw9100Address(addr) || requestedAttributes == null || requestedAttributes.length == 0) {
+            return new byte[0];
         }
+        String[] hp = parsePrinterAddr(addr, 631, "/ipp/print");
+        String host = hp[0];
+        int port = Integer.parseInt(hp[1]);
+        String firstPath = hp[2];
+        String[] candidates = "/ipp/print".equals(firstPath)
+                ? new String[]{"/ipp/print", "/ipp", "/"}
+                : new String[]{firstPath};
+        for (String path : candidates) {
+            try {
+                return queryPrinterAttributesAtPath(host, port, path, requestedAttributes);
+            } catch (IppRefusedException refused) {
+                if (refused.httpCode != 404 && refused.ippStatus != 0x0401) {
+                    return new byte[0];
+                }
+            } catch (Exception ignored) {
+                return new byte[0];
+            }
+        }
+        return new byte[0];
+    }
+
+    private byte[] queryPrinterAttributesAtPath(String host, int port, String path, String[] requestedAttributes) throws Exception {
+        String printerUri = "ipp://" + host + ":" + port + path;
+        java.io.ByteArrayOutputStream headBuf = new java.io.ByteArrayOutputStream();
+        java.io.DataOutputStream d = new java.io.DataOutputStream(headBuf);
+        d.writeByte(1);
+        d.writeByte(1);
+        d.writeShort(0x000B);        // Get-Printer-Attributes
+        d.writeInt(1);
+        d.writeByte(0x01);
+        writeIppAttr(d, 0x47, "attributes-charset", "utf-8");
+        writeIppAttr(d, 0x48, "attributes-natural-language", "zh-cn");
+        writeIppAttr(d, 0x45, "printer-uri", printerUri);
+        for (int i = 0; i < requestedAttributes.length; i++) {
+            writeIppAttr(d, 0x44, i == 0 ? "requested-attributes" : "", requestedAttributes[i]);
+        }
+        d.writeByte(0x03);
+        d.flush();
+        byte[] requestBody = headBuf.toByteArray();
+        java.net.Socket socket = new java.net.Socket();
+        socket.connect(new java.net.InetSocketAddress(host, port), 4000);
+        socket.setSoTimeout(5000);
+        try {
+            OutputStream out = socket.getOutputStream();
+            String reqHead = "POST " + path + " HTTP/1.1\r\n"
+                    + "Host: " + host + ":" + port + "\r\n"
+                    + "Content-Type: application/ipp\r\n"
+                    + "Content-Length: " + requestBody.length + "\r\n"
+                    + "Connection: close\r\n\r\n";
+            out.write(reqHead.getBytes("US-ASCII"));
+            out.write(requestBody);
+            out.flush();
+            java.io.InputStream in = socket.getInputStream();
+            String statusLine = readHttpStatusLine(in);
+            if (statusLine == null || !statusLine.startsWith("HTTP/")) {
+                throw new IOException("IPP 属性响应无法解析");
+            }
+            String[] parts = statusLine.split(" ");
+            int code = parts.length > 1 ? Integer.parseInt(parts[1].trim()) : 0;
+            while (code == 100) {
+                discardHttpHeaders(in);
+                statusLine = readHttpStatusLine(in);
+                if (statusLine == null || !statusLine.startsWith("HTTP/")) {
+                    throw new IOException("IPP 属性响应无法解析");
+                }
+                parts = statusLine.split(" ");
+                code = parts.length > 1 ? Integer.parseInt(parts[1].trim()) : 0;
+            }
+            if (code < 200 || code >= 300) {
+                throw new IppRefusedException("HTTP " + code + " @ " + path, code, -1);
+            }
+            byte[] response = readHttpResponseBody(in);
+            if (response.length < 4) {
+                throw new IOException("IPP 属性响应过短");
+            }
+            int ippStatus = ((response[2] & 0xFF) << 8) | (response[3] & 0xFF);
+            if (ippStatus > 0x00FF) {
+                throw new IppRefusedException("IPP属性状态 0x" + Integer.toHexString(ippStatus), code, ippStatus);
+            }
+            return response;
+        } finally {
+            try {
+                socket.close();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /* 在合法 IPP 响应里检索支持的文档格式；返回逗号串，查询失败返回 ""。 */
+    private String queryPrinterFormats(String addr) {
+        byte[] resp = queryPrinterAttributes(addr, new String[]{"document-format-supported"});
+        String text = new String(resp, java.nio.charset.StandardCharsets.ISO_8859_1);
+        String[] known = {"application/pdf", "image/jpeg", "image/pwg-raster",
+                "application/PCLm", "application/pclm", "application/postscript",
+                "application/octet-stream", "image/urf"};
+        StringBuilder sb = new StringBuilder();
+        for (String fmt : known) {
+            if (text.contains(fmt)) {
+                if (sb.length() > 0) {
+                    sb.append(',');
+                }
+                sb.append(fmt);
+            }
+        }
+        return sb.toString();
     }
 
     /* ★ V82：PDF 被拒后的光栅回退——PdfRenderer 逐页渲染位图 → JPEG →
@@ -8408,6 +8546,523 @@ public class IcuDashboardView extends View {
         }
     }
 
+    /* IPP Everywhere 标准 PWG Raster（RaS2 + 1796 字节页头，8 位 sRGB、未压缩行）。
+       每页单独 Print-Job，避免多页 24 位光栅在平板内堆积造成 OOM。 */
+    private void tryIppPrintPwgRaster(File pdf, String addr) throws Exception {
+        ParcelFileDescriptor pfd = ParcelFileDescriptor.open(pdf, ParcelFileDescriptor.MODE_READ_ONLY);
+        try {
+            PdfRenderer renderer = new PdfRenderer(pfd);
+            try {
+                int pages = renderer.getPageCount();
+                appendDebugLog("INFO", "直连打印", "PWG 光栅化 " + pages + " 页 @150dpi/sRGB");
+                for (int i = 0; i < pages; i++) {
+                    PdfRenderer.Page page = renderer.openPage(i);
+                    Bitmap bmp = null;
+                    try {
+                        int w = Math.max(1, Math.round(page.getWidth() * 150f / 72f));
+                        int h = Math.max(1, Math.round(page.getHeight() * 150f / 72f));
+                        bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                        bmp.eraseColor(Color.WHITE);
+                        page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT);
+                        byte[] raster = buildPwgRasterPage(bmp, page.getWidth(), page.getHeight());
+                        tryIppPrint(pdf, addr, "image/pwg-raster", raster);
+                    } finally {
+                        if (bmp != null) {
+                            bmp.recycle();
+                        }
+                        page.close();
+                    }
+                }
+            } finally {
+                renderer.close();
+            }
+        } finally {
+            try {
+                pfd.close();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private byte[] buildPwgRasterPage(Bitmap bmp, int widthPoints, int heightPoints) throws IOException {
+        int w = bmp.getWidth();
+        int h = bmp.getHeight();
+        int rowBytes = w * 3;
+        long total = 4L + 1796L + (long) rowBytes * h;
+        if (total > 128L * 1024L * 1024L) {
+            throw new IOException("PWG 单页光栅过大: " + total);
+        }
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream((int) total);
+        out.write(buildPwgRasterHeader(w, h, widthPoints, heightPoints, rowBytes));
+        int[] pixels = new int[w];
+        byte[] row = new byte[rowBytes];
+        for (int y = 0; y < h; y++) {
+            bmp.getPixels(pixels, 0, w, 0, y, w, 1);
+            for (int x = 0; x < w; x++) {
+                int color = pixels[x];
+                int p = x * 3;
+                row[p] = (byte) ((color >> 16) & 0xFF);
+                row[p + 1] = (byte) ((color >> 8) & 0xFF);
+                row[p + 2] = (byte) (color & 0xFF);
+            }
+            out.write(row);
+        }
+        return out.toByteArray();
+    }
+
+    /** CUPS/PWG v2 页头；偏移均相对 1796 字节页头，最前面另加 RaS2 同步字。 */
+    private byte[] buildPwgRasterHeader(int widthPx, int heightPx, int widthPoints, int heightPoints, int bytesPerLine) {
+        byte[] header = new byte[4 + 1796];
+        java.nio.ByteBuffer b = java.nio.ByteBuffer.wrap(header).order(java.nio.ByteOrder.BIG_ENDIAN);
+        b.putInt(0, 0x52615332);       // "RaS2" = PWG Raster
+        b.putInt(4 + 276, 150);        // HWResolution.x
+        b.putInt(4 + 280, 150);        // HWResolution.y
+        b.putInt(4 + 340, 1);          // NumCopies
+        b.putInt(4 + 352, widthPoints);
+        b.putInt(4 + 356, heightPoints);
+        b.putInt(4 + 372, widthPx);    // cupsWidth
+        b.putInt(4 + 376, heightPx);   // cupsHeight
+        b.putInt(4 + 384, 8);          // cupsBitsPerColor
+        b.putInt(4 + 388, 24);         // cupsBitsPerPixel
+        b.putInt(4 + 392, bytesPerLine);
+        b.putInt(4 + 396, 0);          // cupsColorOrder = chunked (RGB RGB ...)
+        b.putInt(4 + 400, 19);         // cupsColorSpace = sRGB
+        b.putInt(4 + 404, 0);          // cupsCompression = none
+        b.putInt(4 + 420, 3);          // cupsNumColors
+        b.putFloat(4 + 424, 1.0f);     // cupsBorderlessScalingFactor
+        b.putFloat(4 + 428, widthPoints);
+        b.putFloat(4 + 432, heightPoints);
+        return header;
+    }
+
+    /* PCLm 是 PDF 语法的分条光栅格式，不等于 PCL5，也不能直接改发原 PDF。
+       M1213nf 实测声明 application/PCLm、600dpi、128 行 strip、RLE 首选。
+       每次只渲染一个 strip，避免 600dpi A4 整页 ARGB 位图约占 133MB。 */
+    private void tryIppPrintPclmRaster(File pdf, String addr) throws Exception {
+        byte[] capabilityResponse = queryPrinterAttributes(addr, new String[]{
+                "pclm-source-resolution-supported", "pclm-strip-height-preferred"});
+        final int dpi = extractIppResolutionAttrValue(capabilityResponse,
+                "pclm-source-resolution-supported", 300);
+        final int stripHeight = extractIppIntAttrValue(capabilityResponse,
+                "pclm-strip-height-preferred", 128);
+        if (dpi < 72 || dpi > 1200 || stripHeight < 16 || stripHeight > 512) {
+            throw new IOException("PCLm 能力无效: dpi=" + dpi + " strip=" + stripHeight);
+        }
+        appendDebugLog("INFO", "直连打印", "PCLm 能力: " + dpi + "dpi，每段 "
+                + stripHeight + " 行，8位灰度/RLE");
+        ParcelFileDescriptor pfd = ParcelFileDescriptor.open(pdf, ParcelFileDescriptor.MODE_READ_ONLY);
+        try {
+            PdfRenderer renderer = new PdfRenderer(pfd);
+            try {
+                int pages = renderer.getPageCount();
+                appendDebugLog("INFO", "直连打印", "PCLm 光栅化 " + pages + " 页 @" + dpi + "dpi");
+                for (int i = 0; i < pages; i++) {
+                    PdfRenderer.Page page = renderer.openPage(i);
+                    try {
+                        int w = Math.max(1, Math.round(page.getWidth() * dpi / 72f));
+                        int h = Math.max(1, Math.round(page.getHeight() * dpi / 72f));
+                        int count = (h + stripHeight - 1) / stripHeight;
+                        if (w > 12000 || h > 40000 || (long) w * stripHeight > 8000000L) {
+                            throw new IOException("PCLm 页面尺寸过大: " + w + "x" + h);
+                        }
+                        java.util.List<byte[]> strips = new java.util.ArrayList<>(count);
+                        boolean[] white = new boolean[count];
+                        float scale = dpi / 72f;
+                        for (int s = 0; s < count; s++) {
+                            int top = s * stripHeight;
+                            int rows = Math.min(stripHeight, h - top);
+                            Bitmap strip = Bitmap.createBitmap(w, rows, Bitmap.Config.ARGB_8888);
+                            try {
+                                strip.eraseColor(Color.WHITE);
+                                android.graphics.Matrix transform = new android.graphics.Matrix();
+                                transform.setValues(new float[]{
+                                        scale, 0, 0,
+                                        0, scale, -top,
+                                        0, 0, 1});
+                                page.render(strip, new android.graphics.Rect(0, 0, w, rows),
+                                        transform, PdfRenderer.Page.RENDER_MODE_FOR_PRINT);
+                                byte[] gray = bitmapToGrayStrip(strip);
+                                white[s] = isAllWhiteRaster(gray);
+                                strips.add(encodePdfRunLength(gray));
+                            } finally {
+                                strip.recycle();
+                            }
+                        }
+                        byte[] pclm = buildPclmRasterPage(w, h, dpi, stripHeight, strips, white);
+                        appendDebugLog("INFO", "直连打印", "PCLm 第 " + (i + 1) + "/" + pages
+                                + " 页 " + w + "x" + h + "，" + count + "段，编码 "
+                                + pclm.length + " 字节");
+                        tryIppPrint(pdf, addr, "application/PCLm", pclm, dpi,
+                                pclmMediaName(page.getWidth(), page.getHeight()));
+                    } finally {
+                        page.close();
+                    }
+                }
+            } finally {
+                renderer.close();
+            }
+        } finally {
+            try {
+                pfd.close();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    private String pclmMediaName(float widthPoints, float heightPoints) {
+        if (Math.abs(widthPoints - 595f) <= 3f && Math.abs(heightPoints - 842f) <= 3f) {
+            return "iso_a4_210x297mm";
+        }
+        if (Math.abs(widthPoints - 612f) <= 3f && Math.abs(heightPoints - 792f) <= 3f) {
+            return "na_letter_8.5x11in";
+        }
+        return null;
+    }
+
+    private byte[] bitmapToGrayStrip(Bitmap bmp) {
+        int w = bmp.getWidth();
+        int h = bmp.getHeight();
+        byte[] gray = new byte[w * h];
+        int[] pixels = new int[w];
+        for (int y = 0; y < h; y++) {
+            bmp.getPixels(pixels, 0, w, 0, y, w, 1);
+            int row = y * w;
+            for (int x = 0; x < w; x++) {
+                int color = pixels[x];
+                int r = (color >> 16) & 0xFF;
+                int g = (color >> 8) & 0xFF;
+                int b = color & 0xFF;
+                gray[row + x] = (byte) ((r * 77 + g * 150 + b * 29) >> 8);
+            }
+        }
+        return gray;
+    }
+
+    private boolean isAllWhiteRaster(byte[] gray) {
+        for (byte value : gray) {
+            if ((value & 0xFF) != 255) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** PDF RunLengthDecode：0..127 为字面长度-1，129..255 为 257-重复长度，128 结束。 */
+    private byte[] encodePdfRunLength(byte[] input) {
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(
+                input.length + input.length / 128 + 16);
+        int index = 0;
+        while (index < input.length) {
+            int run = 1;
+            while (index + run < input.length && run < 128
+                    && input[index] == input[index + run]) {
+                run++;
+            }
+            if (run >= 2) {
+                out.write(257 - run);
+                out.write(input[index]);
+                index += run;
+                continue;
+            }
+            int literalStart = index;
+            index++;
+            while (index < input.length && index - literalStart < 128) {
+                if (index + 1 < input.length && input[index] == input[index + 1]) {
+                    break;
+                }
+                index++;
+            }
+            int literal = index - literalStart;
+            out.write(literal - 1);
+            out.write(input, literalStart, literal);
+        }
+        out.write(128);
+        return out.toByteArray();
+    }
+
+    /** 生成单页 PCLm；对象顺序、xref 偏移和 strip 顺序均按实际字节位置写出。 */
+    private byte[] buildPclmRasterPage(int widthPx, int heightPx, int dpi, int stripHeight,
+                                       java.util.List<byte[]> strips, boolean[] whiteStrips) throws IOException {
+        int expected = (heightPx + stripHeight - 1) / stripHeight;
+        if (widthPx <= 0 || heightPx <= 0 || dpi <= 0 || strips.size() != expected
+                || whiteStrips.length != expected) {
+            throw new IOException("PCLm strip 数量或页面参数无效");
+        }
+        long payloadBytes = 0;
+        for (byte[] strip : strips) {
+            payloadBytes += strip.length;
+        }
+        if (payloadBytes > 64L * 1024L * 1024L) {
+            throw new IOException("PCLm 单页编码过大: " + payloadBytes);
+        }
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream((int) payloadBytes + 16384);
+        int nextObject = 5 + expected * 2;
+        int[] offsets = new int[nextObject];
+        writePclmAscii(out, "%PDF-1.7\n%PCLm 1.0\n");
+        StringBuilder resources = new StringBuilder();
+        StringBuilder content = new StringBuilder(String.format(Locale.US,
+                "%.8f 0 0 %.8f 0 0 cm\n", 72.0 / dpi, 72.0 / dpi));
+        for (int i = 0; i < expected; i++) {
+            int rows = Math.min(stripHeight, heightPx - i * stripHeight);
+            int y = heightPx - (i + 1) * stripHeight;
+            resources.append("/Image").append(i).append(' ').append(5 + i * 2).append(" 0 R ");
+            content.append("/P <</MCID 0>> BDC q\n")
+                    .append(widthPx).append(" 0 0 ").append(rows).append(" 0 ")
+                    .append(Math.max(0, y)).append(" cm\n")
+                    .append("/Image").append(i).append(" Do Q EMC\n");
+        }
+        int mediaW = (widthPx * 72 + dpi / 2) / dpi;
+        int mediaH = (heightPx * 72 + dpi / 2) / dpi;
+        offsets[3] = out.size();
+        writePclmAscii(out, "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [ 0 0 "
+                + mediaW + " " + mediaH + " ] /Resources << /XObject << "
+                + resources + ">> >> /Contents [ 4 0 R ] >>\nendobj\n");
+        writePclmStream(out, offsets, 4, "", content.toString().getBytes("US-ASCII"));
+        for (int i = 0; i < expected; i++) {
+            int rows = Math.min(stripHeight, heightPx - i * stripHeight);
+            String attrs = "/Type /XObject\n/Subtype /Image\n/Width " + widthPx
+                    + " \n/Height " + rows + " \n/ColorSpace /DeviceGray\n/Name /"
+                    + (whiteStrips[i] ? "WhiteStrip" : "ColorStrip")
+                    + "\n/Filter /RunLengthDecode\n/BitsPerComponent 8 \n";
+            writePclmStream(out, offsets, 5 + i * 2, attrs, strips.get(i));
+            writePclmStream(out, offsets, 6 + i * 2, "", "q /Image Do Q\n".getBytes("US-ASCII"));
+        }
+        offsets[1] = out.size();
+        writePclmAscii(out, "1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n");
+        offsets[2] = out.size();
+        writePclmAscii(out, "2 0 obj\n<< /Type /Pages /Count 1 /Kids [3 0 R] >>\nendobj\n");
+        int xref = out.size();
+        writePclmAscii(out, "xref\n0 " + nextObject + "\n0000000000 65535 f \n");
+        for (int i = 1; i < nextObject; i++) {
+            if (offsets[i] <= 0) {
+                throw new IOException("PCLm 对象偏移缺失: " + i);
+            }
+            writePclmAscii(out, String.format(Locale.US, "%010d 00000 n \n", offsets[i]));
+        }
+        writePclmAscii(out, "trailer\n<< /Size " + nextObject
+                + " /Root 1 0 R >>\nstartxref\n" + xref + "\n%%EOF\n");
+        return out.toByteArray();
+    }
+
+    private void writePclmStream(java.io.ByteArrayOutputStream out, int[] offsets, int object,
+                                 String attrs, byte[] data) throws IOException {
+        offsets[object] = out.size();
+        writePclmAscii(out, object + " 0 obj\n<<\n/Length " + data.length + " \n"
+                + attrs + ">>\nstream\n");
+        out.write(data, 0, data.length);
+        writePclmAscii(out, "\nendstream\nendobj\n");
+    }
+
+    private void writePclmAscii(java.io.ByteArrayOutputStream out, String text) throws IOException {
+        byte[] bytes = text.getBytes("US-ASCII");
+        out.write(bytes, 0, bytes.length);
+    }
+
+    /* Apple Raster/URF（UNIRAST）：AirPrint 设备常只声明 image/urf。
+       每页一个 IPP 任务，页数写 1；按 urf-supported 选择分辨率和 SRGB24/W8，
+       逐行使用 CUPS 兼容的像素级 PackBits，并以行重复计数压缩空白区域。 */
+    private void tryIppPrintUrfRaster(File pdf, String addr) throws Exception {
+        byte[] capabilityResponse = queryPrinterAttributes(addr, new String[]{"urf-supported"});
+        int[] capabilities = parseUrfRasterCapabilities(capabilityResponse);
+        final int dpi = capabilities[0];
+        final int bitsPerPixel = capabilities[1];
+        String advertised = extractIppAttrValue(capabilityResponse, "urf-supported");
+        appendDebugLog("INFO", "直连打印", "URF 能力: "
+                + (TextUtils.isEmpty(advertised) ? "(未查询到，使用300dpi/sRGB兼容参数)" : advertised)
+                + "；选择 " + dpi + "dpi/" + (bitsPerPixel == 24 ? "sRGB24" : "W8灰度"));
+        ParcelFileDescriptor pfd = ParcelFileDescriptor.open(pdf, ParcelFileDescriptor.MODE_READ_ONLY);
+        try {
+            PdfRenderer renderer = new PdfRenderer(pfd);
+            try {
+                int pages = renderer.getPageCount();
+                appendDebugLog("INFO", "直连打印", "URF 光栅化 " + pages + " 页 @"
+                        + dpi + "dpi/" + (bitsPerPixel == 24 ? "sRGB" : "灰度"));
+                for (int i = 0; i < pages; i++) {
+                    PdfRenderer.Page page = renderer.openPage(i);
+                    Bitmap bmp = null;
+                    try {
+                        int w = Math.max(1, Math.round(page.getWidth() * dpi / 72f));
+                        int h = Math.max(1, Math.round(page.getHeight() * dpi / 72f));
+                        bmp = Bitmap.createBitmap(w, h, Bitmap.Config.ARGB_8888);
+                        bmp.eraseColor(Color.WHITE);
+                        page.render(bmp, null, null, PdfRenderer.Page.RENDER_MODE_FOR_PRINT);
+                        byte[] raster = buildUrfRasterPage(bmp, dpi, bitsPerPixel);
+                        appendDebugLog("INFO", "直连打印", "URF 第 " + (i + 1) + "/" + pages
+                                + " 页编码 " + raster.length + " 字节");
+                        tryIppPrint(pdf, addr, "image/urf", raster);
+                    } finally {
+                        if (bmp != null) {
+                            bmp.recycle();
+                        }
+                        page.close();
+                    }
+                }
+            } finally {
+                renderer.close();
+            }
+        } finally {
+            try {
+                pfd.close();
+            } catch (Exception ignored) {
+            }
+        }
+    }
+
+    /** 返回 {dpi, bitsPerPixel}；优先150dpi省内存，其次300dpi，均未声明则用首个RS值。 */
+    private int[] parseUrfRasterCapabilities(byte[] response) {
+        String text = response == null ? "" : new String(response, java.nio.charset.StandardCharsets.ISO_8859_1);
+        int dpi = 300;
+        java.util.regex.Matcher matcher = java.util.regex.Pattern.compile(
+                "(?:^|[^A-Za-z0-9])RS([0-9]+(?:-[0-9]+)*)").matcher(text);
+        if (matcher.find()) {
+            int first = -1;
+            boolean has150 = false;
+            boolean has300 = false;
+            String[] values = matcher.group(1).split("-");
+            for (String value : values) {
+                try {
+                    int candidate = Integer.parseInt(value);
+                    if (candidate < 72 || candidate > 1200) {
+                        continue;
+                    }
+                    if (first < 0) {
+                        first = candidate;
+                    }
+                    has150 |= candidate == 150;
+                    has300 |= candidate == 300;
+                } catch (NumberFormatException ignored) {
+                }
+            }
+            if (has150) {
+                dpi = 150;
+            } else if (has300) {
+                dpi = 300;
+            } else if (first > 0) {
+                dpi = first;
+            }
+        }
+        int bitsPerPixel = !text.contains("SRGB24") && text.contains("W8") ? 8 : 24;
+        return new int[]{dpi, bitsPerPixel};
+    }
+
+    private byte[] buildUrfRasterPage(Bitmap bmp, int dpi, int bitsPerPixel) throws IOException {
+        if (bitsPerPixel != 24 && bitsPerPixel != 8) {
+            throw new IOException("不支持的 URF 位深: " + bitsPerPixel);
+        }
+        int w = bmp.getWidth();
+        int h = bmp.getHeight();
+        int bytesPerPixel = bitsPerPixel / 8;
+        int rowBytes = w * bytesPerPixel;
+        long rawSize = 44L + (long) rowBytes * h;
+        if (rawSize > 128L * 1024L * 1024L) {
+            throw new IOException("URF 单页光栅过大: " + rawSize);
+        }
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream((int) rawSize);
+        out.write(buildUrfRasterHeader(w, h, dpi, bitsPerPixel));
+        int[] pixels = new int[w];
+        byte[] row = new byte[rowBytes];
+        byte[] previous = null;
+        int repeat = 0;
+        for (int y = 0; y < h; y++) {
+            bmp.getPixels(pixels, 0, w, 0, y, w, 1);
+            for (int x = 0; x < w; x++) {
+                int color = pixels[x];
+                int r = (color >> 16) & 0xFF;
+                int g = (color >> 8) & 0xFF;
+                int blue = color & 0xFF;
+                if (bytesPerPixel == 3) {
+                    int p = x * 3;
+                    row[p] = (byte) r;
+                    row[p + 1] = (byte) g;
+                    row[p + 2] = (byte) blue;
+                } else {
+                    row[x] = (byte) ((r * 77 + g * 150 + blue * 29) >> 8);
+                }
+            }
+            if (previous != null && repeat < 256 && java.util.Arrays.equals(previous, row)) {
+                repeat++;
+                continue;
+            }
+            if (previous != null) {
+                out.write(repeat - 1);
+                out.write(encodeUrfPackBitsRow(previous, bytesPerPixel));
+            }
+            previous = java.util.Arrays.copyOf(row, row.length);
+            repeat = 1;
+        }
+        if (previous != null) {
+            out.write(repeat - 1);
+            out.write(encodeUrfPackBitsRow(previous, bytesPerPixel));
+        }
+        return out.toByteArray();
+    }
+
+    /** 12字节 UNIRAST 文件头 + 32字节页头；字段偏移依据 CUPS Apple Raster writer。 */
+    private byte[] buildUrfRasterHeader(int widthPx, int heightPx, int dpi, int bitsPerPixel) {
+        byte[] header = new byte[44];
+        java.nio.ByteBuffer b = java.nio.ByteBuffer.wrap(header).order(java.nio.ByteOrder.BIG_ENDIAN);
+        b.putInt(0, 0x554E4952);       // "UNIR"
+        header[4] = 'A';
+        header[5] = 'S';
+        header[6] = 'T';
+        header[7] = 0;
+        b.putInt(8, 1);                // 每个 IPP 任务只含当前一页
+        int page = 12;
+        header[page] = (byte) bitsPerPixel;
+        header[page + 1] = (byte) (bitsPerPixel == 24 ? 1 : 4); // sRGB / W灰度
+        header[page + 2] = 1;          // 单面
+        b.putInt(page + 12, widthPx);
+        b.putInt(page + 16, heightPx);
+        b.putInt(page + 20, dpi);
+        return header;
+    }
+
+    /** CUPS modified PackBits：重复像素控制值=count-1，字面像素控制值=257-count。 */
+    private byte[] encodeUrfPackBitsRow(byte[] row, int bytesPerPixel) throws IOException {
+        if (bytesPerPixel < 1 || row.length == 0 || row.length % bytesPerPixel != 0) {
+            throw new IOException("URF 行格式无效");
+        }
+        java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream(row.length + row.length / 128 + 8);
+        int pixels = row.length / bytesPerPixel;
+        int index = 0;
+        while (index < pixels) {
+            int run = 1;
+            while (index + run < pixels && run < 128
+                    && urfPixelEquals(row, index, index + run, bytesPerPixel)) {
+                run++;
+            }
+            if (run >= 2) {
+                out.write(run - 1);
+                out.write(row, index * bytesPerPixel, bytesPerPixel);
+                index += run;
+                continue;
+            }
+            int literalStart = index;
+            index++;
+            while (index < pixels && index - literalStart < 128) {
+                if (index + 1 < pixels && urfPixelEquals(row, index, index + 1, bytesPerPixel)) {
+                    break;
+                }
+                index++;
+            }
+            int literal = index - literalStart;
+            out.write(257 - literal);
+            out.write(row, literalStart * bytesPerPixel, literal * bytesPerPixel);
+        }
+        return out.toByteArray();
+    }
+
+    private boolean urfPixelEquals(byte[] row, int a, int b, int bytesPerPixel) {
+        int ap = a * bytesPerPixel;
+        int bp = b * bytesPerPixel;
+        for (int i = 0; i < bytesPerPixel; i++) {
+            if (row[ap + i] != row[bp + i]) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private void writeIppAttr(java.io.DataOutputStream d, int tag, String name, String value) throws IOException {
         byte[] nb = name.getBytes("UTF-8");
         byte[] vb = value.getBytes("UTF-8");
@@ -8416,6 +9071,17 @@ public class IcuDashboardView extends View {
         d.write(nb);
         d.writeShort(vb.length);
         d.write(vb);
+    }
+
+    private void writeIppResolutionAttr(java.io.DataOutputStream d, String name, int dpi) throws IOException {
+        byte[] nb = name.getBytes("US-ASCII");
+        d.writeByte(0x32);            // resolution
+        d.writeShort(nb.length);
+        d.write(nb);
+        d.writeShort(9);
+        d.writeInt(dpi);
+        d.writeInt(dpi);
+        d.writeByte(3);               // dots per inch
     }
 
     private String readHttpStatusLine(java.io.InputStream in) throws IOException {
@@ -8489,6 +9155,7 @@ public class IcuDashboardView extends View {
     private byte[] buildPcl5RasterJob(File pdf) throws IOException {
         java.io.ByteArrayOutputStream jobBuf = new java.io.ByteArrayOutputStream();
         try {
+            jobBuf.write("\u001B%-12345X@PJL\r\n@PJL ENTER LANGUAGE=PCL\r\n".getBytes("US-ASCII"));
             jobBuf.write(new byte[]{0x1B, 'E'});                                  // ESC E 复位
             jobBuf.write("\u001B&l26A".getBytes("US-ASCII"));                     // A4 纸
             jobBuf.write("\u001B&l0O".getBytes("US-ASCII"));                      // 纵向
@@ -8543,6 +9210,7 @@ public class IcuDashboardView extends View {
                 }
             }
             jobBuf.write(new byte[]{0x1B, 'E'});                                  // ESC E 复位收尾
+            jobBuf.write("\u001B%-12345X".getBytes("US-ASCII"));                  // UEL 任务结束
         } catch (IOException e) {
             throw e;
         } catch (Exception e) {
@@ -8569,7 +9237,7 @@ public class IcuDashboardView extends View {
         new Thread(new Runnable() {
             @Override
             public void run() {
-                String name = queryPrinterNameIpp(target);
+                String name = isRaw9100Address(target) ? "" : queryPrinterNameIpp(target);
                 if (TextUtils.isEmpty(name)) {
                     name = queryPrinterNamePjl(target);
                 }
@@ -8589,95 +9257,14 @@ public class IcuDashboardView extends View {
         }, "printer-name-query").start();
     }
 
-    /** IPP Get-Printer-Attributes：请求 printer-name / printer-make-and-model，解析二进制响应取值。 */
+    /** IPP Get-Printer-Attributes：与格式查询共用标准 keyword 多值请求和 HTTP 解码。 */
     private String queryPrinterNameIpp(String addr) {
-        java.net.Socket socket = null;
-        try {
-            String[] hp = parsePrinterAddr(addr, 631, "/ipp/print");
-            String host = hp[0];
-            int port = Integer.parseInt(hp[1]);
-            String path = hp[2];
-            String printerUri = "ipp://" + host + ":" + port + path;
-            java.io.ByteArrayOutputStream headBuf = new java.io.ByteArrayOutputStream();
-            java.io.DataOutputStream d = new java.io.DataOutputStream(headBuf);
-            d.writeByte(1);
-            d.writeByte(1);              // IPP version 1.1
-            d.writeShort(0x000B);        // operation-id = Get-Printer-Attributes
-            d.writeInt(1);               // request-id
-            d.writeByte(0x01);           // operation-attributes-tag
-            writeIppAttr(d, 0x47, "attributes-charset", "utf-8");
-            writeIppAttr(d, 0x48, "attributes-natural-language", "zh-cn");
-            writeIppAttr(d, 0x45, "printer-uri", printerUri);
-            writeIppAttr(d, 0x42, "requested-attributes", "printer-name");
-            writeIppAttr(d, 0x42, "requested-attributes", "printer-make-and-model");
-            d.writeByte(0x03);           // end-of-attributes-tag
-            d.flush();
-            byte[] body = headBuf.toByteArray();
-            socket = new java.net.Socket();
-            socket.connect(new java.net.InetSocketAddress(host, port), 4000);
-            socket.setSoTimeout(5000);
-            try {
-                OutputStream out = socket.getOutputStream();
-                String reqHead = "POST " + path + " HTTP/1.1\r\n"
-                        + "Host: " + host + ":" + port + "\r\n"
-                        + "Content-Type: application/ipp\r\n"
-                        + "Content-Length: " + body.length + "\r\n"
-                        + "Connection: close\r\n\r\n";
-                out.write(reqHead.getBytes("US-ASCII"));
-                out.write(body);
-                out.flush();
-                java.io.InputStream in = socket.getInputStream();
-                String statusLine = readHttpStatusLine(in);
-                if (statusLine == null || !statusLine.startsWith("HTTP/")) {
-                    return "";
-                }
-                String[] parts = statusLine.split(" ");
-                int code = parts.length > 1 ? Integer.parseInt(parts[1].trim()) : 0;
-                if (code < 200 || code >= 300) {
-                    return "";
-                }
-                // 跳过剩余 HTTP 头（空行结束），之后读全部响应体（Connection: close 收尾）
-                int prev = -1, prevprev = -1, prev3 = -1;
-                int c;
-                while ((c = in.read()) >= 0) {
-                    if (prev3 == '\r' && prevprev == '\n' && prev == '\r' && c == '\n') {
-                        break;
-                    }
-                    prev3 = prevprev;
-                    prevprev = prev;
-                    prev = c;
-                }
-                java.io.ByteArrayOutputStream respBuf = new java.io.ByteArrayOutputStream();
-                byte[] buf = new byte[4096];
-                int n;
-                try {
-                    while ((n = in.read(buf)) >= 0) {
-                        respBuf.write(buf, 0, n);
-                    }
-                } catch (java.net.SocketTimeoutException ignored) {
-                    // 部分打印机不关连接，超时后已收到的数据照常解析
-                }
-                byte[] resp = respBuf.toByteArray();
-                String name = extractIppAttrValue(resp, "printer-name");
-                if (TextUtils.isEmpty(name)) {
-                    name = extractIppAttrValue(resp, "printer-make-and-model");
-                }
-                return name;
-            } finally {
-                try {
-                    socket.close();
-                } catch (Exception ignored) {
-                }
-            }
-        } catch (Exception ignored) {
-            try {
-                if (socket != null) {
-                    socket.close();
-                }
-            } catch (Exception ignored2) {
-            }
-            return "";
+        byte[] resp = queryPrinterAttributes(addr, new String[]{"printer-name", "printer-make-and-model"});
+        String name = extractIppAttrValue(resp, "printer-name");
+        if (TextUtils.isEmpty(name)) {
+            name = extractIppAttrValue(resp, "printer-make-and-model");
         }
+        return name;
     }
 
     /** IPP 响应体里按属性名定位：[tag(1)][nameLen(2)][name][valueLen(2)][value]，取 value（UTF-8）。 */
@@ -8715,6 +9302,59 @@ public class IcuDashboardView extends View {
         return "";
     }
 
+    private int extractIppIntAttrValue(byte[] body, String attrName, int fallback) {
+        int offset = findIppAttrValue(body, attrName, 4);
+        if (offset < 0) {
+            return fallback;
+        }
+        return ((body[offset] & 0xFF) << 24) | ((body[offset + 1] & 0xFF) << 16)
+                | ((body[offset + 2] & 0xFF) << 8) | (body[offset + 3] & 0xFF);
+    }
+
+    private int extractIppResolutionAttrValue(byte[] body, String attrName, int fallback) {
+        int offset = findIppAttrValue(body, attrName, 9);
+        if (offset < 0) {
+            return fallback;
+        }
+        int x = ((body[offset] & 0xFF) << 24) | ((body[offset + 1] & 0xFF) << 16)
+                | ((body[offset + 2] & 0xFF) << 8) | (body[offset + 3] & 0xFF);
+        int y = ((body[offset + 4] & 0xFF) << 24) | ((body[offset + 5] & 0xFF) << 16)
+                | ((body[offset + 6] & 0xFF) << 8) | (body[offset + 7] & 0xFF);
+        return x == y && (body[offset + 8] & 0xFF) == 3 ? x : fallback;
+    }
+
+    /** 定位指定长度属性的 value 起点；避免把二进制 resolution/integer 当 UTF-8 文本解析。 */
+    private int findIppAttrValue(byte[] body, String attrName, int expectedLength) {
+        if (body == null || attrName == null) {
+            return -1;
+        }
+        byte[] needle;
+        try {
+            needle = attrName.getBytes("US-ASCII");
+        } catch (Exception e) {
+            return -1;
+        }
+        for (int i = 0; i + needle.length + 2 <= body.length; i++) {
+            boolean match = true;
+            for (int j = 0; j < needle.length; j++) {
+                if (body[i + j] != needle[j]) {
+                    match = false;
+                    break;
+                }
+            }
+            if (!match) {
+                continue;
+            }
+            int vlenOff = i + needle.length;
+            int vlen = ((body[vlenOff] & 0xFF) << 8) | (body[vlenOff + 1] & 0xFF);
+            int vstart = vlenOff + 2;
+            if (vlen == expectedLength && vstart + vlen <= body.length) {
+                return vstart;
+            }
+        }
+        return -1;
+    }
+
     /** PJL 兜底（9100 口或地址指定端口）：发 @PJL INFO ID，取回包引号内的型号字符串。 */
     private String queryPrinterNamePjl(String addr) {
         java.net.Socket socket = null;
@@ -8722,6 +9362,9 @@ public class IcuDashboardView extends View {
             String[] hp = parsePrinterAddr(addr, 9100, "");
             String host = hp[0];
             int port = Integer.parseInt(hp[1]);
+            if (port == 631) {
+                port = 9100;
+            }
             socket = new java.net.Socket();
             socket.connect(new java.net.InetSocketAddress(host, port), 4000);
             socket.setSoTimeout(4000);
@@ -8899,7 +9542,7 @@ public class IcuDashboardView extends View {
                 os.close();
                 doc.close();
             }
-            if (!TextUtils.isEmpty(s5PrinterAddress)) {
+            if (!TextUtils.isEmpty(s5PrinterAddress) && !"system".equals(s5PrinterMode)) {
                 appendDebugLog("INFO", "打印测试页", "直连 " + s5PrinterAddress);
                 printPdfToConfiguredPrinter(pdf);
                 return;
@@ -8917,6 +9560,19 @@ public class IcuDashboardView extends View {
         }
     }
 
+    /** 只有用户明确点击时才打开 Android 打印服务设置，不再作为直连失败的自动跳转。 */
+    private void openPrintServiceSettings() {
+        if (activity == null) {
+            return;
+        }
+        try {
+            activity.startActivity(new Intent(Settings.ACTION_PRINT_SETTINGS));
+            appendUserLog("打印", "打开打印服务设置", "用户主动打开");
+        } catch (Exception e) {
+            Toast.makeText(activity, "无法打开打印服务设置: " + e.getMessage(), Toast.LENGTH_LONG).show();
+        }
+    }
+
     private void sendDataStage2() {
         Toast.makeText(activity, "发送数据功能为二期规划，暂未开放", Toast.LENGTH_SHORT).show();
     }
@@ -8928,27 +9584,50 @@ public class IcuDashboardView extends View {
         public void onLayout(PrintAttributes oldAttributes, PrintAttributes newAttributes,
                              CancellationSignal cancellationSignal, PrintDocumentAdapter.LayoutResultCallback callback, android.os.Bundle extras) {
             if (cancellationSignal.isCanceled()) { callback.onLayoutCancelled(); return; }
+            final int pageCount;
+            ParcelFileDescriptor pfd = null;
+            PdfRenderer renderer = null;
+            try {
+                pfd = ParcelFileDescriptor.open(pdfFile, ParcelFileDescriptor.MODE_READ_ONLY);
+                renderer = new PdfRenderer(pfd);
+                pageCount = renderer.getPageCount();
+            } catch (Exception e) {
+                callback.onLayoutFailed("无法读取 PDF 页数: " + e.getMessage());
+                return;
+            } finally {
+                if (renderer != null) {
+                    try { renderer.close(); } catch (Exception ignored) { }
+                } else if (pfd != null) {
+                    try { pfd.close(); } catch (Exception ignored) { }
+                }
+            }
+            /* 不能向厂商打印服务报告 PAGE_COUNT_UNKNOWN：部分 HP/厂商服务会一直等待
+               初始化。测试页与报告均在本地可读，直接提供真实页数。 */
             PrintDocumentInfo info = new PrintDocumentInfo.Builder(pdfFile.getName())
                     .setContentType(PrintDocumentInfo.CONTENT_TYPE_DOCUMENT)
-                    .setPageCount(PrintDocumentInfo.PAGE_COUNT_UNKNOWN)
+                    .setPageCount(pageCount)
                     .build();
             callback.onLayoutFinished(info, true);
         }
         @Override
         public void onWrite(PageRange[] pages, ParcelFileDescriptor destination,
                             CancellationSignal cancellationSignal, PrintDocumentAdapter.WriteResultCallback callback) {
-            try {
-                InputStream in = new FileInputStream(pdfFile);
-                OutputStream out = new FileOutputStream(destination.getFileDescriptor());
+            try (InputStream in = new FileInputStream(pdfFile);
+                 OutputStream out = new FileOutputStream(destination.getFileDescriptor())) {
                 byte[] buffer = new byte[8192];
                 int len;
-                while ((len = in.read(buffer)) > 0) { out.write(buffer, 0, len); }
-                in.close();
-                out.close();
-                callback.onWriteFinished(new PageRange[]{PageRange.ALL_PAGES});
+                while ((len = in.read(buffer)) > 0) {
+                    if (cancellationSignal.isCanceled()) {
+                        callback.onWriteFailed("打印已取消");
+                        return;
+                    }
+                    out.write(buffer, 0, len);
+                }
             } catch (Exception e) {
                 callback.onWriteFailed(e.getMessage());
+                return;
             }
+            callback.onWriteFinished(new PageRange[]{PageRange.ALL_PAGES});
         }
     }
 
@@ -9318,6 +9997,24 @@ public class IcuDashboardView extends View {
         return PDF_INFO_LEFT + column * (pdfInfoColumnWidth(columns) + PDF_INFO_GAP);
     }
 
+    /* 与 H5 fmtDurText 同源：治疗时长必须取该病例开始/结束时刻，
+       不能读取已复位或未连接主机的实时计时，更不能把结束时间戳当时长打印。 */
+    private String pdfTreatmentDurationText(PatientCase patient) {
+        if (patient == null || TextUtils.isEmpty(patient.treatmentStartTime)) {
+            return "--";
+        }
+        long start = parseVisitDate(patient.treatmentStartTime).getTimeInMillis();
+        long end = System.currentTimeMillis();
+        if (!TextUtils.isEmpty(patient.treatmentEndTime) && !"进行中".equals(patient.treatmentEndTime)) {
+            end = parseVisitDate(patient.treatmentEndTime).getTimeInMillis();
+        }
+        if (end < start) {
+            end = start;
+        }
+        long minutes = Math.round((end - start) / 60000.0);
+        return (minutes / 60L) + "小时" + (minutes % 60L) + "分钟";
+    }
+
     private void drawPdfTemplatePatientInfo(Canvas canvas, Paint pdfPaint, PatientCase patient) {
         float y1 = 73;
         float y2 = 94;
@@ -9338,14 +10035,13 @@ public class IcuDashboardView extends View {
 
         drawPdfInfoField(canvas, pdfPaint, "\u52a8\u7269\u79cd\u7c7b", patient.species,
                 pdfInfoColumnX(0), y2, 45, colW - 45);
-        // 体重 / 科室 来自病例录入弹窗，不再写死 "--"
+        // 体重 / 病症 / 治疗时长分占独立等宽列，病症取代原科室显示位。
         drawPdfInfoField(canvas, pdfPaint, "\u4f53\u91cd", patient.weight,
                 pdfInfoColumnX(1), y2, 32, colW - 32);
-        // \u2605 2026-10-12\uff1a\u79d1\u5ba4\u680f\u5148\u6ce8\u91ca\u6389\u4e0d\u663e\u793a\uff08\u6570\u636e\u5b57\u6bb5\u4fdd\u7559\uff0c\u6062\u590d\u65f6\u53d6\u6d88\u6ce8\u91ca\u5373\u53ef\uff09
-        // drawPdfInfoField(canvas, pdfPaint, "\u79d1\u5ba4", patient.department,
-        //         pdfInfoColumnX(2), y2, 32, colW - 32);
+        drawPdfInfoField(canvas, pdfPaint, "\u75c5\u75c7", patient.disease,
+                pdfInfoColumnX(2), y2, 32, colW - 32);
         drawPdfInfoField(canvas, pdfPaint, "\u6cbb\u7597\u65f6\u957f",
-                pdfFirstValue(bleManager.getTreatmentTimeText(), patient.treatmentEndTime),
+                pdfTreatmentDurationText(patient),
                 pdfInfoColumnX(3), y2, 52, colW - 52);
         drawPdfInfoField(canvas, pdfPaint, "\u64cd\u4f5c\u533b\u5e08",
                 pdfFirstValue(patient.doctor, accountStore.getCurrentAccount()),

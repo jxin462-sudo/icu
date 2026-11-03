@@ -187,7 +187,7 @@
     /* 记录单（由桥接层从原生 patient/treatments 注入） */
     sheet: {
       animal: '', no: '', owner: '', date: '', cage: '',
-      sp: '', weight: '', dept: '', dur: '', doc: '',
+      sp: '', weight: '', dept: '', disease: '', dur: '', doc: '',
       proj: [],
       env: [],
       imgs: [],
